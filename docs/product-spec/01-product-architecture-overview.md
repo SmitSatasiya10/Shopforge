@@ -1,0 +1,102 @@
+# Product Architecture Overview
+
+## 1. What Shopforge builds
+
+Shopforge generates a working Shopify store from a product URL. A user creates a project, supplies a product
+URL, and AI generates a multi-section homepage and product page onto Shopforge's own base Shopify theme. The
+user can then edit that store visually — directly in a live-rendered preview, or by asking the AI to change
+it — before publishing it to a real Shopify store.
+
+Everything the user sees while building, and everything that ends up live on Shopify, is rendered from the
+same first-party Liquid section templates. AI never writes Liquid, HTML, CSS, or JavaScript — it only decides
+which sections to use, in what order, and what their settings and copy should be.
+
+## 2. End-to-end flow
+
+```
+User
+  |
+Project / Store Creation
+  |
+Product URL
+  |
+Product Import / Scraper
+  |
+Normalized Product Data
+  |
+AI Generation
+  |
+Section Selection
+  |
+Section Ordering
+  |
+Section Settings / Content
+  |
+Store Configuration (JSON)
+  |
+LiquidJS Preview Renderer
+  |
+Same-Origin Preview iframe
+  |
+Visual Editor
+  |
+User Changes
+  |
+Store Configuration Updated
+  |
+LiquidJS Preview Updated
+  |
+Save / Version
+  |
+Publish
+  |
+Apply Configuration to Base Shopify Theme
+  |
+Shopify Theme
+  |
+Real Shopify Storefront
+```
+
+## 3. Stage-by-stage summary
+
+| Stage | What happens | Specification |
+|---|---|---|
+| Project / Store Creation | A user creates a `Project` — the unit that holds one store's configuration, version history, and eventual Shopify connection. No Shopify connection is required yet. | [Data Model](19-data-model.md) |
+| Product URL / Import | The user supplies a product URL. It is fetched and scraped into normalized `Product` data (title, description, images, pricing, variants, options), kept distinct from anything AI-authored. | [Product Import](05-product-import.md) |
+| AI Generation | AI selects sections from the fixed Section Library, orders them, and authors their settings and copy, grounded in the imported product data. Output is structured operations against the Store Configuration, never code. | [AI Architecture](04-ai-architecture.md) |
+| Store Configuration | The generated (and subsequently edited) store is persisted as one JSON document: pages, sections, settings, blocks, order. This is the single source of truth every other layer reads and writes. | [Store Configuration](03-store-configuration.md) |
+| LiquidJS Preview Renderer | Resolves each section's `type` to its real Liquid template, injects the Store Configuration's settings/blocks, and renders HTML with LiquidJS — the literal production template, not a recreation. | [Preview Architecture](06-preview-architecture.md) |
+| Same-Origin Preview iframe | The rendered HTML is shown inside an iframe hosted by the builder application, isolated in CSS/JS from the builder's own chrome. | [Preview iframe](08-preview-iframe.md) |
+| Visual Editor | A React/Next.js application surrounding the preview iframe: selection, inspector, AI panel, section library browser. Click-to-select and `contentEditable` write back into the Store Configuration; the editor has no other write path. | [Visual Editor](09-visual-editor.md) |
+| User Changes / AI Edits | Every change — manual or AI-driven — resolves to a structured operation against the Store Configuration, validated and diffed the same way regardless of origin. | [Validation and Error Handling](17-validation-and-error-handling.md) |
+| Save / Version | Each accepted change produces a new configuration version and a Diff; the user can undo/redo or restore an earlier version. | [Versioning and Undo/Redo](18-versioning-and-undo-redo.md) |
+| Publish | On explicit user action, the current Store Configuration is validated, converted to Shopify theme JSON/settings, and applied to the merchant's installed copy of the Base Theme via the Shopify Admin API. | [Shopify Publishing](14-shopify-publishing.md) |
+| Real Shopify Storefront | Shopify's own Liquid engine renders the same controlled section templates using the published configuration. | [Preview-to-Shopify Parity](16-preview-shopify-parity.md) |
+
+## 4. What React, LiquidJS, Liquid, Store Configuration, and Shopify each mean here
+
+These five terms are used precisely throughout this folder and are not interchangeable:
+
+- **React (Next.js)** — the builder application's UI shell: toolbar, sidebar, section navigator, inspector, AI
+  panel, and the component that hosts the preview iframe. React never renders the storefront itself.
+- **LiquidJS** — the JavaScript Liquid engine that renders the storefront **preview**, running our controlled
+  Liquid section templates against the current Store Configuration.
+- **Liquid** — the controlled, first-party section template source code (`.liquid` files + `{% schema %}`) that
+  both LiquidJS (preview) and Shopify's own Liquid engine (production) render. Liquid is authored by us, never
+  generated by AI.
+- **Store Configuration** — the store-specific JSON source of truth: which sections exist, in what order, and
+  their settings/blocks/content. This is what AI and the editor actually change.
+- **Shopify** — the production rendering environment. It receives the Base Theme (installed once, updated on
+  new theme versions) and the Store Configuration (applied as theme JSON/settings on every publish). Shopify is
+  only ever touched at Publish — ordinary preview and editing never round-trip through it.
+
+## 5. Out of scope by design
+
+- Parsing or editing an arbitrary, pre-existing merchant theme.
+- AI-generated Liquid, HTML, CSS, or JavaScript.
+- A React reconstruction of the storefront (React is UI chrome around the real Liquid preview, not a
+  replacement for it).
+- A Shopify round trip for ordinary preview or editing — Shopify is reached only at Publish.
+
+See [MVP Scope](24-mvp-scope.md) for what ships first and [Implementation Roadmap](25-implementation-roadmap.md)
+for build sequencing.
