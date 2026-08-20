@@ -1,171 +1,144 @@
 # 24 — Development Roadmap
 
-Ten phases, Phase 0 through Phase 9. Phase 0 and Phase 1 run partly in parallel (business-development exemption application vs. engineering) per doc 16 §10.4 — this is the single most important scheduling decision in this roadmap and is called out explicitly below.
+Seven phases, Phase 0 through Phase 6. Phase 0 and Phase 1 run partly in parallel (business-development exemption application vs. engineering) per doc 16 §8.4 — this is still the single most important scheduling decision in this roadmap, and it is *more* favorable now than under the old plan: the new architecture's preview loop (Phases 1–4) needs **zero** Shopify write access to build and demo end to end, since the LiquidJS Preview Renderer never round-trips through Shopify (doc 09, doc 16 §6). Only Phase 5 (Publishing) actually requires `write_themes`.
 
 ---
 
 ## Phase 0 — Research & Platform De-risking
 
-**Features**: None (no user-facing product). Output is: this document set (docs 01–25), a validated architecture-core schema set, and a started Shopify partner relationship.
+**Features**: None (no user-facing product). Output is: this document set (docs 01–26), a frozen v1 schema contract (Section, Store Configuration, Operation, Diff — docs 07/08/11/14), and a started Shopify partner relationship.
 
-**Dependencies**: None — this is the current phase, already substantially complete via docs 01–22.
+**Dependencies**: None — this is the current phase, substantially complete via docs 01–22 and this rewrite pass (docs 01–26).
 
 **Technical work**:
-- Submit the `write_themes` exemption application to Shopify Partner support (doc 16 §10.4), framed around the safety properties this architecture already specifies (duplicate-first, never touches `MAIN`, full diff/undo).
-- Stand up a Shopify development store and validate `theme pull`/CLI access as the Phase 1 engineering substrate (doc 16 §10.4 fallback path).
-- Confirm the open questions in doc 16 §11 directly with Shopify where possible (rate limits, exemption criteria, webhook semantics, `files` connection content-inline behavior) — these affect Phase 1/2 API client design.
+- Submit the `write_themes` exemption application to Shopify Partner support (doc 16 §8.4), framed around the new, narrower write surface: installing/updating one specific, versioned, first-party Base Theme, never arbitrary edits to a merchant's own theme — doc 16 §8.2 argues this is an easier case to make than the old "editing an unknown merchant theme" framing was.
+- Stand up a Shopify development store and validate `theme pull`/CLI access as a Phase 5 engineering substrate (doc 16 §8.4 fallback path) — not needed before Phase 5, but worth having ready.
+- Confirm the open questions in doc 26 directly with Shopify/internally where possible (exemption criteria, Base Theme update policy, rate limits) — these affect Phase 5's design, not earlier phases.
+- Begin Section Library content production planning (doc 07 §3's category breakdown) — this is now a genuine content-production project with its own timeline, not purely an engineering task, and should start in parallel with engineering rather than being treated as a Phase 1 afterthought.
 
 **Risks**:
-- Exemption timeline is unknown and outside our control — this is why Phase 1 engineering is explicitly designed not to depend on it (see Phase 1).
-- Some doc 16 open questions may require a live support ticket or partner call to resolve, not just documentation reading.
+- Exemption timeline is unknown and outside our control — this is why Phases 1–4 are explicitly designed not to depend on it.
+- Section Library authorship throughput is a new, real risk this document set didn't previously name explicitly: producing well-designed, schema-clean, on-brand Liquid sections at the pace this roadmap assumes is a design + engineering effort, not just engineering.
 
-**Acceptance criteria**: Exemption application submitted; dev store operational with CLI theme pull/push validated; architecture-core.md schemas frozen as the v1 contract for all downstream docs (already done).
+**Acceptance criteria**: Exemption application submitted; dev store operational; docs 01–26 frozen as the v1 contract for all downstream engineering; Section Library production plan exists for the ~15–20 sections Phase 1 needs.
 
 ---
 
 ## Phase 1 — Foundation
 
-**Features**: Auth (email + Shopify OAuth), org/store data model, theme import against the dev-store/local-file path (not yet gated on the exemption), basic dashboard shell (doc 05's IA, minus AI Workspace/Editor).
+**Features**: Base Theme skeleton, an initial Section Library slice (per doc 23 §2: header, footer, hero, image banner, rich text, product grid, featured product, product info/gallery, testimonials, FAQ, CTA banner, newsletter, about), Store Configuration schema + persistence, Product Import against a narrow allowlisted source set, auth/org data model, basic dashboard shell (doc 05 minus the Visual Editor).
 
-**Dependencies**: Phase 0's dev store; doc 17's DB schema; doc 18's `/shopify/*` and base `/theme/*` endpoints.
+**Dependencies**: None blocking — this phase deliberately needs no Shopify write access at all.
 
 **Technical work**:
-- Implement `User`, `Organization`, `OrgMembership`, `ShopifyStore`, `ShopifyInstallation` per doc 17.
-- OAuth connect flow (doc 16 §2) including `read_themes` (freely grantable) and requesting `write_themes` (works against the dev store regardless of exemption status, per doc 16 §10.4).
-- Theme listing + duplication-as-working-copy (doc 16 §3, §5) against the dev store.
-- Basic dashboard shell and navigation per doc 05, without the Editor/AI Workspace screens yet.
+- Implement `User`, `Organization`, `OrgMembership`, `Product`, `Project`, `StoreConfigVersion`, `SectionDefinition` per doc 17.
+- Author the initial Section Library slice: for each section, the five sibling artifacts doc 07 §2 specifies (Liquid template, `{% schema %}`, editor metadata, settings/blocks contract, design spec), each emitting the `data-sf-*` DOM metadata contract doc 09 §6 requires for later click-to-select support.
+- Implement Store Configuration CRUD per doc 08, backed by doc 17's `StoreConfigVersion`.
+- Implement Product Import: URL validation, SSRF-safe fetching (doc 20's Product Import threat model), scrape parsing into `Product`, partial-failure handling (doc 17 §6's `importStatus`/`importedFieldsMissing`).
+- Basic dashboard shell per doc 05 (`Organization → Project → {…}`), without the Visual Editor or AI Generation screens yet.
 
-**Risks**: None platform-blocking, since this phase deliberately avoids the exemption dependency by building/testing against the dev store.
+**Risks**: Section Library authorship throughput (carried over from Phase 0) is the dominant risk here — budget real design/content time, not just engineering time. Product Import reliability varies by source site; expect the allowlisted-source approach (doc 23 §2) to need iteration as real URLs are tested.
 
-**Acceptance criteria**: A developer can OAuth-connect the dev store, list its themes, and create a Shopforge working-copy duplicate, all persisted correctly per doc 17's schema.
+**Acceptance criteria**: A developer can create a `Project`, import a product from a supported URL and get back valid `Product` data (or a clear partial-failure state), and every section in the initial catalog validates against doc 15's Section/Settings validation categories.
 
 ---
 
-## Phase 2 — Theme Intelligence
+## Phase 2 — LiquidJS Preview
 
-**Features**: Theme Parser, Theme Manifest, Theme Model (read-only at this point — no mutation UI yet), capability summary view.
+**Features**: The LiquidJS Preview Renderer (doc 09), section Liquid loading, HTML generation, same-origin iframe hosting, preview styling isolation, responsive/device-viewport preview.
 
-**Dependencies**: Phase 1's imported working-copy themes; docs 07–09.
+**Dependencies**: Phase 1's Section Library and Store Configuration.
 
 **Technical work**:
-- Build the Parser exactly per doc 07 (three-pass extraction, capability heuristics, vintage-theme rejection).
-- Build Manifest storage/versioning per doc 08 (`themeVersionHash`-keyed, immutable rows).
-- Build the Model construction step per doc 09, including the full mutation API surface (even though nothing calls it yet except read paths).
-- Validate against **multiple real themes**, not just one — doc 21 §1's fixture set (Dawn, Craft, Sense, Colorblock, Studio) exists specifically because capability-flag heuristics that only work on one theme don't prove the "works on a merchant's *actual*, arbitrary theme" claim.
+- Implement the resolve-type → load-template → inject-settings/blocks → LiquidJS `render()` → HTML pipeline per doc 09 §2–§3.
+- Implement the same-origin iframe host and its CSS/asset isolation from the builder app chrome (doc 09 §4, doc 20 §20.7).
+- Decide and implement the Shopify runtime-object stubbing strategy (`shop`, `cart`, `routes`, etc.) that section Liquid depends on but that has no real value outside a live Shopify request — this is foundational for every section author from this point forward, so get it settled here, not incrementally per-section later.
+- Implement responsive viewport simulation (desktop/tablet/mobile).
+- Stand up doc 21 §6's LiquidJS-vs-real-Shopify structural parity check now, against the dev store from Phase 0, so preview drift is caught from the first section onward rather than discovered at Phase 5.
 
-**Risks**: Capability-flag heuristics (doc 07's static rules) may have a higher false-negative rate against unusual/heavily-customized themes than expected — budget time for iterating against the multi-theme fixture set, not just Dawn.
+**Risks**: Preview-vs-Shopify parity gaps around the stubbed runtime objects are the main technical risk — an incomplete or inaccurate stub set produces sections that preview correctly but render differently (or error) on real Shopify. This is exactly why the parity harness is pulled into this phase instead of deferred.
 
-**Acceptance criteria**: For each fixture theme, Parser produces a Manifest whose capability flags a human reviewer agrees are correct; Model construction round-trips (Model → Serializer → re-parse → same Manifest) with no drift.
+**Acceptance criteria**: Every section in the current catalog renders correctly via LiquidJS into the iframe across doc 21 §1's fixture Store Configuration set; the structural parity check passes against the dev store for every section.
 
 ---
 
 ## Phase 3 — Visual Editor
 
-**Features**: Full doc 06 editing operations (section/block settings, add/remove/reorder/duplicate, global styles), editor states (autosave, undo/redo, device preview), doc 19's editor layout (structure panel, canvas, inspector).
+**Features**: Full doc 06 operation catalog (section/block/setting editing, add/remove/duplicate/reorder section, global styles), doc 09's click-to-select and hover-detection interaction layer, `contentEditable` text editing, Diff-backed undo/redo, doc 19's editor shell (structure panel, canvas, inspector, AI panel placeholder).
 
-**Dependencies**: Phase 2's Model; doc 18's `/editor/*` endpoints; doc 14's Diff system (every editor mutation produces a Diff, even before AI exists).
-
-**Technical work**:
-- Implement the mutation-function-to-endpoint mapping from doc 18 (`update-setting`, `add-section`, `move-section`, etc.), each producing Diff entries per doc 14.
-- Implement the frontend per doc 19: structure panel bound to `TemplateNode`/`SectionInstance` tree, inspector bound to `SettingDef`s, canvas with device switcher.
-- Implement undo/redo over the Diff stack (doc 14 §3) — this validates the diff/versioning design *before* AI operations start also writing to the same stack in Phase 4, which is deliberate sequencing to isolate bugs.
-
-**Risks**: Live preview rendering mechanism is a confirmed doc 16 §8 gap (`[Not found]` — no confirmed server-side Admin API path for a hosted app to generate preview links). This phase's engineering spike must resolve it or fall back to an interim approach (e.g. Shopforge's own server-side Liquid-adjacent render approximation) before the canvas can show a faithful live preview.
-
-**Acceptance criteria**: A user can perform every doc 06 operation against a real imported theme, see it reflected in a live/near-live preview, and undo/redo cleanly across a sequence of mixed edits.
-
----
-
-## Phase 4 — AI Operations
-
-**Features**: AI chat (doc 10), Operation Planner (doc 11), Clarification System (doc 13), context-selection/token optimization (doc 12) — structural operations only at first (`update_setting`, `move_section`, etc.), matching MVP's narrow generative scope (doc 23 §3).
-
-**Dependencies**: Phase 3's Diff-integrated mutation path (AI operations reuse the exact same mutation functions and Diff stream, per Principle 7); Phase 2's Manifest/Model for context retrieval.
+**Dependencies**: Phase 2's preview iframe — the editor is built directly on top of it, not alongside it.
 
 **Technical work**:
-- Implement the AI provider abstraction (doc 10) with one live provider.
-- Implement context selection (doc 12): keyword extraction → capability index lookup, deferring the embedding-based fallback tier to a later phase.
-- Implement the Operation Planner's reuse-vs-generate decision rules (doc 11 §5).
-- Implement the 5-outcome Clarification decision table (doc 13).
-- Wire AI-produced Operations through the *same* validation (Phase 5, built alongside) and Diff pipeline Phase 3 already proved out.
+- Implement hover/click-to-select using the `data-sf-*` metadata contract emitted by section Liquid (doc 09 §6) — resolve a clicked DOM node back to Page → Section → Block → Setting.
+- Implement `contentEditable` write-back into Store Configuration (doc 09 §7, doc 20 §20.7's sanitization requirement), never persisting raw DOM state directly.
+- Implement the React builder shell per doc 19: structure panel bound to the Store Configuration's `pages`/`sections` tree, inspector bound to a section's settings contract (doc 08 §5), selection-outline overlay drawn by React over the iframe (doc 19 §19.4.4's stated decision).
+- Implement Diff-backed undo/redo (doc 14 §3) — this validates the diff/versioning design *before* AI operations start also writing to the same stack in Phase 4, deliberately isolating bugs the same way the old plan did.
+- Implement the per-section-instance render-cache doc 19 §19.5.1 specifies, with test coverage for the stale-cache failure class it flagged as new.
 
-**Risks**: This is the highest product-risk phase — "does the reuse-vs-generate decision actually work well against real, messy themes" is the core untested hypothesis of the whole product. Budget significant iteration time against the doc 21 §4 AI-specific test suite (ambiguous-prompt accuracy, section-selection accuracy, hallucination resistance) before considering this phase done.
+**Risks**: doc 09 §6.3 flagged several genuinely undecided interaction questions — ambiguous/overlapping click-target disambiguation, keyboard-accessible selection, mid-edit `contentEditable` selection behavior (also tracked in doc 26). Resolve these as real design work in this phase; don't let them surface as production bugs.
 
-**Acceptance criteria**: The doc 23 §8 MVP acceptance scenarios (hero-background example, ambiguous-header example) pass consistently against the multi-theme fixture set, not just one theme.
+**Acceptance criteria**: A user can perform every doc 06 operation against a live `Project` and see it reflected immediately in the preview; undo/redo works cleanly across a sequence of mixed manual edits; click-to-select correctly resolves for every section in the catalog.
 
 ---
 
-## Phase 5 — Validation & Safety
+## Phase 4 — AI Generation
 
-**Features**: Full 9-layer validation pipeline (doc 15), snapshot/backup system (doc 14 §2), bounded generative-op scope (`create_section_file` for an allowlisted archetype set, per doc 23 §3).
+**Features**: AI provider abstraction (doc 10) with one live provider, Flow A — AI Store Generation (doc 11 §4: section selection → ordering → settings → copy → Store Configuration), Flow B — conversational editing (doc 11 §6–§7), context selection (doc 12), the 5-outcome Clarification system (doc 13), provenance-aware safe regeneration (doc 11 §9).
 
-**Dependencies**: Phase 4's Operations; Phase 3's Diff system.
+**Dependencies**: Phase 3's Diff-integrated mutation path — AI operations reuse the exact same `Operation` → `Diff` mechanism manual edits already proved out; Phase 1's Section Library/catalog, which is what the AI selects from and is scoped by.
 
 **Technical work**:
-- Implement all 9 validation layers in order, with the hard-block-vs-warning behavior doc 15 specifies per layer.
-- Implement `ThemeSnapshot` triggers (pre-destructive, pre-generative, pre-publish) per doc 14 §2.
-- Implement the bounded single-retry-then-surface behavior for generative-op validation failures (doc 15's closing section).
-- Build the Liquid-syntax validation layer specifically (likely via a theme-check-equivalent tool) — this is new integration work, not a reuse of anything from earlier phases.
+- Implement the provider abstraction (doc 10) with one live provider.
+- Implement context selection per doc 12: catalog/keyword lookup against the fixed Section Library, with the lightweight embedding fallback doc 12 scoped narrowly to vague style language only — not a full semantic-search tier.
+- Implement doc 11 §8's decision logic (does an existing section/setting already satisfy the request) and §4's full generation pipeline.
+- Implement doc 13's 5-outcome clarification decision table.
+- Implement doc 11 §9's provenance tagging (`ai`/`user` per section and per setting) and the regeneration default that only touches `ai`-tagged fields.
+- Wire AI-produced Operations through the same validation (Phase 1's pipeline, doc 15) and Diff pipeline (Phase 3) already proved out — no separate AI-specific write path.
 
-**Risks**: Regression validation (any Diff entry outside an Operation's declared scope = hard block) depends on the per-`OperationType` allowed-secondary-effects list from doc 15 being complete; an incomplete list produces false-positive blocks that make the AI look broken even when it isn't. Expect iteration here informed by Phase 4/6 real usage.
+**Risks**: This is now the highest product-risk phase, but the risk itself has changed shape from the old plan. The old risk was "does the reuse-vs-generate decision hold up against messy, unknown themes" — that problem doesn't exist anymore. The new risk is squarely about **generation quality**: does AI-selected section ordering and AI-authored settings/copy actually produce a credible, on-brand store from real, varied product data? Budget significant iteration against doc 21 §4's AI-specific test suite (hallucination resistance, regeneration-preserves-user-edits, section-selection accuracy) before considering this phase done.
 
-**Acceptance criteria**: No operation in the doc 21 regression-test suite passes with an out-of-scope file change; every generative-op validation failure surfaces to the user within one retry, never loops silently.
+**Acceptance criteria**: doc 23 §8's MVP acceptance scenarios (full generation from a product URL, a single well-scoped conversational edit, an ambiguous request, a regeneration-preserves-edits case) pass consistently across doc 21 §1's fixture Product set, not just one hand-picked example.
 
 ---
 
-## Phase 6 — Shopify Publishing
+## Phase 5 — Shopify Publishing
 
-**Features**: Preview (resolved from Phase 3's spike), Publish (doc 16 §9), rollback, `PublishHistory`.
+**Features**: Shopify OAuth connect (doc 16 §2), theme-slot check (doc 16 §3), Base Theme install/update (doc 16 §4), Store Configuration publish (doc 16 §5/§7), rollback (doc 16 §7/`PublishHistory`).
 
-**Dependencies**: Phase 0's exemption status (this phase is the first one that *requires* real `write_themes` access against a real, non-dev-store merchant — everything before this can run entirely on the dev store).
+**Dependencies**: Phase 0's exemption status — this is the *first* phase that requires real `write_themes` access against a non-dev-store merchant. Everything in Phases 1–4 runs entirely without it, since preview and editing never touch Shopify.
 
 **Technical work**:
-- Implement `themePublish` flow with async processing awaited before recording `PublishHistory` (doc 16 §9).
-- Implement rollback (republish a demoted prior theme — doc 16 §7's inferred design, needs confirmation against live behavior).
-- **Gate decision point**: if the exemption from Phase 0 has not landed yet, this phase ships to design-partner merchants via the custom/unlisted-app fallback (doc 16 §10.4) rather than blocking entirely.
+- Implement the `themeCreate`-from-our-own-source install flow (doc 16 §4) with `role: UNPUBLISHED` on creation.
+- Implement the Base Theme update path for stores that already have an older Base Theme version installed (doc 16 §4.4) — resolve the auto-update-vs-opt-in policy question flagged there and in doc 26 as part of this phase's design work, not after.
+- Implement Store-Configuration-to-JSON translation (section order/settings templates) plus `themeFilesUpsert`/`themePublish` (doc 16 §5/§7).
+- Implement `PublishHistory` and rollback (republish a prior entry).
 
-**Risks**: This is the phase most exposed to the doc 16 §11 open questions (exact publish-processing timing, rollback mechanism) — treat the first few real-merchant publishes as closely monitored, not routine.
+**Risks**: This phase is the first to touch a real merchant's live storefront — treat the first several real-merchant publishes as closely monitored, not routine. The Base Theme update/migration policy (doc 16 §9, doc 26) is a real open design question that needs resolving here, since real published stores start accumulating version drift the moment this phase ships.
 
-**Acceptance criteria**: A design-partner merchant's working-copy theme, edited via Shopforge, publishes successfully to their real live store and is confirmed correct by the merchant; rollback is demonstrated at least once against a real store.
-
----
-
-## Phase 7 — AI Image/Copy Generation
-
-**Features**: Grounded AI copywriting and image generation (doc 03 §6.2 Should-haves), tied to real `AssetRef` slots and Manifest content rather than free-floating generation.
-
-**Dependencies**: Phase 4's AI pipeline; Phase 5's validation (generated assets/copy still flow through the same pipeline).
-
-**Technical work**: Extend the provider abstraction (doc 10) to route image-generation calls; extend the Operation system with `update_asset` executions tied to `GeneratedAsset` records (doc 17).
-
-**Risks**: Image generation is the least-differentiated part of the product relative to Dropmagic/Instant (doc 03 §5) — scope conservatively, don't let this phase expand past "parity, grounded."
-
-**Acceptance criteria**: Generated copy/images are traceable to the specific Manifest section/asset slot they targeted, consume credits per doc 22's cost table, and pass validation before being offered to the user.
+**Acceptance criteria**: A design-partner merchant's `Project`, built and edited entirely through Shopforge, publishes successfully to their real live Shopify store via our Base Theme, is confirmed correct by the merchant, and rollback is demonstrated at least once against a real store.
 
 ---
 
-## Phase 8 — CRO Features
+## Phase 6 — Advanced Features
 
-**Features**: CRO/upsell suggestions, lightweight A/B testing hooks (doc 03 §6.3 Nice-to-haves), product-URL import as a grounded accelerator (doc 03 §5).
+**Features**: Section Library expansion toward the full ~40–60 target (doc 07 §3), deeper conversational AI editing, `generate_image` (image generation/enhancement), bulk `regenerate_page` and the `overrideUserEdits` regeneration variant (doc 11 §3.3/§9), CRO optimization, analytics, A/B testing, additional Shopify integrations, full tiered billing (doc 22 §1), multi-provider AI, and doc 12's fuller embedding-based fallback if MVP's narrow version proves insufficient.
 
-**Dependencies**: A proven core editing loop (Phases 4–6) — doc 03 §6.1 is explicit that this is not the wedge and shouldn't be pulled forward.
+**Dependencies**: A proven core loop (Phases 1–5) — this phase is explicitly about scaling and broadening a proven product, not proving new mechanisms.
 
-**Technical work**: New Operation types or presets built on the existing system (e.g. "add trust badges" as a pre-composed Operation Plan template), not new architecture.
+**Technical work**: Extend the Section Library on an ongoing content-production cadence; extend the provider abstraction (doc 10) to route image-generation calls, tied to `GeneratedAsset` records (doc 17 §16); implement `generate_image`/`regenerate_page`/`overrideUserEdits` on top of the existing Operation system rather than new architecture; Stripe-equivalent billing integration against the `AIUsageEvent`/`CreditBalance` ledger that's existed since MVP.
 
-**Risks**: Scope creep risk — CRO is a crowded, well-served category (GemPages Optimize, Shogun's dedicated products, per doc 03). Build only what naturally extends the existing Operation system; don't build a separate CRO subsystem.
+**Risks**: Scope creep — CRO/analytics is a crowded, well-served category (doc 03's competitor research); build only what naturally extends the existing Operation system, don't build a separate CRO subsystem. Image generation is one of the least-differentiated capabilities relative to competitors (doc 03 §5) — scope conservatively.
 
-**Acceptance criteria**: At least one CRO-oriented multi-step request (e.g. "add social proof near the buy button") produces a correct Operation Plan reusing existing capabilities where present.
+**Acceptance criteria**: The Section Library reaches its full target range; at least one CRO-oriented request produces a correct Operation Plan reusing existing capabilities; image generation flows through the same validation/credit pipeline as copy generation; a merchant can self-serve upgrade/downgrade across billing tiers.
 
 ---
 
-## Phase 9 — Billing & Scale
+## Future / Out of scope for this roadmap entirely
 
-**Features**: Full tiered billing (doc 22's Free/Starter/Growth/Agency), multi-provider AI (second provider wired into the Phase 4 abstraction), embedding-based fuzzy capability matching (doc 12's deferred fallback tier), full 4-role permission nuances (doc 18).
+Not a later phase — a different, unbuilt product direction, tracked only as the Future / Advanced Architecture appendices in docs 07, 09, 11, and 15:
 
-**Dependencies**: Everything prior — this phase is explicitly about scaling a proven product, not proving new mechanisms.
-
-**Technical work**: Stripe-equivalent billing integration against the `AIUsageEvent`/`CreditBalance` ledger that's existed since MVP (doc 23 §6); second AI provider config; embedding search infrastructure for the doc 12 semantic-match fallback.
-
-**Risks**: Standard scale risks (cost predictability under real usage, provider outage handling now that a fallback provider matters) — nothing novel to this product specifically.
-
-**Acceptance criteria**: A merchant can self-serve upgrade/downgrade across tiers; usage-based overage handling (doc 22 §5) behaves correctly under real load; a provider outage fails over or degrades gracefully rather than hard-failing the whole AI Workspace.
+- Arbitrary existing-theme import/parsing
+- Theme capability detection against an unknown theme
+- Generic arbitrary-theme compatibility
+- AI-generated Liquid/CSS/JS
+- AI modification of a merchant's own pre-existing, non-Shopforge-authored theme files

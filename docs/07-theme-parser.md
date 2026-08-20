@@ -1,190 +1,244 @@
-# 07 — Theme Parser
+# 07 — Section Library
 
 ## 1. Purpose and Scope
 
-The Theme Parser is the ingestion boundary between an arbitrary Shopify Online Store 2.0 (OS 2.0) theme file tree and everything Shopforge does afterward. It performs one job: **read the theme's files and produce a `ThemeManifest`** — a flat, static, read-only summary of what the theme *is* (its sections, settings, blocks, presets, templates, and derived capabilities).
+Shopforge does not parse, understand, or minimally edit an arbitrary merchant's existing Shopify theme. That direction — ingesting an unknown theme's file tree, deriving a capability manifest via static rules and embedding-based semantic matching, and performing targeted Liquid surgery on code we didn't write — is **cancelled for the MVP**. The reasoning that produced it isn't wasted; it's relocated to §11 as a possible post-MVP direction, because the underlying problem (arbitrary theme ingestion) is real and may return once the product has proven itself against a controlled surface.
 
-The Parser does not mutate anything. It does not build the `ThemeModel` (that is doc 09's Theme Model builder, which consumes the Manifest). It does not talk to the AI. It is a pure, deterministic (for a given file tree) transform:
+The actual MVP architecture is narrower and much safer to build on: **Shopforge owns one base Shopify theme and a fixed library of reusable Sections.** We write and maintain every Section's Liquid ourselves, review it like any other production code, and version it deliberately. AI never generates or modifies Liquid. AI's entire surface area is choosing which Sections to use, in what order, and what structured settings/content to put into them — a job it does by writing JSON into a Store Configuration (doc 08), never by writing code.
 
-```
-file tree (theme.zip / Shopify Theme API pull) --> Theme Parser --> ThemeManifest
-```
-
-Because the Manifest is derived data, it is always safe to throw away and regenerate. The Parser is the only component permitted to write a `ThemeManifest` record.
-
----
-
-## 2. Input
-
-The Parser's input is the theme's full file tree, obtained either by:
-
-- Pulling all theme files via the Shopify Admin API / Theme Access API (`GET /themes/{id}/assets.json` enumerated per file), or
-- Receiving an uploaded `.zip` export of a theme (manual import path, e.g. a theme the merchant purchased but hasn't published).
-
-Both paths normalize to the same in-memory file tree shape before parsing begins: a flat map of `{ relativePath: rawContentBuffer }`, e.g. `"sections/hero-banner.liquid" -> Buffer`. This normalization step is what lets the rest of the Parser be agnostic to source (live store vs. uploaded zip).
-
----
-
-## 3. Directory-by-Directory Extraction
-
-The Parser walks the standard OS 2.0 directory layout. Each directory maps to a specific extraction responsibility and a specific slice of the `ThemeManifest`.
-
-### 3.1 `layout/`
-
-- Reads `layout/theme.liquid` (and any alternate layouts referenced by templates, e.g. `layout/checkout.liquid` if present, though checkout.liquid is largely irrelevant post-Plus-checkout-extensibility and is recorded but not deeply parsed).
-- Extracts `{% section %}` and `{% sections %}` (section group) calls to identify which section groups (`header-group.json`, `footer-group.json`, etc. under `sections/`) are wired into the layout.
-- Populates `ThemeManifest.layouts[]` with `{ file, sections: [sectionGroupRef] }`.
-
-### 3.2 `templates/`
-
-- Enumerates every file in `templates/`. OS 2.0 templates are JSON (`product.json`, `index.json`, `collection.json`, custom variants like `product.deluxe.json`); legacy `.liquid` templates may still be present alongside JSON ones during a partial migration.
-- For each `*.json` template: parses the JSON directly. Extracts the ordered `sections` object keys as `sectionOrder`, cross-references each entry's `type` field against the parsed `sections/` directory to build `sectionsUsed`.
-- Derives `resourceType` from the filename stem (`product`, `collection`, `page`, `index`, `cart`, `blog`, `article`, `search`, `404`), with dotted-suffix custom templates (`product.deluxe.json`) still mapping to their base `resourceType` (`product`) so the AI system knows what resource they render.
-- For each `*.liquid` template (vintage-style template even inside an otherwise OS 2.0 theme — this does happen for templates a developer never migrated): records `type: "liquid"`, and attempts a best-effort regex scan for `{% section '...' %}` calls to populate `sectionsUsed`, but `sectionOrder` is left as `null` since Liquid templates don't declare a manifest-legible order — reordering such a template is out of scope for structural `move_section` operations and is flagged via `capabilities` (see §5).
-- Populates `ThemeManifest.templates[]`.
-
-### 3.3 `sections/`
-
-This is the richest extraction target.
-
-- For every `sections/*.liquid` file, the Parser extracts the `{% schema %} ... {% endschema %}` block via a Liquid-tag-aware scanner (not a naive regex — it must correctly handle nested `{% %}` inside string literals within the JSON, and files with zero or malformed schema blocks, see §7).
-- The extracted string is parsed as JSON. From it:
-  - `schema.name` -> `schemaName`
-  - `schema.settings[]` -> `settings: [SettingDef]` (mapped field-for-field: `id, type, label, default, options?, min?, max?, step?, unit?`)
-  - `schema.blocks[]` -> `blocks: [BlockDef]` (`type, name, settings, limit?`)
-  - `schema.presets[]` -> `presets: [PresetDef]` (`name, settings, blocks`)
-  - `schema.max_blocks` -> `maxBlocks` (null if absent, meaning unlimited)
-- `sectionId` is the file basename without extension (e.g. `hero-banner.liquid` -> `hero-banner`), matching the canonical `sectionId` field used throughout the Manifest and later by `ThemeModel.SectionInstance.sectionType`.
-- `usedInTemplates` is back-filled after all templates are parsed (§3.2), by inverting `templates[].sectionsUsed`.
-- `isAppBlockCompatible` is derived by checking for `{% content_for "blocks" %}` (current syntax) or the legacy `"@app"` entry inside `schema.blocks[].type` (older convention) — either signals the section accepts merchant-installed app blocks, which matters to the AI planner when it's deciding whether an upsell/review app's block can be dropped in without new code.
-- `sections/*.json` files (section **groups**, e.g. `header-group.json`) are parsed separately: their `type: "header" | "footer" | ...`, ordered `order[]` of block/section references, and per-entry settings are captured and folded into the relevant `layouts[].sections` entry rather than the flat `sections[]` array, since a section group is a layout concern, not a reusable section type.
-
-### 3.4 `snippets/`
-
-- Enumerates `snippets/*.liquid`. For each, the Parser does a static scan of every OTHER file (primarily `sections/`) for `{% render 'snippet-name' %}` / `{% include 'snippet-name' %}` calls to build the inverse map `renderedBySections: [sectionId]`.
-- Snippets have no schema of their own (Liquid gives them none), so no settings are extracted — they're recorded purely for dependency-graph purposes. This matters later: if the AI wants to `modify_liquid` a section, the Operation Planner consults this graph to know which snippets that edit might transitively touch.
-
-### 3.5 `config/`
-
-- `config/settings_schema.json`: theme-wide settings schema (color/typography/layout groups). Parsed into `themeSettings.schema: [SettingDef]`, flattening Shopify's grouping structure (each group is an object with a `name` and `settings[]`; the Parser flattens groups into one list but retains group membership in each `SettingDef`'s `id` namespace where Shopify uses one, e.g. `id` values are kept exactly as declared — no renaming).
-- `config/settings_data.json`: parsed into `themeSettings.currentValues`, taking specifically the `current` key's resolved object (Shopify's settings_data supports named presets plus a `current` pointer/object — the Parser resolves `current` to its concrete value object regardless of whether `current` is a string preset-name reference or an inline object, so downstream consumers always see resolved values, never a preset indirection).
-
-### 3.6 `assets/`
-
-- Enumerates every file in `assets/`. Classifies `type` by extension: `css`/`css.liquid` -> `"css"`, `js` -> `"js"`, image extensions (`png`, `jpg`, `jpeg`, `webp`, `svg`, `gif`) -> `"image"`, font extensions (`woff`, `woff2`, `ttf`, `otf`) -> `"font"`, everything else -> `"other"`.
-- Records `sizeBytes` from the raw content length.
-- For `.css` and `.css.liquid` files specifically, the Parser additionally scans for top-level custom property declarations (`--name: value;` inside a `:root` or similar broad selector) to populate `cssCustomProperties[]`, tagging each with `definedIn` (the asset file path). This is what lets the AI/editor discover theme-wide design tokens that live outside `settings_schema.json` (increasingly common in OS 2.0 themes that use CSS variables driven by Liquid for color scheme application).
-
-### 3.7 `locales/`
-
-- Enumerates `locales/*.json`. `isDefault` is true for the file matching the shop's primary locale suffix convention (`en.default.json` pattern) or, absent that convention, the locale declared in the theme's own config. `keys` records the flattened dot-path key list (not values — values aren't needed for the Manifest; the Model layer reads them on demand) so the AI can know translation coverage exists for a given string reference without pulling the entire, sometimes very large, locale file into every context window.
-
----
-
-## 4. Manifest Assembly Order
-
-Because several fields depend on cross-referencing other directories (`usedInTemplates` needs `templates/` parsed first; section-group layout refs need `sections/*.json` parsed before `layout/`), the Parser runs in a fixed two-pass order:
-
-1. **Pass 1 (independent extraction):** `config/`, `assets/`, `locales/`, `sections/*.liquid` (schema + settings only), `snippets/` inventory.
-2. **Pass 2 (cross-referencing):** `templates/` (needs Pass 1 section list to resolve `sectionsUsed`), `layout/` + `sections/*.json` groups (needs Pass 1 section list), back-fill `usedInTemplates` on each section, back-fill `renderedBySections` on each snippet.
-3. **Pass 3 (derivation):** compute `capabilities` (§5) using the fully assembled Manifest from Passes 1–2 as input, since capability rules read across sections + templates + theme settings jointly.
-
----
-
-## 5. Deriving `capabilities`
-
-`capabilities` is the single most product-critical output of the Parser: it's the flag set the AI planner consults first, before ever considering a generative operation (Principle 2: reuse existing capabilities; Principle 3: minimal AI generation). Getting this wrong in either direction is costly — a false negative causes the AI to needlessly regenerate code the theme already supports; a false positive causes the AI to point the user at a capability that doesn't actually do what they asked.
-
-Each capability flag is computed by one of two mechanisms, and each flag's derivation method is a static, documented property of that flag (not a runtime choice):
-
-### 5.1 Static rule-based flags
-
-These are computed by exact/structural matching against schema fields — no fuzzy logic, fully deterministic and explainable.
-
-| Flag | Rule |
-|---|---|
-| `hasHeroSection` | A section exists whose settings include an `image_picker`- or `video`-typed setting AND a `richtext`/`text`-typed setting AND is referenced in `sectionOrder[0]` or `[1]` of the `index` template. (Position matters — a text+image section buried at the bottom of the homepage is not a hero.) |
-| `hasAnnouncementBar` | A section or section-group entry whose `sectionId`/`schemaName` matches `/announce|announcement|marquee|topbar|utility-bar/i`, OR whose parsed section group `type` is a group rendered inside `layout/theme.liquid` above the header render call. |
-| `supportsColorSchemes` | `themeSettings.schema` contains a `SettingDef` of `type === "color_scheme"` or `type === "color_scheme_group"` (the OS 2.0 marker types Shopify introduced for shared color scheme pickers). |
-| `supportsSectionGroups` | At least one `layouts[].sections` entry resolves to a `sections/*.json` group file (as opposed to a bare `{% section %}` call), for both a header-equivalent and footer-equivalent slot. |
-| `hasUpsellCapability` | A section's `blocks[]` contains a block `type` matching `/upsell|cross-sell|bundle|frequently-bought/i` in its `type` or `name`, OR a section is `isAppBlockCompatible: true` AND the store's installed-apps list (fetched separately, not part of the Manifest itself) includes a known upsell app — this half of the check is why `hasUpsellCapability` is documented as a *hybrid* flag: the Parser can only set the file-structural half; the full resolved value is finalized by doc 12's context-assembly step, which has access to the live app list the Parser does not. |
-
-Static rules are intentionally narrow and keyword/structure-based because they must be cheap (computed synchronously on every parse, no LLM call) and fully explainable in the UI ("we detected this because your theme has a section with an image and rich text at the top of your homepage").
-
-### 5.2 Semantic / embedding-matched flags
-
-Some capabilities can't be reliably named by keyword because theme authors use wildly inconsistent naming (`schemaName` values like "Trust Block", "Social Proof Grid", "Customer Love Wall" may all be the same underlying capability as a section literally named "Reviews"). For these, the Parser does NOT do the matching itself — it only prepares the input. The actual embedding-similarity comparison against a canonical capability-description library is performed by the AI Context system (doc 12), because it requires a model/embedding call and the Parser is deliberately kept LLM-free (fast, deterministic, runs on every webhook-triggered re-sync without incurring AI cost).
-
-| Flag | Why it's semantic, not rule-based |
-|---|---|
-| `hasReviewsSection` | Review sections vary hugely in naming and shape (star widgets, testimonial grids, third-party app embeds). The Parser flags `hasReviewsSection` as `null` (meaning "undetermined by static rule") whenever no exact keyword match (`/review|testimonial|rating/i` in `schemaName`, `sectionId`, or any block/setting label) is found, and doc 12's embedding pass resolves the `null` to `true`/`false` using semantic similarity of the section's full extracted schema (settings labels, block names) against a reference "reviews section" description. |
-| `hasFaqSection` | Same pattern: keyword rule (`/faq|frequently asked|question/i`) covers the obvious case and sets the flag directly; ambiguous cases (a generic "Accordion" section that's actually used for FAQs) are left `null` for embedding resolution. |
-| `hasProductRecommendations` | Keyword rule checks for Shopify's own `{% recommendations %}` Liquid tag or `product-recommendations` section handle (very reliable signal, Shopify-provided primitive) — when found, set `true` directly, no embedding needed. When absent, set `null` and defer to embedding match against custom "you may also like" style sections, since third-party/custom-built recommendation UIs don't use the native tag. |
-
-**Contract with the Manifest schema:** any `capabilities` flag may legitimately be `null` at Parser-output time, meaning "the Parser could not determine this statically." The Manifest's `capabilities` object is documented (doc 08 §2) as tri-state (`true | false | null`) precisely to support this handoff — doc 12 never has to guess whether the Parser tried and failed vs. simply doesn't cover that flag. `null` is only ever resolved into `true`/`false` in the context-assembly layer, never persisted back into the cached `ThemeManifest` itself, since embedding results can depend on the reference-library version and shouldn't silently invalidate a manifest cache keyed purely on theme file content (`themeVersionHash`).
-
----
-
-## 6. Re-parsing Triggers
-
-The Manifest must never silently go stale relative to the actual theme files, since AI decisions and editor state both trust it as ground truth for "what capabilities exist." Two triggers cause a re-parse:
-
-1. **Webhook-driven:** Shopify's `themes/publish` and asset-update-adjacent activity is not granularly webhook-covered per-file, so Shopforge polls theme asset checksums via the Admin API on a short interval (see doc 18 for the exact `/theme/*` contract) whenever a `ShopifyInstallation` is active, AND explicitly re-parses immediately after any Shopforge-initiated publish (our own Theme Serializer writing files back triggers a parse of what was just written, both to refresh the cache and as a self-check that serialization round-trips cleanly).
-2. **Explicit re-sync:** user-triggered "Re-sync from Shopify" action (surfaced when a merchant edits the theme directly in Shopify's native theme editor outside Shopforge, which our system cannot observe in real time) — exposed via `/theme/parse` (doc 18).
-
-In both cases, the Parser re-reads the full file tree (it does not attempt incremental/partial re-parsing — theme trees are small enough, typically low hundreds of files totaling a few MB, that full re-parse is cheap and correctness from a clean read is worth more than the complexity of incremental diffing at this layer). Incremental *comparison* happens one level up, via `themeVersionHash` (§7).
-
----
-
-## 7. Manifest Caching and Invalidation via `themeVersionHash`
-
-- `themeVersionHash` is computed as a stable hash (e.g. SHA-256) over the sorted concatenation of every file's relative path + content bytes in the theme tree. Any single-byte change anywhere in the tree changes the hash.
-- Before running a full parse, the Parser computes `themeVersionHash` cheaply (hash-only pass, no schema parsing) and checks it against the `themeVersionHash` stored on the most recent cached `ThemeManifest` (DB entity, doc 17) for that `Theme`.
-- **Cache hit** (hash unchanged): the cached Manifest is returned as-is; no re-parse. This is the common case for the polling trigger (§6.1) when the merchant hasn't touched the theme since the last check.
-- **Cache miss** (hash changed or no prior Manifest exists): full parse runs, producing a new `ThemeManifest` row, and the previous Manifest is retained (not deleted) for diffing/audit purposes — `ThemeManifest` is itself a cache entity per theme *version*, not a singleton per theme, matching doc 17's `ThemeManifest(cache)` entity being keyed by version.
-- Manifest invalidation is therefore purely content-driven, never time-based (no TTL expiry) — a Manifest is valid forever for the exact file content it was computed from, and only ever superseded by a new hash.
-
----
-
-## 8. Error Handling
-
-### 8.1 Malformed section schema
-
-If a `{% schema %}` block fails JSON parsing (trailing commas, unescaped quotes, truncated block — all observed in the wild from hand-edited themes), the Parser:
-
-- Does not fail the entire parse.
-- Records that section with `settings: [], blocks: [], presets: []` and an entry in a Manifest-adjacent `parseWarnings[]` list (surfaced to doc 15's validation layer and to the user as "we couldn't fully read section X — AI edits to it will be treated as higher-risk").
-- The section still gets a `sectionId` and `file` entry (from the filename, independent of schema parse success) so template `sectionsUsed` references don't dangle.
-
-### 8.2 Missing `config/settings_schema.json` or `settings_data.json`
-
-Both files are required by the OS 2.0 spec; their absence is one of the strongest signals of a non-OS-2.0 (vintage) theme (see §8.3). If present but malformed JSON, same partial-failure treatment as §8.1: `themeSettings.schema`/`currentValues` default to empty, warning recorded.
-
-### 8.3 Vintage (pre-2.0) theme detection — explicit rejection, not degraded support
-
-**Decision: vintage themes are explicitly rejected in v1, not supported in any degraded mode.**
-
-Detection rule: a theme is classified vintage if `templates/` contains zero `*.json` files (i.e., every template is legacy `.liquid`) OR `config/settings_schema.json` is absent. Either condition alone is sufficient — real-world vintage themes reliably fail both, but requiring only one keeps the check robust against partially-migrated edge cases.
-
-When detected, the Parser aborts before Pass 2 and returns a structured rejection result (not a partial `ThemeManifest`):
+This document specifies the Section Library as an engineering artifact: what a Section is, the initial target catalog, how Sections are authored/reviewed/versioned, how a new Section reaches the AI and the editor, and how a Section's contract changes propagate — or deliberately don't — to already-published stores.
 
 ```
-ThemeParseResult {
-  status: "rejected"
-  reason: "vintage_theme_unsupported"
-  message: "This theme predates Shopify's Online Store 2.0 architecture (no JSON templates / no settings_schema.json found). Shopforge requires an OS 2.0 theme to safely map sections and settings. Please upgrade to an OS 2.0-compatible theme (Shopify's free Dawn-based themes, or your current theme's 2.0 version if the developer has published one) and re-import."
-}
+Section Library (this doc)  +  Store Configuration (doc 08)
+                    |
+                    v
+        Preview Renderer / LiquidJS (doc 09)  +  Shopify Liquid (production, doc 16)
 ```
 
-**Justification for outright rejection over degraded support:**
+The Section Library is the one and only place Liquid is authored. Everything downstream — AI, editor, preview, and the real storefront — treats it as a fixed, trusted catalog rather than something to be discovered or inferred.
 
-- The entire Shopforge value proposition rests on structural reuse: parsing real `settings_schema` + JSON template section order to make targeted, reversible edits. Vintage themes have no declared section schema (sections aren't first-class — the whole page is often one monolithic `index.liquid`), no ordered/reorderable section list, and no per-section settings contract. Every field in `ThemeManifest.sections[]` and `TemplateNode.sectionOrder` (doc 08/09) simply has no source of truth to read from.
-- A "best-effort" vintage parser would have to fall back to regex-scraping arbitrary Liquid for guessed section-like `{% include %}` boundaries, which produces a Manifest whose `capabilities` flags and `settings` are unreliable in exactly the way that undermines Principle 4 (ask instead of guessing) and Principle 1 (preserve the existing theme) — presenting a merchant with an editable capability list built on guesses is worse than clearly declining and directing them to upgrade, since Shopify itself actively steers all merchants toward OS 2.0 and free 2.0-compatible themes are readily available.
-- Silently degrading (e.g., treating a vintage theme as "OS 2.0 with zero sections detected") would produce a Manifest that looks structurally valid but is functionally empty, causing every downstream capability check to false-negative and every user request to fall through to `create_section_file`/`modify_liquid` — i.e., Shopforge would behave exactly like Dropmagic's blind-regeneration approach for these merchants, which is the specific failure mode this product exists to avoid.
-- Rejecting with a clear, actionable message costs the merchant one theme-upgrade step (usually free) versus Shopforge silently offering a degraded, generation-heavy experience under the same "targeted edit" marketing promise.
+---
 
-This is recorded as a v1 constraint, not a permanent one: a future vintage-adapter Parser mode is a plausible v2 investment if usage data shows meaningful demand from merchants unwilling/unable to upgrade, but it is out of scope here and must not be implicitly half-supported by weakening the detection rule above.
+## 2. Anatomy of a Section
 
-### 8.4 Partial/corrupt file tree (network/zip errors)
+A **Section** is a single reusable page-building block. It is defined by five sibling artifacts that ship together and are reviewed together — a Section is not "done" until all five exist and agree with each other:
 
-If the source file tree itself is incomplete (failed download, truncated zip, Admin API pagination error mid-fetch), the Parser refuses to run at all and returns `status: "rejected", reason: "incomplete_file_tree"` — it never produces a Manifest from a file set it cannot confirm is complete, since a Manifest silently missing files is strictly more dangerous than one that's never created (silent capability false-negatives again). The caller (import flow) is expected to retry the fetch.
+1. **Liquid Template** (`{type}.liquid`) — the real `.liquid` file. This is the literal file that both the LiquidJS Preview Renderer (doc 09) and Shopify's own Liquid engine render at runtime. There is no separate "preview version" of a Section's markup; the same file serves both.
+2. **Liquid Schema** — Shopify's native `{% schema %} ... {% endschema %}` JSON block, embedded in the template exactly as Shopify's theme editor spec requires (`name`, `settings[]`, `blocks[]`, `presets[]`, `max_blocks`). Because this is Shopify's own format, a Section that passes our review is, by construction, a Section Shopify's theme editor and Admin API will accept without translation.
+3. **Editor/Preview Metadata** (`editor.meta.json`) — Shopforge-only descriptive data that is not part of Shopify's schema spec: inspector field grouping and order, richer field types than Shopify's native pickers support (e.g. a grouped "layout" tab vs. a "content" tab), icon, thumbnail, category (§3), and help text shown in the Visual Editor's inspector (doc 06).
+4. **Shared Settings Contract** (`contract.json`) — the canonical, doc-08-shaped `SettingDef[]` / `BlockDef[]` definition for this Section type. This is the artifact doc 08 §5 calls the Shared Settings Contract: the one settings shape that AI, editor, LiquidJS preview, and Shopify Liquid all consume identically.
+5. **Design Specification** (`design-spec.md`) — visual/brand guidelines this Section must follow: typography and spacing rules, responsive breakpoint behavior, imagery treatment, interactive states (hover/empty/loading), and accessibility notes. This is a human-reviewed document, not machine-consumed, and is the artifact a design reviewer signs off against before merge (§5).
+
+**Why both a Liquid Schema and a separate Shared Settings Contract, when they describe the same settings?** They don't duplicate by hand. `contract.json` is the single source of truth for a Section's settings/blocks shape. The `{% schema %}` JSON block embedded in the `.liquid` file is *generated from* `contract.json` at build time by a small build step, not hand-maintained twice. This guarantees the two can never drift — there is exactly one place a Section author edits settings shape, and the Liquid-native schema Shopify reads is always a mechanical projection of it. `contract.json` additionally carries a `contractVersion` (§7) that has no equivalent field in Shopify's own schema format.
+
+A Section's canonical identifier is its **type slug** — a short, kebab-case string (`hero`, `product-grid`, `faq`) that is:
+
+- The Liquid filename stem (`sections/hero.liquid`).
+- The `type` value every `SectionInstance` in a Store Configuration uses to reference it (doc 08 §2.3).
+- The key the Preview Renderer uses to resolve which Liquid template to load (doc 09 §2).
+
+This is the one identifier threaded through all three of these documents — get it wrong anywhere and preview/production diverge, so it is treated as an immutable primary key once a Section is published (§7).
+
+---
+
+## 3. The Initial Section Catalog
+
+The list below is the MVP's working target catalog, organized into six rough categories. **This is explicitly not a final list** — categories and specific Sections will evolve as real store builds surface gaps or redundancies, and the catalog is designed to grow (or occasionally deprecate an entry, §7) without any of this document's mechanics changing. It currently totals 50 Sections, inside the ~40-60 range the product brief targets.
+
+### 3.1 Layout / Navigation
+
+| Type slug | Name | Purpose |
+|---|---|---|
+| `announcement-bar` | Announcement Bar | Thin top-of-page bar for shipping/promo messaging |
+| `header` | Header | Logo, primary nav, cart icon, search trigger |
+| `mega-menu` | Mega Menu | Rich nested navigation panel triggered from the header |
+| `mobile-nav-drawer` | Mobile Nav Drawer | Slide-out navigation for small viewports |
+| `search-overlay` | Search Overlay | Full-screen/dropdown search-as-you-type panel |
+| `breadcrumbs` | Breadcrumbs | Hierarchical location trail on product/collection pages |
+| `sticky-cart-bar` | Sticky Add-to-Cart Bar | Persistent bottom/top bar on product pages once the main ATC scrolls out of view |
+
+### 3.2 Content / Marketing
+
+| Type slug | Name | Purpose |
+|---|---|---|
+| `hero` | Hero | Primary above-the-fold image/video + heading + CTA |
+| `image-banner` | Image Banner | Full-width image with overlay text and optional CTA |
+| `video-banner` | Video Banner | Full-width autoplay/looping video with overlay content |
+| `slideshow` | Slideshow | Rotating carousel of banner-style slides |
+| `rich-text` | Rich Text | Freeform heading + formatted text block |
+| `image-with-text` | Image With Text | Two-column image/text pairing |
+| `split-promo` | Split Promo | Two adjacent image+CTA panels |
+| `collage` | Collage | Multi-column asymmetric image gallery |
+| `logo-list` | Logo List | "As seen in" / brand/press logo row |
+| `countdown-banner` | Countdown Banner | Timed promotion banner with a live countdown |
+| `about` | About | Brand story section, usually image + long-form text |
+| `blog-post-grid` | Blog Post Grid | Recent article cards |
+
+### 3.3 Product / Commerce
+
+| Type slug | Name | Purpose |
+|---|---|---|
+| `product-grid` | Product Grid | Configurable grid of product cards, manual or collection-sourced |
+| `featured-product` | Featured Product | Single spotlighted product with full purchase controls |
+| `product-information` | Product Information | PDP core block: title, price, variant picker, add-to-cart |
+| `product-gallery` | Product Gallery | PDP media gallery (images/video/3D) |
+| `collection-list` | Collection List | Grid of collection tiles |
+| `best-sellers` | Best Sellers | Curated or auto-ranked top-selling products |
+| `related-products` | Related Products | "You may also like" grid |
+| `recently-viewed` | Recently Viewed | Client-side recently-viewed product rail |
+| `quick-add-grid` | Quick-Add Product Grid | Product grid with inline variant/add-to-cart per card |
+| `size-chart` | Size Chart | Sizing table, usually modal-triggered from PDP |
+| `bundle` | Bundle | Multi-product bundle with combined pricing |
+| `upsell` | Upsell | Cross-sell/upsell offer block (cart or PDP context) |
+
+### 3.4 Social Proof
+
+| Type slug | Name | Purpose |
+|---|---|---|
+| `testimonials` | Testimonials | Curated quote cards, not tied to a reviews platform |
+| `reviews` | Reviews | Star-rated customer review list/widget |
+| `comparison` | Comparison | Feature/plan comparison table (us vs. alternative, or tier vs. tier) |
+| `stats-counters` | Stats / Counters | Numeric proof points (e.g. "50,000+ customers") |
+| `press-logos` | Press Logos | Media outlet logo row (distinct from `logo-list`'s brand-partner framing) |
+| `trust-badges` | Trust Badges | Payment/security/guarantee badge row |
+| `ugc-gallery` | UGC Gallery | Instagram-style user-generated-content image grid |
+
+### 3.5 Conversion
+
+| Type slug | Name | Purpose |
+|---|---|---|
+| `cta-banner` | CTA Banner | Focused single-message call-to-action band |
+| `newsletter` | Newsletter | Email capture form |
+| `faq` | FAQ | Accordion of question/answer pairs |
+| `benefits` | Benefits | Icon + short-text value-proposition row |
+| `features` | Features | Longer-form feature breakdown, usually icon/image + description |
+| `promo-bar` | Promo Bar | Discount-code or limited-time-offer strip |
+| `contact-form` | Contact Form | Merchant contact/inquiry form |
+
+### 3.6 Footer / Utility
+
+| Type slug | Name | Purpose |
+|---|---|---|
+| `footer` | Footer | Site-wide footer: link columns, legal, newsletter slot |
+| `social-links` | Social Links | Social platform icon row |
+| `payment-icons` | Payment Icons | Accepted payment method icon row |
+| `store-locator` | Store Locator | Physical location list/map |
+| `legal-bar` | Legal Bar | Copyright + policy link strip |
+
+---
+
+## 4. Directory / Package Shape
+
+Each Section is a self-contained directory holding its five artifacts as siblings, so review, versioning, and catalog generation all operate at the directory level:
+
+```
+section-library/
+  sections/
+    hero/
+      hero.liquid            # Liquid template (schema block generated into this file at build time)
+      contract.json          # Shared Settings Contract — SettingDef[]/BlockDef[]/PresetDef[] (doc 08 §5)
+      editor.meta.json       # Inspector metadata: field groups, icon, category, help text
+      design-spec.md         # Visual/brand guidelines this section must follow
+      thumbnail.png          # Editor "add section" picker preview image
+    product-grid/
+      product-grid.liquid
+      contract.json
+      editor.meta.json
+      design-spec.md
+      thumbnail.png
+    ...
+  catalog.json                # Generated: aggregates every section's type, category, status, contractVersion,
+                               #   and contract into one document — the artifact doc 12's AI context and
+                               #   doc 06's editor "add section" picker both actually read
+  build/
+    generate-schema.ts        # Compiles each contract.json into its section's {% schema %} block
+    generate-catalog.ts       # Rebuilds catalog.json from every sections/*/contract.json + editor.meta.json
+```
+
+`catalog.json` is the only artifact most other systems need to know about: doc 12 (AI context) reads it to ground the AI's understanding of what Sections exist and what settings each accepts; doc 06/19 (editor) reads it to populate the "add section" picker and to drive the inspector's field rendering together with each Section's `editor.meta.json`. Neither the AI nor the editor ever needs to read a `.liquid` file.
+
+---
+
+## 5. Ownership, Authoring, and Review
+
+The Section Library is owned by internal frontend/theme engineering as a standard reviewed codebase, not a merchant- or AI-editable surface — this is a hard boundary, not a policy that happens to hold today: **AI never authors or modifies a Section's Liquid, schema, or contract.** AI's write surface is Store Configuration values (doc 08) only.
+
+Every Section change goes through two review lenses before merge:
+
+- **Engineering review** — standard code review of the Liquid template, contract shape (does it reuse existing `SettingDef` type conventions rather than inventing one-off shapes, per doc 08 §5), and editor metadata.
+- **Design review** — a design owner signs off specifically against `design-spec.md`: does the shipped Section actually conform to the guidelines it claims to follow (typography, spacing, responsive behavior, states)?
+
+A Section is not published to the catalog until both reviews pass. There is no fast-path for AI-proposed or merchant-proposed Sections; new capability always arrives through this same human-reviewed process (§6).
+
+---
+
+## 6. Lifecycle: Adding a New Section
+
+1. **Proposal** — identify the gap (a demo script, a common merchant request pattern, a competitor-parity gap) and name the candidate Section, category, and rough settings shape.
+2. **Design spec** drafted (`design-spec.md`) — visual direction and conformance rules, reviewed against the base theme's existing brand system.
+3. **Contract drafted** (`contract.json`) — the `SettingDef[]`/`BlockDef[]`/`PresetDef[]` shape, reusing existing setting-type conventions (doc 08 §5) wherever the new Section's needs overlap with an existing pattern (e.g. reuse the same `image_picker`/`richtext`/`color_scheme` conventions rather than inventing new ones for equivalent needs).
+4. **Liquid implementation** — the template is written against the drafted contract; the build step (§4) generates the embedded `{% schema %}` block from `contract.json` rather than it being hand-written.
+5. **Editor metadata** (`editor.meta.json`) — inspector grouping/labels/icon/category.
+6. **Review** (§5) — engineering + design sign-off.
+7. **Merge → catalog regeneration** — `catalog.json` is rebuilt to include the new entry with `status: "active"` and an initial `contractVersion` of `"1.0.0"`.
+8. **Propagation** — because the AI's section-catalog context (doc 12) and the editor's "add section" picker (doc 06) both read the current `catalog.json` live (or from a short-TTL cache) rather than any per-store cached copy, the new Section becomes usable in the very next AI context build and the very next editor session — there is no separate "roll out to stores" step, since nothing about a *new* Section (as opposed to a changed one, §7) can be backward-incompatible with any existing Store Configuration.
+
+---
+
+## 7. Lifecycle: Changing an Existing Section's Contract
+
+This is the part of the Section Library's design that most needs to be gotten right, because getting it wrong means a Section Library change could silently break a store that published against an older Section version. The rule is deliberately simple and is treated as load-bearing:
+
+**A Section type slug's Shared Settings Contract never changes shape once published. Type identity is contract identity.**
+
+Concretely:
+
+- Every Section's `contract.json` carries a `contractVersion` (semver-style string, e.g. `"1.4.0"`), bumped on every change, tracked purely for audit/changelog purposes.
+- **Backward-compatible changes** — adding a new optional setting or block with a schema-level default, adjusting a label/help-text string, wording changes in `design-spec.md`, internal Liquid refactors that don't touch any `SettingDef.id`/`type` or `BlockDef.type` — are published **in place**, as a MINOR or PATCH `contractVersion` bump. The `type` slug is unchanged. Every existing `SectionInstance` in every store's Store Configuration with that `type` continues to render exactly as before, and immediately becomes eligible to use the new optional field (at its schema default until a merchant or the AI sets it).
+- **Breaking changes** — removing a setting, renaming a `SettingDef.id`, changing a setting's `type` incompatibly, removing/renaming a `BlockDef.type` — are **never** made in place. They are published as a **new type slug** (e.g. `hero` → `hero-v2`), with its own full five-artifact directory, cataloged *alongside*, not instead of, the original. This is a MAJOR change by definition, and the version bump lands on the new slug's `contractVersion`, starting again at `"1.0.0"`.
+- The original slug's entry is marked `status: "deprecated"` in `catalog.json`. Its Liquid, contract, and schema are **never deleted** — a deprecated Section remains fully renderable, by both the Preview Renderer (doc 09) and Shopify's own Liquid engine, indefinitely. Deprecation only changes two things: it's excluded from the AI's section-catalog context for new placements (§8), and it's excluded from the editor's "add section" picker for new placements. A Store Configuration may reference a mix of active and deprecated types at once; this is an expected, safe steady state, not an error condition.
+
+**Consequence for Store Configurations (coordinated with doc 08 §6):** because contract shape is immutable per type slug, a stored Store Configuration is never invalidated by a Section Library release, and no automatic migration step is ever required when the library changes. This is a deliberate trade against "in-place evolution with migration scripts" — it costs catalog surface area (an old and a new slug coexisting) in exchange for making "does this library change break existing stores" a question with a structurally guaranteed "no" instead of a per-release judgment call.
+
+**What this design leaves open:** there is currently no mechanism to *offer* a merchant an upgrade from a deprecated type to its replacement (e.g. surfacing "a newer version of this Hero section is available" in the editor) — deprecated just means "don't offer for new use," not "prompt for migration." Whether/how to build that affordance is undecided and is a candidate for doc 26 (Open Questions).
+
+---
+
+## 8. Propagation to the AI Section Catalog Context
+
+Doc 12 (AI context assembly) treats `catalog.json` as one of its primary structured inputs, analogous to the role the old, cancelled Theme Manifest used to play — except the catalog here is **static across every store** (not derived per-merchant), since every store is built from the same fixed base theme and Section Library. Concretely:
+
+- The catalog gives the AI, for every `status: "active"` Section, its `type`, category, and full Shared Settings Contract (`SettingDef[]`/`BlockDef[]`) — everything the AI needs to choose a Section and populate valid `settings`/`blocks` values (doc 11), without ever reading or writing Liquid.
+- Because the catalog only changes on a Section Library release — not per merchant action, not per store — it can be built once at deploy time and cached, needing no per-request or per-store re-parse. This is a substantial simplification versus the cancelled Theme Parser's per-theme, per-webhook re-parse loop (old doc 07 §6): there is nothing store-specific to parse, because there is nothing store-specific about what Sections exist.
+- `status: "deprecated"` Sections are omitted from the context given to the AI for new generation — the AI should never propose placing a Section that's being phased out, even though that same Section keeps rendering correctly for stores that already use it.
+
+---
+
+## 9. Propagation to Already-Published Stores
+
+Because of the immutable-contract-per-type-slug policy (§7), "propagation to already-published stores" is mostly a non-event by design:
+
+- A backward-compatible (in-place) contract change is picked up automatically the next time a store's Section instance of that type is re-rendered (preview or, on next publish, production) — new optional settings simply render at their defaults until explicitly set.
+- A breaking contract change never reaches an already-published store at all, because it ships under a new type slug that no existing Store Configuration references. The store keeps rendering the deprecated-but-unchanged original.
+- The one thing that *can* change for an already-published store without any Store Configuration edit is a Section's **Liquid/visual implementation** under a backward-compatible release (e.g. a CSS/markup polish that doesn't touch the contract) — this is treated the same as any other base-theme code deploy and is intentionally in scope; it's how visual/UX improvements reach existing stores without requiring a republish-triggering settings change.
+
+---
+
+## 10. Editor DOM Metadata (Cross-Reference)
+
+Every Section's Liquid template is also responsible for emitting a small set of `data-sf-*` attributes on its rendered markup, so the Visual Editor's click-to-select and in-preview editing can map a clicked DOM node back to a specific setting. This is a Section-authoring responsibility (part of step 4 in §6/§7 above, and part of engineering review), but the exact attribute contract is specified in full in doc 09 §6, since it's fundamentally about the preview/editor interaction model, not the Section Library's own shape. Section authors implement against doc 09 §6's contract; this document just records that the obligation exists.
+
+---
+
+## 11. Future / Advanced Architecture
+
+Everything in this section describes the **cancelled MVP direction**, preserved because the underlying problem — supporting an arbitrary, unknown merchant theme instead of only our own base theme — is a plausible post-MVP investment, not a bad idea. It is explicitly **not** part of the MVP architecture and nothing in docs 07-09 depends on it.
+
+**If Shopforge ever supports importing an arbitrary existing merchant theme** (rather than only building on our own base theme + fixed Section Library), it would need something close to the original Theme Parser concept:
+
+- **Arbitrary file-tree ingestion:** a parser walking an unknown OS 2.0 theme's `layout/`, `templates/`, `sections/`, `snippets/`, `config/`, `assets/`, and `locales/` directories, extracting each section's `{% schema %}` into a structural summary — an `ImportedThemeManifest`, distinct in name and purpose from this architecture's `StoreConfiguration` (doc 08), since an imported theme's sections aren't drawn from our controlled catalog and can't be assumed to expose our Shared Settings Contract shape.
+- **Static rule-based capability detection:** cheap, deterministic, explainable pattern matching (e.g. "a section with an `image_picker` + `richtext` setting near the top of the homepage template is probably a hero") to flag likely capabilities without any model call.
+- **Embedding-based semantic capability matching:** for capabilities that can't be reliably named by keyword because arbitrary theme authors use wildly inconsistent naming (a reviews section literally called "Customer Love Wall"), a fallback resolution pass comparing extracted schema text against a reference capability-description library — deferred to an AI/embedding step specifically because it's too expensive and non-deterministic to run as a static rule.
+- **Tri-state capability flags** (`true | false | null`, `null` meaning "undetermined by static rule, pending semantic resolution") as the mechanism for handing off from the cheap static pass to the expensive semantic pass without conflating "we checked and it's absent" with "we haven't determined this yet."
+
+None of this is designed in detail here — reviving it would require, at minimum, deciding how an arbitrary theme's ad hoc sections would map onto (or coexist with) the Section Library's controlled catalog and Shared Settings Contract, which is a substantially harder problem than anything this document solves for the fixed-catalog MVP. This is flagged as a real future direction, not a discarded one, but it is out of scope until there's product evidence it's needed.
