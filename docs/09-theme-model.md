@@ -1,194 +1,230 @@
-# 09 — Theme Model
+# 09 — Preview Rendering & Interaction Architecture
 
-## 1. What the Theme Model Is
+## 1. What the Preview Is (and Isn't)
 
-`ThemeModel` is the live, mutable, semantic representation of one `ThemeVersion`'s working copy — the single in-memory-and-DB-persisted structure that the Visual Editor and the AI both read from and write to. Where `ThemeManifest` (doc 08) answers "what does this theme support," `ThemeModel` answers "what does this specific working copy currently look like, right now, including every unsaved edit."
+State this plainly up front, because it's the load-bearing decision this whole document exists to specify: **the preview is not React rendering the storefront.** It is **LiquidJS rendering our actual Liquid Section templates into an HTML string, written into a same-origin iframe.**
 
-Every section on every page, every setting value, every block, every global style token exists in exactly one place: the `ThemeModel`. This document specifies its shape, the mutation functions that are the *only* sanctioned way to change it, how it's built, how it's serialized back to real theme files, and how this design satisfies Principle 7.
+This is intentional, and it's intentional for one reason above all others: **preview/production parity.** LiquidJS renders the exact same `.liquid` files (doc 07 §2) that Shopify's own Liquid engine will run at publish time, fed the exact same `settings`/`blocks` values from the exact same `StoreConfiguration` (doc 08). There is no second implementation of a Hero section's markup living in React, no hand-maintained visual approximation that can drift from what actually ships. If a Section's Liquid changes, the preview changes with it automatically, because there's only one place that Liquid lives.
 
----
-
-## 2. Full Field Reference
-
-### 2.1 Top-level `ThemeModel`
-
-| Field | Type | Description |
-|---|---|---|
-| `themeVersionId` | `string` | The `ThemeVersion` (doc 17) this Model is the working copy of. One `ThemeModel` per `ThemeVersion`. |
-| `templates` | `{ [templateKey]: TemplateNode }` | Every template in the theme, keyed by a stable template key. |
-| `sections` | `{ [instanceId]: SectionInstance }` | Every section *instance* across the whole theme (all templates + section groups), keyed by a stable UUID independent of position. |
-| `globalStyles` | `GlobalStyles` | Structured theme-wide design tokens. |
-| `themeSettings` | `object` | Current `settings_data.json`-equivalent values, keyed by schema id — the full resolved set, including keys `globalStyles` doesn't structurally model yet. |
-| `assets` | `{ [file]: AssetRef }` | Asset references, including AI-generated replacements. |
-
-### 2.2 `TemplateNode`
-
-| Field | Type | Description |
-|---|---|---|
-| `key` | `string` | Template identity, e.g. `"product"`, `"index"`, `"collection.summer-sale"` (dotted suffix for named alternate templates, mirroring Shopify's own `product.suffix.json` convention). |
-| `file` | `string` | Source file path this node serializes back to, e.g. `"templates/product.json"`. |
-| `sectionInstances` | `instanceId[]` | Ordered list of section instances rendered in the template body (excludes header/footer groups). |
-| `sectionGroups` | `{ header: instanceId[], footer: instanceId[] }` | Section-group-slotted instances, ordered. |
-
-**Why `instanceId` and not `sectionId` in the order arrays:** a `sectionId` (e.g. `"hero-banner"`) names a section *type*; the same type can appear multiple times in one template (two "featured-collection" sections stacked), or the same instance conceptually never appears in two templates at once. `instanceId` is what makes reordering, duplicating, and moving sections between templates unambiguous and stable — drag-reordering in the editor mutates an array of `instanceId`s, never re-keys anything.
-
-### 2.3 `SectionInstance`
-
-| Field | Type | Description |
-|---|---|---|
-| `instanceId` | `string` | Stable UUID, assigned once at creation (Model build or `add_section`), persists across every subsequent edit/move/reorder for the life of the instance. |
-| `sectionType` | `string` | References `ThemeManifest.sections[].sectionId` — identifies which section schema/Liquid file this instance renders through. |
-| `settings` | `object` | Current values, keyed by `SettingDef.id` from the section's schema. |
-| `blocks` | `{ blockInstanceId: string, blockType: string, settings: object }[]` | Ordered block instances. `blockInstanceId` is likewise a stable UUID independent of block position. |
-| `visibility` | `{ desktop: boolean, tablet: boolean, mobile: boolean }` | Per-breakpoint show/hide (Shopify's `[data-breakpoint-visibility]`-style responsive controls, modeled explicitly rather than left in `settings` so the editor can render one universal visibility control regardless of section type). |
-| `disabled` | `boolean` | Whether the instance is fully disabled (excluded from render but retained in the Model/file — Shopify keeps disabled sections in template JSON, just excluded from `sectionOrder` rendering; the Model mirrors this by keeping the instance present with `disabled: true` rather than removing it, which is what makes re-enabling a simple flag flip instead of a reconstruction). |
-
-### 2.4 `GlobalStyles`
-
-| Field | Type | Description |
-|---|---|---|
-| `colors` | `{ [role: string]: string }` | Resolved color values keyed by role (`"background"`, `"text"`, `"accent"`) or, for themes using `color_scheme_group`, by scheme name. |
-| `typography` | `{ headingFont, bodyFont, scaleRatio, baseSize }` | Structured font/scale tokens. |
-| `buttons` | `{ radius, borderWidth, shadow, style: "solid" \| "outline" \| "soft" }` | Structured button style tokens. |
-| `spacing` | `{ sectionSpacing, containerWidth }` | Structured layout spacing tokens. |
-| `raw` | `object` | Passthrough of every `themeSettings` key not yet mapped into a structured field above — guarantees no `settings_data.json` key is ever silently dropped, even for design-token shapes the Model hasn't been taught to structure yet. |
-
-### 2.5 `AssetRef`
-
-| Field | Type | Description |
-|---|---|---|
-| `file` | `string` | Path within `assets/`. |
-| `url` | `string` | Resolvable URL (CDN-hosted Shopify asset URL, or Shopforge-hosted staging URL pre-publish). |
-| `uploadedBy` | `"user" \| "ai" \| "theme-default"` | Provenance — drives UI treatment (AI-generated assets get an attribution/regenerate affordance) and cost accounting (doc 22). |
-| `sourceGeneratedAssetId` | `string?` | Present when `uploadedBy === "ai"`; links back to the `GeneratedAsset` DB entity (doc 17) that produced it. |
+This document specifies, precisely enough for the editor/frontend teams (doc 06, doc 19) to build against: the LiquidJS rendering pipeline, why every plausible alternative was ruled out, the division of labor between React and LiquidJS, why the iframe is same-origin, how click-to-select and `contentEditable` work, the full edit-to-preview loop, and the bounded, honest scope of "parity" this approach actually buys.
 
 ---
 
-## 3. Building the Model from Manifest + Raw File Contents
+## 2. The LiquidJS Rendering Pipeline
 
-The Theme Model Builder runs once per `ThemeVersion` creation (theme import, or branching a new working version off an existing one) and produces the initial `ThemeModel`. It is a distinct step from the Theme Parser (doc 07): the Parser never touches per-instance state, and the Builder never re-derives schema/structure — it strictly consumes `ThemeManifest` for "what's possible" and raw file contents for "what's currently set" (doc 08 §5.2).
+### 2.1 Pipeline steps
 
-Build sequence:
+| Step | What happens |
+|---|---|
+| 1 | **Store Configuration** (doc 08) holds the current page's `sections[]`, each a `SectionInstance` with a `type` and `settings`/`blocks`. |
+| 2 | **Preview Renderer** iterates the page's `sections[]` in array order (doc 08 §2.2 — array order is render order). |
+| 3 | For each instance, **resolve `type`** against the Section Library catalog (doc 07 §3) to find its Liquid template path. |
+| 4 | **Load that Section's Liquid template** (`sections/{type}.liquid`, doc 07 §4) — fetched once and cached client-side; not re-fetched per render. |
+| 5 | **Build the render context** for that instance: inject `settings`/`blocks` (doc 08 §2.3/§2.4) as `section.settings.*` / `section.blocks[]`, matching Shopify's own Liquid object shape exactly, plus stubbed Shopify runtime globals (§2.3). |
+| 6 | **LiquidJS `render()`** the template against that context, producing an HTML string for that one Section. |
+| 7 | Concatenate every Section's rendered HTML (plus the base theme's shared layout chrome — `<head>`, global CSS, `<body>` wrapper) into one full-page HTML string. |
+| 8 | **Write the HTML string into the same-origin iframe** (§5) — via `iframe.srcdoc` or an equivalent same-origin document write. |
+| 9 | The browser renders it like any other HTML document — real CSS cascade, real layout, real interactivity for anything that doesn't require a live Shopify backend. |
 
-1. **Load** the current `ThemeManifest` for the theme (doc 08 §4 lookup) and the raw contents of every `templates/*.json`, `sections/*.json` (groups), and `config/settings_data.json` file.
-2. **For each `ThemeManifest.templates[]` entry:** create a `TemplateNode` keyed by the template's resource-derived key. For each entry in the raw template JSON's `sections` object, create a `SectionInstance`:
-   - Generate a new `instanceId` (UUID) — the raw Shopify template JSON keys section entries by an arbitrary string id of Shopify's own choosing, which the Builder does *not* reuse as `instanceId` (Shopify's own ids are not guaranteed stable across the merchant re-saving in Shopify's native editor); a fresh stable UUID is minted at build time and a `{ shopifyBlockKey -> instanceId }` mapping is retained internally by the Serializer (§4) for round-tripping.
-   - Validate `sectionType` against `ThemeManifest.sections[].sectionId`; abort the build for that instance (log + flag, do not silently drop) if no match — this indicates raw-file/Manifest drift, which should only occur if a re-parse is needed first.
-   - Populate `settings` from the raw JSON's `settings` object, filling any key absent there with `SettingDef.default` from the Manifest (doc 08 §5.2).
-   - Populate `blocks[]` similarly from the raw JSON's `blocks` object, generating a `blockInstanceId` per block.
-   - `sectionInstances` order is taken directly from the raw JSON's `order` array (which is the true current order — `ThemeManifest.sectionOrder` reflects the state at last parse and could theoretically differ if this build is happening mid-drift-detection, so raw file order always wins for the Model).
-3. **For each `layouts[].sections` group ref:** same instance-construction logic, populating `TemplateNode.sectionGroups.header`/`.footer` — but section groups are shared across all templates that reference that layout, so their instances are built once and referenced by `instanceId` from every relevant `TemplateNode`.
-4. **`themeSettings`** is populated directly from raw `config/settings_data.json`'s resolved `current` object (same resolution the Parser did — Builder re-reads raw rather than trusting the Manifest's cached `currentValues`, since `settings_data.json` can change independently of a re-parse being triggered, e.g. mid-build during a fresh import).
-5. **`globalStyles`** is derived from `themeSettings` by mapping recognized `SettingDef.type`/`id` patterns (font pickers -> `typography`, `color`/`color_scheme` settings whose id matches known role-naming conventions -> `colors`, etc.) into the structured sub-objects, with every other key passed into `globalStyles.raw` verbatim (doc 08 §5.2).
-6. **`assets`** is populated from `ThemeManifest.assets[]`, with `uploadedBy: "theme-default"` for every entry (no AI-generated assets exist yet in a freshly built Model).
-
-The resulting `ThemeModel` is persisted (JSON, doc 17) keyed by `themeVersionId`, and from this point forward **all further changes to it happen exclusively through the mutation API in §4** — the Builder is never invoked again for an existing `ThemeVersion`; a fresh build only happens for a new version.
-
----
-
-## 4. Mutation API Surface
-
-This is the complete, exhaustive set of functions permitted to change a `ThemeModel`. Both the Visual Editor (doc 06, via `/editor/*` doc 18) and the AI Operation Executor (doc 11, executing an `Operation` from architecture-core §3) call these same functions — there is no second mutation path for either caller. Every mutation function:
-
-- Takes `themeVersionId` plus the operation-specific arguments.
-- Validates the target exists and the new value/shape is legal against the relevant `SettingDef`/schema from the Manifest.
-- Applies the change to the in-memory/persisted `ThemeModel`.
-- Emits one or more `DiffEntry` records (architecture-core §4) capturing `before`/`after`, appended to a `Diff` tagged with `causedBy: { type: "ai_operation" | "editor_edit", ... }`.
-- Returns the updated `SectionInstance`/`TemplateNode`/`GlobalStyles` slice (not the whole Model) so callers can apply an optimistic local update without re-fetching everything.
-
-| Function | Signature | Diff entries produced |
-|---|---|---|
-| `setSectionSetting` | `(themeVersionId, instanceId, settingId, value) -> SectionInstance` | one `modified`, path `sections.{instanceId}.settings.{settingId}` |
-| `setBlockSetting` | `(themeVersionId, instanceId, blockInstanceId, settingId, value) -> SectionInstance` | one `modified`, path `sections.{instanceId}.blocks.{blockInstanceId}.settings.{settingId}` |
-| `addSectionInstance` | `(themeVersionId, templateKey, sectionType, position, presetName?) -> SectionInstance` | one `added`, path `sections.{newInstanceId}`; settings/blocks seeded from `PresetDef` if `presetName` given, else schema defaults |
-| `removeSectionInstance` | `(themeVersionId, instanceId) -> void` | one `removed`, path `sections.{instanceId}` (full prior instance stored as `before` for reversibility) |
-| `moveSectionInstance` | `(themeVersionId, instanceId, toTemplateKey?, toIndex) -> TemplateNode` | one `moved`, path `templates.{templateKey}.sectionInstances`, `before`/`after` = index (and template key, if cross-template) |
-| `duplicateSectionInstance` | `(themeVersionId, instanceId) -> SectionInstance` | one `added`, path `sections.{newInstanceId}`, `after` = deep copy of source instance with fresh `instanceId`/`blockInstanceId`s |
-| `addBlock` | `(themeVersionId, instanceId, blockType, position) -> SectionInstance` | one `added`, path `sections.{instanceId}.blocks.{newBlockInstanceId}` |
-| `removeBlock` | `(themeVersionId, instanceId, blockInstanceId) -> SectionInstance` | one `removed`, path `sections.{instanceId}.blocks.{blockInstanceId}` |
-| `reorderBlock` | `(themeVersionId, instanceId, blockInstanceId, toIndex) -> SectionInstance` | one `moved`, path `sections.{instanceId}.blocks` |
-| `setVisibility` | `(themeVersionId, instanceId, breakpoint: "desktop"\|"tablet"\|"mobile", value: boolean) -> SectionInstance` | one `modified`, path `sections.{instanceId}.visibility.{breakpoint}` |
-| `setDisabled` | `(themeVersionId, instanceId, disabled: boolean) -> SectionInstance` | one `modified`, path `sections.{instanceId}.disabled` |
-| `setGlobalStyle` | `(themeVersionId, path, value) -> GlobalStyles` | one `modified`, path `globalStyles.{path}` (e.g. `"colors.accent"`) — mirrors `update_global_style`'s `path` payload shape verbatim |
-| `setThemeSetting` | `(themeVersionId, settingId, value) -> object` | one `modified`, path `themeSettings.{settingId}` |
-| `setAsset` | `(themeVersionId, file, newContentRef, uploadedBy, sourceGeneratedAssetId?) -> AssetRef` | one `modified` (or `added` if `file` is new), path `assets.{file}` |
-
-Two additional functions exist outside the per-field list above because they don't correspond 1:1 to a single `OperationType` but are required for AI generative operations (architecture-core §3) to have somewhere to land their output in the Model:
-
-| Function | Signature | Notes |
-|---|---|---|
-| `registerNewSectionType` | `(themeVersionId, sectionType, liquidSource, schema) -> void` | Backing function for `create_section_file`. Writes the new section's schema into a Model-local "pending new section types" set (not yet in `ThemeManifest` — that only updates on next Parser re-sync post-publish) so `addSectionInstance` can immediately reference the new `sectionType` within the same session, and stages `liquidSource` for the Serializer (§5) to write out. |
-| `applyRawFileEdit` | `(themeVersionId, file, unifiedDiff) -> void` | Backing function for `modify_liquid`/`modify_css`/`modify_js`. Applies a unified diff to a raw file staged for the Serializer; does not touch `ThemeModel`'s structured fields directly, since a raw Liquid/CSS/JS edit isn't necessarily setting-shaped — the affected `SectionInstance.settings`, if any, are re-derived from the new raw source right after via `setSectionSetting` calls as needed, keeping raw-edit consequences visible in the structured Model too rather than only in the file. |
-
-**Contract every mutation function shares:** none of them ever write directly to a Liquid/JSON file. They only ever touch the in-memory/DB-persisted `ThemeModel` and emit a `Diff`. File writes happen exclusively in the Theme Serializer (§5), on an explicit save/publish action — this separation is what makes every edit (editor or AI) cheap, instant-feeling, and safely batchable before anything touches the merchant's actual theme files.
-
----
-
-## 5. The Theme Serializer
-
-The Serializer is the inverse of the Model Builder: it takes the current `ThemeModel` (plus the staged raw-file edits from `registerNewSectionType`/`applyRawFileEdit`) and writes real Liquid/JSON files back out, ready to push to Shopify via the Admin API.
-
-It runs on explicit save (`/editor/save`, doc 18) or as part of AI plan execution finalization (doc 11) — never automatically on every mutation call, so many mutations can be batched into one file-write pass.
-
-Serializer steps:
-
-1. **For each `TemplateNode`:** reconstruct the template JSON. For every `instanceId` in `sectionInstances` (and `sectionGroups.header`/`.footer`, written to their respective group JSON files instead), look up the `SectionInstance`, and:
-   - Resolve `instanceId` back to a Shopify-legal section key using the `{ instanceId -> shopifyBlockKey }` map retained since Build time (§3 step 2) for pre-existing instances, or mint a new Shopify-legal key (handle-safe string) for instances created via `addSectionInstance`/`duplicateSectionInstance` since the last serialize.
-   - Write `settings` and `blocks` (each block similarly resolved to a stable block key) into that section's JSON entry.
-   - Write the `order` array from `sectionInstances`, **omitting** instances where `disabled: true` from `order` while still including their full entry in `sections` (matching Shopify's own disabled-section convention, so re-enabling round-trips cleanly — this is exactly why `SectionInstance.disabled` is modeled as a flag rather than instance removal, §2.3).
-   - `visibility` per-breakpoint flags are written into that section's settings block using Shopify's standard responsive-visibility setting keys.
-2. **For `globalStyles` and `themeSettings`:** merge changed values back into `config/settings_data.json`'s `current` object. This is a targeted merge, not a full overwrite — only keys the Model actually changed (tracked via the accumulated Diff entries since last serialize) are written, so any settings_data.json content Shopforge doesn't model (arbitrary future keys landing in `globalStyles.raw`/passthrough `themeSettings` entries) is preserved untouched rather than clobbered by a stale in-memory copy.
-3. **For staged `registerNewSectionType` entries:** write a new `sections/{sectionType}.liquid` file containing the provided Liquid source with the schema JSON embedded in a `{% schema %} %}` block matching the provided `schema` object exactly (byte-for-byte JSON serialization of what was validated, so what the AI proposed is what ships).
-4. **For staged `applyRawFileEdit` entries:** apply the unified diff to the named file's last-known content and write the patched result.
-5. **For new/moved `AssetRef` entries with `uploadedBy: "ai"`:** upload the referenced generated asset content to `assets/{file}` (or a Shopify CDN-eligible path per Admin API asset upload conventions).
-6. **Post-write:** trigger a Theme Parser re-parse (doc 07 §6, "Shopforge-initiated publish" trigger) against exactly what was just written, both to refresh the `ThemeManifest` cache and as a self-check — if the fresh parse's derived structure disagrees with what the Model *thought* it wrote (e.g. a hand-crafted `liquidSource` from a generative operation produced schema JSON that doesn't parse the way the Model assumed), that's surfaced as a validation failure (doc 15) before the write is confirmed to the user as successful, not after.
-
-The Serializer never needs to reason about *why* a value changed (AI vs. editor) — it only reads the current `ThemeModel` state, making it fully agnostic to origin. Provenance (`causedBy`) lives on the `Diff` records, not on the Model or the Serializer's output.
-
----
-
-## 6. Principle 7 — One Model, No Disconnected Representations
-
-Principle 7 states: visual editor and AI must never maintain two disconnected representations. The design above satisfies this structurally, not by convention:
+### 2.2 Worked example: `hero`
 
 ```
-                     ┌─────────────────────────┐
-                     │   ThemeModel (per        │
-                     │   themeVersionId)         │
-                     │   — single source of      │
-                     │     truth, DB-persisted   │
-                     └────────────┬──────────────┘
-                                  │
-                     mutation API (§4) — the ONLY write path
-                                  │
-              ┌───────────────────┴───────────────────┐
-              │                                         │
-   Visual Editor (doc 06)                    AI Operation Executor (doc 11)
-   drag/drop, inspector field edit           executes Operation[] from an
-   -> calls e.g. moveSectionInstance,        approved Operation Plan
-      setSectionSetting directly              -> calls the SAME functions,
-      from UI event handlers                     e.g. moveSectionInstance,
-                                                  setSectionSetting, driven by
-                                                  each Operation's `type`/`target`/
-                                                  `payload`
-              │                                         │
-              └───────────────────┬───────────────────┘
-                                  │
-                     every call emits a Diff (architecture-core §4)
-                     tagged causedBy.type = "editor_edit" | "ai_operation"
-                                  │
-                     both paths read back from the SAME ThemeModel
-                     (editor re-render + AI's next-turn context both
-                      query current ThemeModel state — never a cached
-                      or forked copy)
-                                  │
-                     Theme Serializer (§5) — single write-back path
-                     to real Liquid/JSON files, origin-agnostic
+SectionInstance:
+  type: "hero"
+  settings: { heading: "Everyday Carry, Elevated", subheading: "...", image: {...}, cta_label: "Shop the Collection" }
+        |
+        v
+Resolve "hero" -> sections/hero.liquid  (doc 07 §3.2)
+        |
+        v
+LiquidJS render(heroLiquidSource, { section: { settings: {...}, blocks: [] }, shop, cart, routes, ... })
+        |
+        v
+"<section class=\"hero\" data-sf-section-id=\"sec_a1\" data-sf-section-type=\"hero\">
+   <h1 data-sf-setting=\"heading\" data-sf-editable=\"text\">Everyday Carry, Elevated</h1>
+   <p data-sf-setting=\"subheading\" data-sf-editable=\"richtext\">...</p>
+   <a data-sf-setting=\"cta_label\" href=\"/collections/all\">Shop the Collection</a>
+ </section>"
+        |
+        v
+Written into the iframe's document -> browser renders it as real HTML
 ```
 
-Concretely, this means:
+The `data-sf-*` attributes are what make click-to-select and `contentEditable` possible (§6) — they are emitted by the Section's own Liquid template, per doc 07 §10's authoring obligation, not injected by the Preview Renderer after the fact.
 
-- There is exactly one `OperationType` -> mutation-function mapping (architecture-core §3's `OperationType` list maps 1:1 onto §4's function table above: `update_setting` -> `setSectionSetting`, `move_section` -> `moveSectionInstance`, `add_block` -> `addBlock`, etc.). The AI Operation Executor is, mechanically, just another caller of the editor's own mutation functions — it has no private mutation logic, no shadow copy of section state, and no ability to bypass Manifest-schema validation that the editor's UI wouldn't also be subject to.
-- If a user is looking at the Visual Editor and asks the AI chat to "make the hero heading bigger" in the same session, the AI's `setGlobalStyle`/`setSectionSetting` call updates the exact same `ThemeModel` row the editor is rendering from — the editor reflects the change on its next state read (live-sync via the same `/editor/get-model` + mutation-broadcast path used for the editor's own optimistic-update reconciliation, doc 18), not via a separate "AI changes" merge step.
-- Undo/redo and the Diff/Snapshot system (doc 14) operate over one unified Diff stream regardless of `causedBy` — an AI operation can be undone from the editor's undo stack and vice versa, because both produced identical `DiffEntry` shapes against the identical Model.
-- There is only one serialization path to real files (§5): the AI never writes Liquid/JSON directly, and the editor never writes Liquid/JSON directly — both changes accumulate in `ThemeModel` and are flushed by the same Serializer, which is what guarantees the file output is always self-consistent regardless of how many alternating editor/AI edits preceded the save.
+### 2.3 Preview Runtime Context: stubbing Shopify's own Liquid objects
+
+Section Liquid legitimately references Shopify-provided runtime objects that don't exist outside a real Shopify request — `shop`, `cart`, `routes`, `settings` (theme-wide), `localization`, and similar. The Preview Renderer supplies a **stubbed runtime context** for these: representative-but-fake values (a `shop` object with the store's real name/domain, an empty `cart`, `routes` pointing at plausible-looking paths) good enough for layout and content to render correctly, without a live Shopify backend behind them. This stub context is maintained alongside the Section Library, since which globals a Liquid template might reference is a Section-authoring concern (doc 07), and is the first, most direct source of the parity gaps documented in §9.
+
+### 2.4 Product data resolution
+
+Sections that reference a `ProductRef` (doc 08 §2.8) — `product-grid`, `featured-product`, `product-information`, `product-gallery`, and similar — need hydrated product data (title, price, images, variants) to render meaningfully, not just a `productId`/`handle`. Before step 5 above, the Preview Renderer resolves every `ProductRef` an instance's settings contain into a full product object, sourced from the cached Product Import/Scraper data (pre-publish) or a live Shopify product lookup (post-publish). This resolution step is what lets `product-grid` render real-looking product cards in preview before the store has ever touched Shopify's Admin API.
+
+### 2.5 Where LiquidJS runs
+
+LiquidJS executes **client-side, in the browser**, inside the builder application — not server-side per edit. Section Liquid source and the stub runtime context (§2.3) are fetched once (or served from a short-TTL cache) rather than re-fetched on every keystroke. This is what makes the edit → preview loop (§8) feel instant: a settings change re-renders entirely in-browser, with no network round trip to a server or to Shopify.
+
+---
+
+## 3. Explicitly Ruled Out Alternatives
+
+| Alternative | Why it was rejected |
+|---|---|
+| **Screenshot / static image** | Not interactive — no click-to-select, no `contentEditable`, no responsive viewport simulation. A screenshot is also stale the instant a setting changes; it would require a server round-trip per edit to regenerate, defeating the instant-feedback goal (§8). |
+| **Static mockup (design-tool-style rendering)** | Same interactivity problem as a screenshot, plus it's a second, hand-maintained visual representation of every Section — the exact drift risk this architecture exists to avoid (§1). |
+| **React recreation of the storefront** | Would require re-implementing every Section's markup/behavior twice: once in Liquid (for production) and once in React (for preview) — any divergence between the two silently breaks preview/production parity, and every future Section addition doubles the implementation cost. This is the single most important alternative ruled out, since it's the most tempting one to reach for as a "modern frontend" default. |
+| **Shopify API round-trip per edit** | Pushing every edit to a real (draft) Shopify theme and re-fetching a rendered page per keystroke would be accurate but far too slow for interactive editing, would require every store to have a live Shopify connection before a single preview could render, and would burn API rate limits on every field edit rather than on publish. |
+
+---
+
+## 4. Role of React vs. LiquidJS
+
+React (via Next.js) owns the **builder application chrome only**: toolbar, sidebar, section navigator, AI chat panel, inspector (settings form for the selected instance), editor controls (undo/redo, device-size toggle, publish button), and the iframe **host element** itself. React never renders storefront markup, never re-implements a Section's visual output, and never reaches inside the iframe's document to render anything — its job stops at owning the `<iframe>` tag and reacting to messages/events that cross the iframe boundary (§6).
+
+LiquidJS owns **all storefront rendering**, exclusively inside the iframe, as specified in §2. This split is deliberate and total: if a pixel is part of "what the store looks like," it came from LiquidJS rendering a real Section template; if a pixel is part of "the tool used to build the store," it came from React.
+
+---
+
+## 5. The Same-Origin Iframe
+
+The preview iframe is **same-origin** with the builder application — not a separate remote website, not a sandboxed `srcdoc` with a different effective origin, not an embed of any external URL. This is a deliberate choice, made for one reason: **same-origin is what lets the editor's React chrome reach into the iframe's DOM** to attach hover/click listeners, read computed styles, and detect selected elements (§6). A cross-origin iframe would block exactly the DOM access this entire interaction model depends on.
+
+The iframe is responsible for:
+
+- **Isolating storefront CSS from editor UI CSS** — the base theme's stylesheet applies only inside the iframe's document, so a Section's styles can never leak out and corrupt the builder chrome's own styling, and vice versa.
+- **Rendering independently of the host page's layout** — its own scroll, its own viewport-relative units, so responsive viewport simulation (§5.1) behaves like a real browser viewport, not a scaled `<div>`.
+- **Supporting click-to-select and hover detection** (§6) via same-origin DOM access from the host React app.
+- **Supporting in-preview editing** via `contentEditable` (§7) on eligible elements.
+- **Accurately reflecting storefront styling** — because it's rendering the real Liquid + real base-theme CSS, not an approximation.
+
+### 5.1 Responsive viewport simulation
+
+Device-size toggling (desktop/tablet/mobile) in the editor resizes the iframe element itself (its CSS width/height, or an actual `<iframe>` `width`/`height` change) rather than swapping rendered content — the same HTML string renders at whatever viewport width the iframe currently occupies, exercising the base theme's real responsive CSS. `Visibility` settings (doc 08 §2.6) are applied by the Preview Renderer choosing whether to render a given instance at all for a simulated breakpoint, consistent with how the same flags drive production visibility at publish time.
+
+To be explicit about what the iframe is **not**: it is not a separate remote website loaded via `<iframe src="https://...">` pointing at some hosted storefront URL. It is part of the builder's own preview system, its content generated entirely client-side from the current `StoreConfiguration` by the same LiquidJS pipeline described in §2, and it exists only within an active editor session.
+
+---
+
+## 6. Click-to-Select Editor Interaction
+
+### 6.1 Interaction flow
+
+```
+hover over rendered element
+        |
+        v
+outline drawn around the nearest data-sf-* ancestor (visual affordance only, editor chrome, drawn by React
+  reading the hovered element's bounding box via same-origin DOM access)
+        |
+        v
+click
+        |
+        v
+select — walk up from the clicked element to the nearest ancestor carrying data-sf-setting (field-level),
+  else data-sf-block-id (block-level), else data-sf-section-id (section-level)
+        |
+        v
+map to Page -> Section id -> Block id -> Setting id
+        |
+        v
+Inspector (doc 06) opens scoped to exactly that target
+```
+
+### 6.2 DOM metadata strategy
+
+The mapping from a clicked DOM node back to a precise `StoreConfiguration` path is made possible by `data-sf-*` attributes that Section Liquid templates emit themselves (doc 07 §10 — this is a Section-authoring obligation, reviewed like any other part of a Section). The full attribute contract:
+
+| Attribute | Where it's emitted | Purpose |
+|---|---|---|
+| `data-sf-page` | Root wrapper of the rendered page (once per page) | Identifies which `pages.{key}` the click occurred within. |
+| `data-sf-section-id` | Root element of each rendered Section instance | Maps to `SectionInstance.id` (doc 08 §2.3). |
+| `data-sf-section-type` | Same element as `data-sf-section-id` | Maps to `SectionInstance.type` — lets the editor know which contract/inspector layout to use without a lookup. |
+| `data-sf-block-id` | Root element of each rendered block instance (e.g. each testimonial card, each FAQ item) | Maps to `BlockInstance.id` (doc 08 §2.4). |
+| `data-sf-setting` | The specific DOM node rendering one editable field's value | Maps to a `SettingDef.id` — this is the field-level click target. |
+| `data-sf-editable` | Same element as `data-sf-setting` | One of `"text" \| "richtext" \| "image" \| "none"` — tells the editor which in-preview interaction applies (§7) if any. |
+
+Resolution walks **up** the DOM tree from the clicked node, taking the nearest match at each level — a click directly on a heading resolves to that heading's `data-sf-setting` (field-level, opens the Inspector pre-scrolled to that field); a click on section whitespace with no `data-sf-setting` ancestor resolves only to `data-sf-section-id` (section-level, opens the Inspector's general tab for that instance).
+
+### 6.3 Open questions flagged for doc 26
+
+The following are genuinely undecided and are flagged, not designed, here:
+
+- **Overlapping/ambiguous click targets** — a block nested inside another block-like structure, or a setting rendered inside a loop where the same `data-sf-setting` value legitimately appears more than once in the DOM (e.g. a price shown both in a gallery thumbnail overlay and in the main info panel) needs a precise disambiguation rule beyond "nearest ancestor."
+- **Keyboard/accessibility path for selection** — the hover/click flow above is mouse-first; an equivalent keyboard-navigable selection path is undesigned.
+- **Selection behavior during an active `contentEditable` edit** — whether clicking a different element mid-edit should auto-commit, prompt, or discard is undecided (§7 states the write-back principle but not this specific UX rule).
+
+---
+
+## 7. `contentEditable` and the Single Source of Truth Principle
+
+For appropriate text-shaped fields (`data-sf-editable="text"` or `"richtext"`), the editor supports direct in-preview editing via the browser's native `contentEditable`, rather than requiring every text change to go through the Inspector sidebar. This is purely an interaction convenience.
+
+**The governing principle: `contentEditable` is only an editor *interaction mechanism*. It is never the source of truth, and raw DOM mutations are never persisted directly.** Concretely:
+
+1. The user clicks into a `data-sf-editable="text"` element and types — the browser's native contentEditable behavior handles the in-place text mutation, entirely within the iframe's DOM.
+2. On blur (or an explicit commit action), the editor **reads the current text content back out** of that DOM node — not the raw DOM tree, just the resulting string.
+3. That string is written into `StoreConfiguration` at the path resolved by that element's `data-sf-setting` (§6.2) — e.g. `pages.home.sections[].settings.heading` — via the same settings-update path any other editor field edit uses (doc 08 §5, "Visual Editor" row).
+4. This triggers a LiquidJS rerender (§8) — including of the very element just edited — which means the "final" rendered text the user sees after commit came from a fresh render off the updated `StoreConfiguration`, not from the raw DOM mutation the browser applied during typing.
+
+This matters because it keeps exactly one source of truth (`StoreConfiguration`) even though the interaction momentarily lets the DOM diverge from it while the user is mid-edit — the DOM is never trusted as storage, only as a transient editing surface that gets reconciled back into the real data model on every commit.
+
+---
+
+## 8. The Editor → Configuration → Preview Loop
+
+```
+user edits a field (Inspector or in-preview contentEditable)
+        |
+        v
+StoreConfiguration update  (doc 08 — a new settings value at a specific path)
+        |
+        v
+LiquidJS rerender  (§2 — the affected Section(s) only, or the full page; either is a fresh render off
+                     the current StoreConfiguration, never a DOM patch)
+        |
+        v
+iframe content updated  (new HTML string written in)
+```
+
+**Worked example — hero heading text change:**
+
+Before:
+```json
+{ "id": "sec_a1", "type": "hero", "settings": { "heading": "Everyday Carry, Elevated", ... } }
+```
+Rendered: `<h1 data-sf-setting="heading" data-sf-editable="text">Everyday Carry, Elevated</h1>`
+
+User edits the heading in-preview to "Carry Less. Carry Better." → committed per §7's read-back flow →
+
+After:
+```json
+{ "id": "sec_a1", "type": "hero", "settings": { "heading": "Carry Less. Carry Better.", ... } }
+```
+Rerendered: `<h1 data-sf-setting="heading" data-sf-editable="text">Carry Less. Carry Better.</h1>`
+
+**This loop never touches Shopify.** The preview updates immediately, entirely client-side, off the in-memory/session `StoreConfiguration` — no publish, no Admin API call, no live theme write happens as part of ordinary editing. Shopify only enters the picture at explicit publish (doc 16).
+
+---
+
+## 9. Preview Parity: A Bounded Goal
+
+Because the LiquidJS preview and Shopify's production Liquid engine render the **literal same Section templates** off the **literal same settings values**, parity for our controlled, first-party Sections is expected to be close. This is a real, structural advantage over any React-recreation approach (§3) — but it is a **bounded goal, not a guarantee of automatic 100% parity.** The following are concrete places parity can still break, and are things to be documented and tested case by case, not solved by this document:
+
+| Parity risk | Why it can diverge |
+|---|---|
+| **Shopify-specific runtime objects** (`cart`, `routes`, `customer`, real `localization`) | The Preview Renderer uses a stubbed context (§2.3); a Section that behaves differently against a populated real cart (e.g. quantity-dependent messaging) than against the stub won't be caught in preview. |
+| **Shopify-only Liquid behavior/tags** | Filters or tags with server-side-only semantics (e.g. money formatting tied to the shop's actual currency/locale settings, `{% recommendations %}`) may render differently between LiquidJS's implementation and Shopify's own engine's edge cases. |
+| **App extensions / third-party apps** | Any merchant-installed Shopify app that injects script tags, app blocks, or checkout/cart extensions has no equivalent in the preview environment — it simply isn't there. |
+| **Real inventory / cart state** | Preview cannot reflect actual stock levels, real cart contents, or live pricing/discount logic that depends on a live Shopify session. |
+| **Shopify-specific APIs** | Any Section behavior driven by a live Storefront/Admin API call at runtime (as opposed to data resolved ahead of render, §2.4) has no live backend to call against in preview. |
+| **Browser/runtime differences** | LiquidJS is a JavaScript reimplementation of Shopify's Ruby-based Liquid engine — edge-case filter/tag behavior differences between the two implementations are possible and need to be caught by testing, not assumed away. |
+
+The product commitment here is: parity is strong *for the things this architecture structurally guarantees* (markup, settings-driven content, layout, styling) and explicitly weaker for anything that depends on a live Shopify runtime. Each row above is a testing/documentation obligation for the Section Library and QA process (doc 21), not a gap this document resolves.
+
+---
+
+## 10. Future / Advanced Architecture
+
+Everything in this document assumes the Preview Renderer only ever needs to load Liquid from our own, known, fixed Section Library (doc 07). **If arbitrary-theme support is ever built** (doc 07 §11's cancelled-but-preserved direction), this same LiquidJS approach would, in principle, still be the right rendering strategy — but it would need to render *unknown* section Liquid pulled from an arbitrary merchant theme, rather than our controlled catalog.
+
+That is flagged here as a much harder, currently unsolved problem, not designed: unknown Liquid can reference snippets, assets, and settings shapes this document has no visibility into; the `data-sf-*` DOM metadata contract (§6.2) that click-to-select depends on has no equivalent in a theme we didn't author, since we can't require an arbitrary theme's Sections to emit our attributes; and the stubbed runtime context (§2.3) would need to cover a much wider, unpredictable surface of Liquid patterns instead of the ones our own ~50 Sections actually use. None of this is designed here — it's noted so that if arbitrary-theme import is revived, this document's core rendering strategy (LiquidJS, same-origin iframe, settings-driven rerender) is understood as the likely starting point, not something to reinvent from scratch.

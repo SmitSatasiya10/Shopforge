@@ -1,48 +1,47 @@
 # 15. Validation System
 
 Status: proposed design
-Depends on: architecture-core §3 (Operation), §4 (Diff), doc 14 (Diff & Versioning)
-Owned by: this doc is the canonical source of truth for the validation pipeline every `Operation`/`Diff` passes through before reaching real theme files.
+Depends on: doc 07 (Section Library), doc 08 (Store Configuration Schema), doc 09 (Preview Rendering), doc 11 (AI Generation & Editing Operation System), doc 14 (Diff & Versioning), doc 16 (Shopify Integration/Publishing)
+Owned by: this doc is the canonical source of truth for the validation pipeline the Store Configuration passes through, from first AI generation to a live Shopify store.
 
 ---
 
 ## 1. Purpose and position in the pipeline
 
-No `Operation` (architecture-core §3) — structural or generative — reaches the Theme Serializer (which writes real Liquid/JSON files and, on publish, calls the Shopify Admin API) without passing this pipeline. This is the enforcement mechanism behind Principle 6 (everything is reversible) and Principle 8 (Shopify compatibility first): reversibility is only meaningful if what gets applied was actually valid, and "the theme remains a valid Shopify theme at every step" is a claim this pipeline exists to make true rather than assumed.
+**A note on scope, up front:** the Liquid templates in our Section Library (doc 07) are controlled source code, written once by us when a section is added to the library, and maintained like any other application code — they go through normal code review, not this pipeline. This document is not about validating Liquid. It is about validating **data**: the Store Configuration (doc 08), the JSON document that says which of our fixed sections appear on a page, in what order, and with what settings and content. Every check below exists because the Store Configuration is produced and edited by parties — an AI model, a merchant clicking around a settings panel — that can get the *data* wrong in ways a fixed, reviewed Liquid template has every right to assume never happens. This is a meaningfully smaller job than validating arbitrary generated code, and the pipeline below is smaller as a direct result.
+
+The Store Configuration is touched at several distinct points in the product flow (see doc 01/04 for the full flow): AI Generation produces it from Product Data (doc 11); the Visual Editor lets a merchant hand-edit it; the Preview Renderer (doc 09) turns it into a live same-origin iframe preview as the merchant works; and Publish (doc 16) writes it, together with our Base Theme and Section Library, onto the merchant's real Shopify store. This pipeline is not one linear gate the configuration passes through once — it's eight checks, each with its own natural trigger point, some of which run continuously during editing and some of which run only once, right before publish:
 
 ```
-   OperationPlan (Operation[])
-          │
-          ▼
-   ┌────────────────────────────────────────────────────────────┐
-   │  For each Operation, in plan order, against the tentative    │
-   │  post-apply ThemeModel:                                       │
-   │                                                                │
-   │  1. Schema validation        (is the Operation well-formed)   │
-   │  2. Theme-model validation   (is the resulting ThemeModel      │
-   │                                structurally valid)             │
-   │  3. Shopify validation       (will Admin API / theme rules     │
-   │                                accept it)                       │
-   │  4. Liquid syntax validation (only if requiresNewCode)         │
-   │  5. JSON validation          (templates / settings_data)       │
-   │  6. Asset-reference validation (no dangling refs)              │
-   │  7. Runtime/rendering validation (render preview, check errors)│
-   │  8. Responsive validation    (automatable subset + flag rest)  │
-   │  9. Regression validation    (Diff entries stayed in scope)    │
-   └───────────────────────────┬────────────────────────────────┘
-                                │  any hard block anywhere → whole
-                                │  plan transaction rolled back
-                                │  (doc 14 §8: one plan = one transaction)
-                                ▼
-                     ValidationSummary { perLayer results, overall: "pass"|"warn"|"blocked" }
-                                │
-                     pass/warn ──────────────▶ commit transaction, produce Diff (doc 14)
-                     blocked   ──────────────▶ Clarification / re-plan flow, NOT auto-retry
+   AI Operation emitted  ─┐
+   Editor field edited   ─┼─▶ 1. Configuration validation  (structural JSON shape)
+   Restore applied        ┘        │
+                                    ▼
+                           2. Section validation      (type exists in Section Library)
+                                    │
+                                    ▼
+                           3. Settings validation      (settings match section's contract)
+                                    │
+                          ┌─────────┼─────────┐
+                          ▼                   ▼
+                4. Assets validation   5. Product references validation
+                          │                   │
+                          └─────────┬─────────┘
+                                    ▼
+                           6. Preview validation       (LiquidJS renders without error)
+                                    │
+                          ── continuous during editing ──
+                                    │
+                                    ▼  (only at Publish)
+                           7. Shopify validation        (Admin API will accept the write)
+                                    │
+                                    ▼
+                           8. Publish validation         (the write actually completed)
 ```
 
-Layers run in the order above because each layer is cheaper and more decisive than the next — cheap structural checks (layers 1–2) fail fast before spending time/cost on layers that require actually rendering or calling out to Shopify (layers 3, 7). Layers 4–6 only run when relevant to the `Operation.type` (e.g. Liquid syntax validation is skipped entirely for `update_setting`, which never touches Liquid).
+Layers 1–3 are the cheap, fast, structural gate — they run on every single AI Operation before it's allowed to merge into the draft (doc 14), and on every Visual Editor save, because both write through the same mutation path (doc 14 §2.3). Layers 4–5 run alongside layers 1–3 for any operation touching an asset- or product-bound setting. Layer 6 runs continuously as the merchant edits (it's the same render the same-origin iframe preview already needs, doc 09), and again as a final full-page pass immediately before publish. Layers 7–8 are publish-time only — they have no meaning before there's an actual attempt to write to Shopify.
 
-Every layer's result is recorded into `ValidationSummary` and persisted on the `ThemeOperation` record (doc 14 §4: `validationResult` field) — validation outcomes are themselves part of the permanent audit trail, not a transient check that's discarded once it passes.
+Every layer's result is recorded into a `ValidationSummary` and persisted on the `Operation` record (doc 14 §4: `validationResult` field) — validation outcomes are themselves part of the permanent audit trail, not a transient check discarded once it passes.
 
 ---
 
@@ -50,274 +49,280 @@ Every layer's result is recorded into `ValidationSummary` and persisted on the `
 
 Two outcome classes recur at every layer:
 
-- **Hard block**: the `Operation` cannot be applied. The transaction for the whole `OperationPlan` is rolled back (doc 14 §8 — no partial application). The user never sees a broken theme state as a result. The failure is routed back into the AI Clarification/Operation-Plan flow (doc 11/13), never silently retried.
-- **Warning**: the `Operation` *can* be applied, but the system flags something the user should know before or after doing so — shown inline in the plan-review UI before execution, and/or attached to the `ThemeOperation`/`Diff` history entry afterward for anything that can only be checked post-apply (e.g. rendering/responsive checks that need the applied state to inspect).
+- **Hard block**: the change cannot be applied (or, at publish time, publish cannot proceed). Per doc 14 §8, the whole Operation Plan transaction is rolled back — no partial application. The user never sees a broken configuration as a result. For AI-caused failures, the failure is routed back into the AI Clarification/Operation-Plan flow (doc 11/13), never silently retried without limit (§11).
+- **Warning**: the change *can* be applied, but the system flags something the user should know — shown inline in the plan-review UI before execution, and/or attached to the `Operation`/`Diff` history entry (doc 14) afterward for anything that can only be checked post-apply.
 
-The general dividing line used throughout this doc: **if applying the operation would leave the theme in a state that violates a Shopify-enforced constraint, breaks page rendering, or silently escapes the operation's declared scope, it's a hard block. If it's a quality/appearance concern that a human is better positioned to judge than an automated check, it's a warning.**
-
----
-
-## 3. Layer 1 — Schema validation
-
-**Question:** is the `Operation` itself well-formed, independent of theme content?
-
-Checks:
-- `Operation.type` is one of the defined `OperationType` values (architecture-core §3).
-- `Operation.target` contains the fields required for that `type` (e.g. `update_block_setting` requires `instanceId` + `blockInstanceId` + `settingId`; `add_section` requires none of those but requires a valid `payload.sectionType`).
-- `Operation.payload` matches the documented shape for `type` (e.g. `update_setting` payload has exactly `{ value }`; `modify_liquid` payload has exactly `{ file, unifiedDiff }`).
-- `riskLevel` is one of `"safe"|"review"|"destructive"` and is internally consistent with `type` (e.g. `create_section_file`/`modify_liquid`/`modify_css`/`modify_js` must never be tagged `"safe"` — this is a schema-level cross-field invariant, not just a type check).
-- `requiresNewCode` is `true` iff `type` is one of the four generative types — mismatches here are treated as a planner bug, not a user-facing warning.
-
-**Hard block:** malformed `Operation` (missing required target field, unknown type, payload shape mismatch, risk/type mismatch). This should be rare in practice — it indicates a bug in the Operation Planner (doc 11), not a user-caused problem — so a schema validation failure logs at higher severity internally (paging/alerting territory) in addition to blocking, and surfaces to the user as a generic "couldn't build a safe plan for that request, please rephrase" rather than exposing internal schema details.
-
-**Warning:** none at this layer — a malformed Operation has no partially-safe interpretation.
-
-**Example — fail:** `Operation.type = "update_block_setting"` with `target = { instanceId: "hero-1", settingId: "background" }` (missing `blockInstanceId`) → hard block, "operation planner produced an incomplete target."
-
-**Example — pass:** `Operation.type = "add_block"`, `target = { instanceId: "hero-1" }`, `payload = { blockType: "testimonial", position: 2 }` → well-formed, proceeds to layer 2.
+The general dividing line used throughout this doc: **if applying the change would leave the Store Configuration referencing something that doesn't exist, would fail to render, or would be rejected outright by Shopify, it's a hard block. If it's a quality/appearance concern a human is better positioned to judge than an automated check, it's a warning.**
 
 ---
 
-## 4. Layer 2 — Theme-model validation
+## 3. Configuration validation
 
-**Question:** applied against a tentative copy of the `ThemeModel` (architecture-core §2), does the result stay structurally valid per the Theme Manifest's (architecture-core §1) known constraints?
+**Question:** is the Store Configuration itself structurally valid — well-formed JSON, matching the shape doc 08 defines, with required fields present and correctly typed?
 
-Checks:
-- Every `SectionInstance` referenced by a `TemplateNode.sectionInstances`/`sectionGroups` actually exists in `ThemeModel.sections` (no orphaned reference left behind by `remove_section` forgetting to also update template ordering — this guards the Operation implementation itself, not just AI intent).
-- Conversely, a section removal doesn't leave the section unreferenced-but-still-present in a way that silently orphans it forever (it should be fully removed or explicitly left as an unused-but-valid section, a deliberate choice surfaced to the user, not an accident).
-- Block count for a `SectionInstance` after `add_block`/`duplicate_section` stays within `maxBlocks` from the corresponding `ThemeManifest.sections[].maxBlocks` — this is a Shopify-schema-declared limit (the section's own `schema.blocks` max), and exceeding it would produce a section that the Shopify theme editor itself would reject blocks into.
-- `settingId` referenced by `update_setting`/`update_block_setting`/`update_theme_setting` actually exists in the relevant `SettingDef` list from the Manifest (no writing values for settings the section/theme schema doesn't declare).
-- `blockType` referenced by `add_block` exists in the section's `BlockDef` list.
-- `sectionType` referenced by `add_section` exists in `ThemeManifest.sections` (i.e. references a real section file) or, for `create_section_file`, does not collide with an existing `sectionId`.
-- Enum/option-constrained settings (`SettingDef.options`) receive a value from the allowed option set; range-constrained settings (`min`/`max`/`step`) receive an in-range, step-aligned value.
-- `move_section`/`reorder_block` target indices are within bounds of the resulting array.
+**When it runs:** first, before anything else — on every AI Operation before it's allowed to merge into the draft, on every Visual Editor save, and as the very first gate immediately before Publish (a final sanity re-check, since this is the cheapest possible check to repeat).
 
-**Hard block:** any of the above structural invariants would be violated — these are all cases where the resulting `ThemeModel` would itself be internally inconsistent, independent of whether Shopify would additionally reject it. E.g. exceeding `maxBlocks`, referencing a nonexistent `settingId`, or a dangling section reference.
+**Checks:**
+- The document parses as JSON (or, where it never leaves memory as a parsed object, that the in-memory object matches the expected shape) — this catches nothing in a well-behaved system, but is the first line of defense against a serialization bug anywhere upstream.
+- The top-level `pages` key exists and is an object keyed by page identifier (`home`, `product`, etc., per doc 08).
+- Each page value has a `sections` key that is an array.
+- Every entry in a `sections` array has the required fields: `id` (string, unique within that page's `sections` array), `type` (string), `settings` (object — may be empty, but must be present and must be an object, not an array or scalar).
+- If present, `blocks` on a section entry is an array; every block entry has `id` (string, unique within that section's `blocks` array) and `type` (string), and a `settings` object.
+- No duplicate `id` within a `sections` array, and no duplicate `id` within any one section's `blocks` array (uniqueness is only required within the immediate parent array — the same `id` string reused across two different pages, or on a section vs. an unrelated block, is not a conflict, since doc 14's paths are always rooted at the full path, not a bare `id` lookup).
+- No unrecognized top-level keys outside what doc 08 defines (guards against a stray field leaking through from an AI generation bug or a client-side editor bug).
 
-**Warning:** none typically at this layer — structural invalidity at the model level is inherently a correctness bug, not a judgment call, so it blocks rather than warns.
+**Hard block:** any structural violation above — a document that fails this layer isn't a valid Store Configuration at all, so there is no partial or "mostly fine" outcome. This should be rare in practice; when it happens on the AI Generation side, it indicates a bug in the Operation system (doc 11), not a user-caused problem, and is logged at a higher internal severity in addition to being blocked. When it happens on the editor side, it indicates a client-side bug, similarly logged.
 
-**Example — fail:** section `hero-1`'s manifest declares `maxBlocks: 4`, it currently has 4 blocks, `Operation` is `add_block` targeting it → hard block, "hero-1 already has the maximum number of blocks (4) allowed by its schema."
+**Warning:** none at this layer — a malformed document has no partially-safe interpretation.
 
-**Example — pass:** `update_setting` targeting `settingId: "heading_size"` where the manifest's `SettingDef` is `{ id: "heading_size", type: "range", min: 12, max: 48, step: 2, default: 24 }` and the payload value is `28` → valid, in range, step-aligned.
+**What failure looks like to the user:** for an AI-caused failure, this never reaches the user as a raw structural error — it's caught before the plan is ever presented, and surfaces (if it must surface at all) as a generic "couldn't build a valid update for that request, please try rephrasing," per the same reasoning as an internal planner bug. For an editor-caused failure (which should be prevented by the editor's own UI constraints in the first place — the settings panel shouldn't let a merchant type structurally invalid JSON), it surfaces as "couldn't save that change" with the save blocked, protecting the draft from ever entering an invalid state.
 
----
-
-## 5. Layer 3 — Shopify validation
-
-**Question:** independent of our own model's internal consistency, will Shopify's own theme rules (theme check / Admin API) actually accept this?
-
-This layer targets constraints Shopify enforces that aren't necessarily encoded in our Manifest — platform-level limits and rules such as: total section count per template limits (if any apply to the shop's plan/theme), asset file size/type limits, settings_data.json size limits, theme file count limits, reserved file name collisions, and Admin API — specific rejections (e.g. attempting to write to a locked/system template, permission scope issues from `ShopifyInstallation`).
-
-Mechanically, this layer is implemented as a combination of:
-- Static rule checks mirroring known Shopify platform limits (cheap, fast, run first).
-- For anything not staticly knowable, a live low-cost Admin API dry-run/validation call where Shopify itself exposes one, before attempting the real write.
-
-**Hard block:** Shopify would reject the write outright (file size over platform limit, invalid resource type, permission/scope denial, reserved-name collision).
-
-**Warning:** Shopify would accept it but flags a deprecation or soft-limit concern (e.g. approaching a section count that's technically allowed but discouraged, use of a legacy schema field Shopify still accepts but recommends migrating away from).
-
-**Example — fail:** `update_asset` payload swaps in a new image asset that's 45MB, over Shopify's per-asset size limit → hard block, "generated image exceeds Shopify's asset size limit; try a lower resolution."
-
-**Example — pass:** `add_section` referencing a valid existing `sectionType`, no scope/permission issues on the connected `ShopifyInstallation` → proceeds.
+**Feedback loop:** attached to the `Operation`'s `validationResult` and routed into the bounded-regeneration mechanism described in §11.
 
 ---
 
-## 6. Layer 4 — Liquid syntax validation
+## 4. Section validation
 
-**Question:** for generative operations that produce or modify Liquid source (`create_section_file`, `modify_liquid`, and any snippet-touching payloads), is the resulting Liquid file syntactically valid, before it's ever uploaded?
+**Question:** does every `type` referenced by a section entry actually exist in our fixed Section Library (doc 07)?
 
-Only runs when `Operation.requiresNewCode === true` and the operation's payload contains Liquid source (`create_section_file.payload.liquidSource`, or the file resulting from applying `modify_liquid.payload.unifiedDiff`).
+**When it runs:** immediately after Configuration validation passes, on the same triggers (AI Operation emission, editor save), and again as part of the pre-publish pass — the Section Library is fixed, but re-verification at publish time is cheap and guards against the (rare, operational) case of a section being deprecated/removed from the library between when a draft was built and when it's finally published.
 
-Mechanism: run Shopify's own `theme-check` tooling (or an equivalent embedded Liquid parser/linter) against the resulting file **locally/server-side, pre-upload** — this is the concrete answer to "how do we check this pre-upload": we don't upload-and-see, we parse and lint with the same rule set Shopify's tooling uses, offline, as part of the validation pipeline, so a syntax error never reaches a real theme file or costs an Admin API round-trip to discover.
+**Checks:**
+- Every `sections[].type` value matches a `type` that exists in the doc 07 catalog.
+- The referenced section is not marked deprecated/removed in a way that blocks new use (a deprecated-but-still-rendering section is a warning case, not a hard block — see below).
+- If the Section Library is versioned (doc 07's concern to define precisely), the referenced section version is one the current Base Theme and Preview Renderer actually ship.
 
-Checks: balanced `{% %}`/`{{ }}` tags, valid tag names and required arguments, valid filter names, no use of object/tag features outside the theme's declared Liquid feature set, schema `{% schema %}` block is itself valid JSON and conforms to the section-schema shape (settings/blocks/presets structure) — this sub-check overlaps with Layer 5 but is checked here first since a malformed schema block is really a Liquid-file-level syntax concern.
+**Hard block:** an unknown or nonexistent `type` — this can only ever come from a bug (the AI Operation system is only ever supposed to offer section types that genuinely exist in the catalog it was given, per doc 11; the editor's section picker only ever lists real catalog entries), so like Configuration validation, this is treated as a planner/client bug, not a user mistake, and is logged accordingly.
 
-**Hard block:** any syntax error, unbalanced tag, unknown tag/filter, or malformed `{% schema %}` JSON. Generated code that fails this layer is never shown to the user as "applied" — see §11 for what happens next (bounded regeneration, not silent unlimited retry).
+**Warning:** a `type` that exists but is marked deprecated in the Section Library (still renders correctly today, but the merchant or AI should be nudged toward a supported replacement before it's eventually retired).
 
-**Warning:** theme-check "style"/best-practice level findings that aren't hard errors (e.g. an unused variable, a slightly inefficient loop) — surfaced to the user as an FYI on generative operations but don't block.
+**Example — fail:** an `Operation` proposes adding a section with `type: "hero-banner-v1"`, but the Section Library only has `"hero-banner"` (the older id was retired in a previous library update and the Operation system's local cache of available types was stale) → hard block, "section type no longer available," logged as a cache-staleness bug for the AI Generation system to investigate.
 
-**Example — fail:** `modify_liquid` payload's unified diff, when applied, produces `{% if section.settings.show_badge %}...{% endunless %}` (mismatched block tags) → hard block, theme-check reports "unclosed if tag" style error at the specific line.
+**Example — pass:** an `Operation` adds `type: "featured-collection"`, which exists in the current Section Library → proceeds.
 
-**Example — pass:** generated section file parses cleanly, `{% schema %}` block is valid JSON matching the expected section-schema shape → proceeds to layer 5 for the schema JSON specifically, and layer 7 for actual render behavior.
-
----
-
-## 7. Layer 5 — JSON validation
-
-**Question:** do JSON-shaped artifacts — `templates/*.json`, `config/settings_data.json`, and a section's `{% schema %}` JSON block — conform to Shopify's expected schema for that file type?
-
-Checks:
-- `templates/*.json` conforms to Shopify's template JSON shape: valid `sections` object keyed by section id, valid `order` array whose entries all exist as keys in `sections`, valid `type` per section entry referencing a real section file.
-- `config/settings_data.json` conforms to the theme's own `settings_schema.json` — every key in `current` matches a declared `SettingDef.id` from `ThemeManifest.themeSettings.schema`, value types match declared `SettingDef.type`.
-- A section's `{% schema %}` JSON: valid `name`, `settings` array of well-formed `SettingDef`-shaped entries, `blocks` array of well-formed `BlockDef`-shaped entries (including valid `limit` if present), `presets` array of well-formed `PresetDef`-shaped entries whose `blocks[].type` values reference block types declared in the same schema.
-- No duplicate setting `id`s within one schema, no duplicate block `type`s within one schema.
-
-**Hard block:** any conformance failure above — these all produce a file Shopify's own editor or Admin API would reject or silently mis-render.
-
-**Warning:** valid-but-questionable shapes, e.g. a preset referencing block settings that will fall back to block-level defaults rather than being wrong — technically valid, not necessarily what the AI intended, worth a note in the summary.
-
-**Example — fail:** generated section's `{% schema %}` has a `blocks` array with two entries both `type: "testimonial"` → hard block, "duplicate block type 'testimonial' in section schema."
-
-**Example — pass:** `templates/index.json`'s `order` array and `sections` object keys match exactly after an `add_section` operation → proceeds.
+**Feedback loop:** for AI-caused failures, this is one of the two layers (with Configuration validation) treated as a system bug rather than a content problem — see §11 for why that changes how it's handled downstream.
 
 ---
 
-## 8. Layer 6 — Asset-reference validation
+## 5. Settings validation
 
-**Question:** does the resulting theme have any dangling reference — a Liquid/JSON file pointing at an asset, section, snippet, or block type that no longer exists?
+**Question:** for every section (and block) in the configuration, are the settings provided valid against that section's settings contract — the settings schema declared in the Section Library (doc 07) and formalized in the Store Configuration Schema (doc 08)?
 
-Checks:
-- Every `{{ 'file' | asset_url }}` / `asset_img_tag` style reference in touched Liquid resolves to an entry in `ThemeModel.assets` (or the underlying Manifest `assets` list for untouched files).
-- Every `{% render 'snippet' %}` in touched Liquid resolves to an existing snippet file.
-- Every `{% section 'x' %}`/section-group reference resolves to an existing section file.
-- After `remove_section`, no `templates/*.json` still lists that section id in `sections`/`order` (cross-checks with layer 5, run here specifically for the removal-leaves-a-dangling-pointer case).
-- After `update_asset` swaps an asset file, nothing else in the theme still references the *old* file path if the operation was a rename-style swap rather than an in-place content replace.
-- `GeneratedAsset`/`Asset` (architecture-core §5) records referenced by `sourceGeneratedAssetId` on an `AssetRef` correspond to an asset that actually exists in storage.
+This is the layer exercised most often by far: almost every AI Generation operation and almost every Visual Editor field edit ultimately changes a value under some section's or block's `settings`, so this layer runs on essentially every mutation in the system.
 
-**Hard block:** any dangling reference — this is precisely the class of bug that "theme still parses/uploads fine but breaks at render time or shows a broken image" comes from, so it's treated as strictly as a structural error.
+**When it runs:** immediately after Section validation, on the same triggers (AI Operation emission, editor save), and once more, in aggregate across every section on every page, as part of the pre-publish pass.
 
-**Warning:** none — a dangling reference has no acceptable "partial" outcome; it's either resolvable or it's a bug.
+**Checks:**
+- Every key present in a section's (or block's) `settings` object corresponds to a setting declared in that section type's (or block type's) settings contract — no writing values for settings the section doesn't declare.
+- Every setting declared as **required** by the contract is present with a non-empty value.
+- Every setting's value matches its **declared type** — string, richtext, number, boolean, color, image/asset reference, URL, select/enum, range, or a nested object/array shape for compound settings, per doc 08's typing.
+- **Enum/option-constrained** settings receive a value from the contract's allowed option set — nothing outside the declared list.
+- **Range-constrained** settings (min/max/step) receive an in-range, step-aligned value.
+- Where the Section Library defines a **shared settings contract** across sections (doc 07's concept of common fields — e.g. spacing/padding tokens, a shared color-role setting, a shared "layout variant" enum reused by several section types) — those shared fields are validated once, consistently, against the shared contract rather than being re-specified and potentially drifting per section.
+- Block count for a section stays within any `maxBlocks` the section's contract declares.
+- No duplicate block `id`s beyond what's already caught in Configuration validation, but specifically re-checked here in the context of block-count and block-type limits.
 
-**Example — fail:** `remove_section` on `hero-1`, but `templates/index.json`'s `order` array still contains `"hero-1"` (operation implementation forgot to also touch the template) → hard block, caught before this ever reaches Shopify. Note: this exact case is also technically catchable at layer 2 (theme-model validation) since the `ThemeModel` itself would already reflect the dangling reference — asset-reference validation exists as a defense-in-depth second pass specifically because it runs against the *serialized files*, not just the in-memory model, catching serializer bugs that layer 2 (model-only) cannot see.
+**Hard block:** wrong type for a setting's declared type; a required setting missing; a value outside an enum's allowed set; a value outside a range's min/max or misaligned to its step; a block count exceeding `maxBlocks`; a `blocks[].type` that isn't declared as a valid block type for that section. All of these describe a Store Configuration that the section's Liquid template (doc 07) was never written to handle — the template code is allowed to assume its settings contract holds, and this layer is what makes that assumption safe.
 
-**Example — pass:** `create_section_file` references `{{ 'star-icon.svg' | asset_url }}` and `star-icon.svg` is included in the same operation's asset payload / already exists in `ThemeModel.assets` → proceeds.
+**Warning:** a setting present with a technically valid but unusual value the contract still permits (e.g. a value the section's contract marks deprecated-but-still-accepted, kept for backward compatibility with older configurations) — informational, doesn't block.
 
----
+**Example — fail:** a section's contract declares `{ id: "heading_size", type: "range", min: 12, max: 48, step: 2 }` and an AI Operation proposes `value: 60` → hard block, "heading_size must be between 12 and 48."
 
-## 9. Layer 7 — Runtime / rendering validation
+**Example — pass:** the same contract, proposed `value: 28` → valid, in range, step-aligned, proceeds.
 
-**Question:** does the theme actually render without errors once the change is applied?
+**Example — fail:** a "Testimonials" section's contract declares `maxBlocks: 6`, the section currently has 6 blocks, and an `add_block` Operation targets it → hard block, "this section already has the maximum number of testimonials (6) allowed."
 
-Mechanism: apply the tentative change to an isolated preview copy of the theme (a preview-token-scoped, unpublished rendering context — ties to the `/theme/*` preview-token surface in architecture-core §6), then request a render of every `TemplateNode` that the operation's `target` touches (and, for global changes like `update_global_style`/`update_theme_setting`, a representative sample across template types — home, product, collection, cart, at minimum) via Shopify's rendering (either a live unpublished-theme preview render or a local Liquid render engine matching Shopify's semantics), and inspect the response for:
-- Liquid runtime errors (undefined method/filter applied to unexpected type, division by zero, infinite render loop guard trips) — these can exist even in syntactically valid Liquid (layer 4 only catches parse-time issues, not runtime type errors that only manifest with real data).
-- HTTP-level render failure (500 from the render endpoint).
-- Obviously broken output signals available cheaply: empty response body where content was expected, presence of Shopify's own error-boundary markup in the response.
-
-**Hard block:** a render error or failure on any touched template. This is the layer that most concretely protects "generated output always remains a valid Shopify theme" — a theme that parses and uploads but throws on render is not actually a valid, usable theme in the sense the product promises.
-
-**Warning:** render succeeds but produces console warnings (e.g. a JS asset warning surfaced during a headless render check) that don't prevent the page from working — logged, shown as an FYI, not blocking.
-
-**Example — fail:** `modify_liquid` introduces `{{ product.metafields.custom.foo.value | upcase }}` where `foo` metafield is unset for the product used in preview, and the resulting nil-filter interaction throws → hard block if it's a genuine render-halting error (vs. Liquid's normal nil-tolerant behavior, which usually degrades gracefully — the check specifically looks for actual render failure, not just "value ended up blank").
-
-**Example — pass:** preview render of the product template with the new hero background color returns 200 with expected markup present → proceeds.
+**Feedback loop:** this is the layer where the bounded-regeneration mechanism (§11) does the most work — a settings-validation failure almost always describes exactly what's wrong (which field, what was wrong with it, what's allowed instead), which is fed back verbatim to the AI as correction context for its one automatic retry. In the Visual Editor, this is also the layer behind ordinary inline field-level validation (e.g. a color picker refusing to save an invalid hex value, a range slider clamped to its bounds) — the same contract, enforced both preventively in the UI and authoritatively here.
 
 ---
 
-## 10. Layer 8 — Responsive validation
+## 6. Assets validation
 
-**Question:** does the change break the mobile/tablet presentation?
+**Question:** do assets referenced by the configuration — images, primarily — actually exist and resolve?
 
-This is the layer where automatable checks and required-human-review checks are explicitly split, because responsive/visual breakage is fundamentally a rendering-appearance judgment that current automated tooling can only partially make.
+**When it runs:** alongside Settings validation, for any setting typed as an image/asset reference, on every AI Operation and editor save that touches one; and again as a live re-check immediately before Publish, since an asset that resolved when a draft was built can stop resolving later (a scraped image URL from the merchant's prior site going stale, an uploaded asset being deleted from the store's asset library).
 
-**What can be checked automatically (hard block or warning as noted):**
-- `SectionInstance.visibility` (architecture-core §2) consistency — if an operation disables a section on `mobile` while it remains the *only* instance of critical content (e.g. the only nav/cart-access section) with no equivalent shown on mobile, flag structurally — **warning**, since "hide on mobile" can be intentional but is worth confirming.
-- CSS output sanity checks against the theme's declared breakpoints: does a changed `GlobalStyles`/CSS custom property produce values that are structurally nonsensical at defined breakpoints (e.g. a container width setting change that would compute to a negative or zero value once combined with existing responsive CSS custom properties) — **hard block**, this is a computable structural failure, not a taste judgment.
-- Automated multi-viewport preview capture: render the touched template(s) at defined breakpoint widths (mobile ~375px, tablet ~768px, desktop ~1440px, matching common Shopify theme breakpoints) as part of the same preview render from layer 7, and run basic automatable visual checks: horizontal overflow / content clipping detection (an element's bounding box exceeding the viewport width, which is mechanically detectable via the rendered DOM/CSSOM, not subjective) — **warning** (flagged for review, not blocked, since a detected overflow is sometimes intentional, e.g. an intentionally scrollable carousel).
-- Text/element overlap detection at small viewport widths where computable from rendered box geometry — **warning**.
+**Checks:**
+- Every image/asset-reference setting value resolves to a real entry — either an asset pulled in during Product Import/Scraper (doc 11's ingestion path) or one the merchant uploaded directly — not a broken link or a dangling internal id.
+- The resolved asset's file type is one the section's contract and the Preview Renderer/Shopify actually support for that setting (e.g. an image slot doesn't silently accept a PDF).
+- The resolved asset is retrievable at validation time (a live fetch/HEAD check, not just presence of a reference string) — this is what catches a URL that was valid when scraped but has since gone offline.
 
-**What explicitly requires human/visual review (never auto-passed or auto-blocked):**
-- Actual visual quality/aesthetics at each breakpoint (spacing feels right, image crops look good, font sizes read comfortably) — genuinely subjective, no automated check is claimed here.
-- Whether a mobile-hidden section was *intentionally* hidden by the request vs. an unintended side effect — the automated check above can only flag the structural fact, not the intent.
-- Any change delivered via `modify_css`/`modify_js` with responsive-media-query implications too complex for the structural checks above to model exhaustively.
+**Hard block:** the reference doesn't resolve at all — a 404, a deleted asset id, or a fetch failure that isn't transient. A section with a broken image reference is a section that will render with a visibly broken image, which fails the same "would this actually work" bar as every other hard block in this pipeline.
 
-Mechanically, layer 8's automated portion piggybacks on the same preview-render infrastructure as layer 7 (same render call, additional viewport widths and DOM-geometry checks against the same response), so it does not require a second round-trip.
+**Warning:** the asset resolves, but with a soft concern — file size approaching Shopify's per-asset limit (a hard block at layer 7 if actually over, but worth flagging early as a warning here so the merchant or AI has a chance to swap it before publish forces the issue), or an aspect ratio poorly suited to the section's image slot (a quality judgment, not a functional failure).
 
-**Hard block:** only the structurally-computable failure case above (CSS producing nonsensical/broken values at a breakpoint).
+**Example — fail:** a "Hero" section's `settings.background_image` is set to a URL scraped from the merchant's previous storefront during Product Import, and that URL now 404s → hard block, "this image can no longer be found — please choose another."
 
-**Warning:** everything else in this layer — overflow/clipping detection, visibility-consistency flags, and a standing "review recommended" banner attached to the operation's history entry whenever the operation touched anything with responsive implications, prompting the user to check the live preview at mobile/tablet sizes themselves before publishing.
+**Example — pass:** `settings.background_image` resolves to an image the Product Import pipeline successfully mirrored into our own asset store → proceeds.
 
-**Example — fail (hard block):** `update_global_style` sets `spacing.containerWidth` to a value that, combined with the theme's existing responsive padding custom properties, computes to a negative content width at the mobile breakpoint → hard block, "this container width produces an invalid (negative) content area on mobile."
-
-**Example — warning:** preview render at 375px shows a newly added testimonial block's text bounding box extending 40px past the viewport edge → warning, "content may overflow on mobile — please review the preview," operation still allowed to apply.
+**Feedback loop:** for AI-caused failures (most commonly, an image chosen during initial generation that later goes stale before the merchant gets to it), this routes to the AI proposing a replacement — either another image already available in the store's Product Data/asset set, or a Clarification asking the merchant to upload one, per §11.
 
 ---
 
-## 11. Layer 9 — Regression validation (ties to the Diff system)
+## 7. Product references validation
 
-**Question:** can we prove that everything *outside* what this operation claimed to touch was actually left untouched?
+**Question:** where a section or setting is bound to specific product data (a section pinned to a particular imported product, a block pulling a product's title/price/variant/description), does that reference actually point at real, current Product Data (doc 11's Product Import/Scraper output)?
 
-This is the layer that most directly ties doc 14's `Diff` schema back into validation, and it is the system's core anti-regression guarantee.
+**When it runs:** alongside Settings/Assets validation, on any AI Operation or editor save touching a product-bound setting; and again pre-publish, since Product Data can be re-imported or refreshed after a section was originally configured against it, potentially invalidating references that were valid at generation time.
 
-Mechanism: every `Operation.target` declares its intended scope (architecture-core §3: `templateKey`/`instanceId`/`blockInstanceId`/`settingId`/`assetFile`). After the operation is tentatively applied and its `Diff` (doc 14 §2) is computed, **every `DiffEntry.path` in that Diff is checked against the declared target scope.** A path is in-scope if it is the target path itself, a sub-path of it (e.g. target `instanceId: "hero-1"` legitimately covers `sections.hero-1.settings.*` and, for structural ops like `add_section`/`remove_section`/`move_section`, the containing template's `sectionInstances` ordering array — this is an explicitly allow-listed side effect per `OperationType`, not an open-ended exception), or an explicitly declared secondary-effect path for that `OperationType` (documented per type — e.g. `remove_section` is allowed to also touch the template's section-group array).
+**Checks:**
+- A referenced product id exists in the store's currently-imported Product Data set — it wasn't removed or never actually imported.
+- A referenced field on that product (a specific variant, an image index, an option value, a price) actually exists on the current Product Data for that product — not stale from a previous import.
+- Where a setting expects product data of a particular shape (e.g. a "Product Grid" section expecting a list of product ids, not a single id), the reference's cardinality matches what the section's contract declares.
 
-**Any `DiffEntry` whose `path` falls outside the declared target scope and its allow-listed secondary effects is treated as a validation failure — a hard block.** This is stated explicitly per the design brief: it is not a warning, because an operation that changes something it didn't declare it would change is either an implementation bug in the operation/serializer, or (for generative operations) a sign the generated code has an unintended side effect (e.g. AI-modified Liquid accidentally alters a shared snippet used by other sections) — both cases must never reach a real theme file silently.
+**Hard block:** a referenced product id that doesn't exist in the store's Product Data at all, or a referenced field that doesn't exist on the current product record — both describe a reference the Preview Renderer has nothing to render.
+
+**Warning:** the reference resolves, but the underlying Product Data looks incomplete for what the section wants to show (e.g. a product with no description, feeding a section built to display one, which will fall back to a shorter placeholder) — a content-quality concern, not a functional failure.
+
+**Example — fail:** a "Featured Product" section references `productId: "prod_881"`, but that product was removed during a re-import (the merchant re-scraped their catalog and that product no longer exists in the current Product Data) → hard block, "this product is no longer available — please choose another."
+
+**Example — pass:** the same section references a product id present in the current Product Data, with all fields the section needs populated → proceeds.
+
+**Feedback loop:** routes to the AI proposing a different product reference from the current Product Data set, or a Clarification asking the merchant which product should fill that slot, per §11.
+
+---
+
+## 8. Preview validation
+
+**Question:** can the LiquidJS Preview Renderer (doc 09) actually render this Store Configuration, end to end, without throwing?
+
+This is the layer that catches what the structural checks above cannot: a settings value can be individually well-typed, in range, and contract-valid (layer 3) and still interact badly with a specific section template's logic in a way only an actual render reveals — e.g. a numeric setting at the very edge of its declared range that a template's Liquid math doesn't handle as gracefully as the middle of the range.
+
+**When it runs:** this layer is inherently render-triggered. In practice it runs continuously during editing — it's the same LiquidJS render that already powers the same-origin iframe preview (doc 09), so every time the Visual Editor re-renders the preview after an edit (debounced, not on every keystroke), that render doubles as this validation layer. It also runs as a dedicated, exhaustive pass immediately before Publish — every page in the configuration, every section, rendered once, as a final gate no earlier per-edit render could fully guarantee (an earlier render might only have covered the one section being edited at the time).
+
+**Checks:**
+- The LiquidJS render completes without throwing — no Liquid runtime error (undefined filter/method applied to an unexpected type, a template's internal logic hitting a case its author didn't guard for given this specific settings combination).
+- The render produces non-empty output for every section that isn't deliberately configured as hidden/disabled.
+- No renderer-reported error markers in the output.
+
+**Hard block:** a render throw, a blank result where content was expected, or a renderer-reported error on any section. This is the most concrete guarantee in the whole pipeline that "what the merchant is looking at in preview is what will actually work" — a configuration that passes every structural check but fails to render is not, in any practical sense, a usable configuration.
+
+**Warning:** the render succeeds but the renderer surfaces a non-fatal notice (e.g. a value coerced in a way that's visually slightly off but not broken — a nil value rendering as empty text rather than the section's intended fallback copy).
+
+**Example — fail:** a section's contract allows `settings.column_count` down to `1`, but the section's Liquid template has an unguarded division assuming at least 2 columns for a width calculation, and a value of `1` triggers a divide-by-zero at render time → hard block, "this configuration fails to render — please try a different value," and the specific render error is captured for the feedback loop below (and, separately, filed against the Section Library as a template bug, since a valid, in-contract setting value should never be able to break the template it belongs to — see the note in §11).
+
+**Example — pass:** the Home page renders cleanly with the new Hero background color and the reordered Testimonials section, all sections present with expected markup → proceeds; this is also the render the merchant actually sees update live in the iframe.
+
+**Feedback loop:** for an AI-caused failure, the specific render error (which section, and where possible which setting) feeds back to the AI's one bounded regeneration attempt, per §11. Because this layer usually indicates either a settings-validation gap (a value that should have been caught at layer 3 but wasn't) or a genuine edge case in a section template, a preview-validation failure is also logged distinctly for our own review — a recurring failure at this layer on a specific section type is a signal that the section's settings contract (doc 07/08) needs tightening, not just that this one configuration needs correcting.
+
+---
+
+## 9. Shopify validation
+
+**Question:** independent of everything checked so far, will Shopify's Admin API actually accept the resulting theme configuration and `settings_data` when we attempt to write it (doc 16)?
+
+**When it runs:** at publish time only, immediately before the actual Admin API write — the last check before doc 16 commits anything to the live store.
+
+**Checks:**
+- `settings_data.json` and per-template settings payload sizes are within Shopify's platform limits.
+- Total section/block counts per page are within whatever limits Shopify enforces for the shop's plan and theme.
+- Every section/block reference in the outgoing write resolves to a real file in our Base Theme's Section Library deployment on Shopify — i.e. that the theme files doc 16 expects to already be present on the store (from onboarding/installation) are, in fact, present and haven't drifted.
+- No reserved file/name collisions in what's being written.
+- The connected Shopify installation's OAuth scopes actually permit writing theme settings (a permission/connection-health check, not a content check).
+
+**Hard block:** Shopify would reject the write outright — a size-limit violation, a missing/mismatched theme file reference, a permission/scope denial.
+
+**Warning:** Shopify would accept the write but flags a soft concern — approaching (not exceeding) a size or count limit, or use of a settings field Shopify still accepts but has marked for future deprecation.
+
+**Example — fail:** the connected Shopify installation's access token has had its theme-write scope revoked (the merchant uninstalled and reinstalled the app in a way that changed granted permissions) since the draft was built → hard block, "we've lost permission to update your theme — please reconnect your store," which routes to a reconnect flow (doc 16), not to AI regeneration, since no amount of content correction fixes a permissions problem.
+
+**Example — pass:** the outgoing `settings_data` write is well within size limits and every referenced section resolves to a real deployed theme file → proceeds to the actual write.
+
+**Feedback loop:** most Shopify-validation failures are operational (permissions, platform limits) rather than content problems, so they generally do **not** consume the AI's bounded-regeneration budget (§11) — they surface directly in the Publish UI with an appropriate recovery action (reconnect, wait/retry, contact support). The one content-driven exception is a size/count limit actually being exceeded by the configuration itself (e.g. an unusually large number of blocks across many sections) — that case can still route to a Clarification suggesting the merchant trim content, since it is something content-level correction can fix.
+
+---
+
+## 10. Publish validation
+
+**Question:** did the publish operation (doc 16) actually complete successfully, end to end?
+
+**When it runs:** immediately after the Admin API write attempt(s) in doc 16 complete — this is a post-write verification pass, not a pre-write gate like layer 7.
+
+**Checks:**
+- Every Admin API call doc 16 issued for this publish returned success.
+- A read-back of what was just written matches what was intended — the theme settings Shopify now reports match the Store Configuration that was just published, catching the case where a write appears to succeed but silently drops or alters something.
+- A lightweight post-publish check against the live storefront itself (a fetch of the published page checking for expected content markers) confirms the change is actually visible, not just accepted by the API and stuck behind a caching/propagation delay long enough to matter.
+- A publish history record (doc 14 §5.4, doc 16) is created, marking the corresponding Configuration Version as `published`.
+
+**Hard block:** any write call failed, the read-back doesn't match what was sent, or the storefront check fails outright. Per doc 16's publish design, the live store is left in its last-known-good state — a failed publish must never leave the storefront in a half-written, inconsistent state — and the merchant is told clearly what happened, with a retry action.
+
+**Warning:** the publish succeeded and verified, but a non-critical post-publish signal is worth surfacing (e.g. a detected CDN propagation delay — the write and read-back both succeeded, but the storefront check needed a couple of retries before content appeared, suggesting the merchant might see brief staleness).
+
+**Example — fail:** the Admin API write for the Product page's `settings_data` returns success, but the API write for the Home page's template times out partway through → hard block on the overall publish; doc 16's atomicity handling determines the recovery (retry the failed piece, or roll the whole publish back), and the merchant sees "publish didn't fully complete — retrying" or an explicit failure with a retry button, never a silent partial-live state.
+
+**Example — pass:** all writes succeed, the read-back matches, and the live storefront check confirms the new Hero content is visible → the Configuration Version is marked `published`, publish history is recorded, done.
+
+**Feedback loop:** publish-validation failures are operational, not content problems, so — like Shopify validation — they are handled by direct retry/user action in the Publish UI rather than routed through AI Clarification or counted against any AI regeneration budget. They are always logged to the audit trail (doc 14) regardless of outcome, since "did this publish actually succeed" is exactly the kind of fact the product's safety promise depends on being able to answer definitively later.
+
+---
+
+## 11. Failure feedback into the Clarification / AI Generation flow
+
+A validation hard block is never handled by silently regenerating and retrying without limit — unbounded regeneration burns AI generation cost with no guaranteed convergence, and repeatedly failing silently is worse for trust than surfacing the failure once, clearly.
 
 ```
-regressionCheck(operation, tentativeDiff):
-  allowedPaths = scopeFor(operation.type, operation.target)   // target path + documented allow-listed secondary effects
-  offendingEntries = tentativeDiff.entries.filter(e => !pathWithin(e.path, allowedPaths))
-  if offendingEntries is empty:
-    return PASS
-  else:
-    return BLOCK {
-      reason: "operation modified paths outside its declared scope",
-      offendingEntries,     // shown to the user/dev verbatim — this is diagnosable, not vague
-      declaredTarget: operation.target
-    }
+On hard block at layers 3-6 (Settings, Assets, Product references, Preview — the layers that
+describe an actual content problem an AI can meaningfully act on):
+  1. The failing Operation (and, per doc 14 §8, its whole Operation Plan transaction) is rolled
+     back — nothing partial is ever left applied to the Store Configuration.
+  2. ValidationSummary detail (which layer, which specific field/path, the offending value, the
+     allowed alternative where known) is attached to the Operation Plan record and made available
+     to the AI Generation / Clarification logic (doc 11/13), not just logged for developers.
+  3. The AI is allowed ONE automatic re-generation attempt for the failed step, informed by the
+     specific validation failure detail (e.g. "heading_size must be between 12 and 48, you proposed
+     60" fed back as context, not a bare "try again").
+  4. If the re-generation attempt ALSO fails validation, auto-retry stops. The system surfaces a
+     Clarification to the merchant: what was attempted, why it failed in plain language, and options
+     (rephrase the request, pick a specific alternative if one exists — e.g. choose a different
+     product/image — or cancel). This is a hard cap, not a soft suggestion.
+  5. This retry budget (one automatic attempt) is tracked per failed step on the Operation Plan
+     record, so a multi-step plan with two content-generation steps gets one retry budget EACH, not
+     one shared across the whole plan.
+
+On hard block at layers 1-2 (Configuration, Section — the layers that only ever fail due to a
+system bug, never a content judgment call):
+  These do not go through the regeneration flow at all. A malformed configuration or a reference to
+  a section type that doesn't exist in the catalog the AI was given is, by construction, not
+  something a second AI attempt with the same faulty premise is likely to fix — it's routed straight
+  to internal logging/alerting, and the merchant sees a generic "something went wrong building that
+  update, please try again" rather than a content-correction Clarification.
+
+On hard block at layers 7-8 (Shopify, Publish — operational, publish-time only):
+  These never consume AI regeneration budget (§9, §10) — they are operational/infrastructure
+  failures surfaced directly in the Publish UI with a direct recovery action (retry, reconnect,
+  trim content if the failure was genuinely size-driven).
+
+Warnings (any layer) never block a transaction and never trigger regeneration — they are attached
+to the ValidationSummary and surfaced in the plan-review UI / history entry for the user's
+awareness, and the operation proceeds.
 ```
 
-For generative operations specifically, this is the layer most likely to catch the dangerous class of bug where an AI-modified `theme.liquid` or shared snippet edit, made in service of one section's requested change, incidentally alters markup rendered by unrelated sections — the exact "prove unrelated sections/settings were untouched" guarantee the product promises.
-
-**Hard block:** any out-of-scope `DiffEntry`, always — no severity tiering within this layer, because there is no safe subset of "slightly out of scope."
-
-**Warning:** none.
-
-**Example — fail:** user asks the AI to "make the Add to Cart button rounder" → planned as `modify_css` scoped to `target: { assetFile: "assets/theme.css" }` with a narrow intended change to `.btn` border-radius, but the generated CSS diff also changes a `.card` class's border-radius used by the product grid → the resulting `Diff` includes a `DiffEntry` at a path effectively touching product-grid card rendering, which is outside the declared target's allow-listed scope → hard block, "this change affects the product grid card styling in addition to the button, which wasn't requested — please review or narrow the request."
-
-**Example — pass:** `add_section` targeting `templateKey: "index"` produces a `Diff` with entries at `sections.<new-instance>` (the target itself) and `templates.index.sectionInstances` (the documented allow-listed secondary effect for `add_section`) — both in scope → passes.
+This — one bounded automatic retry for content-level failures, no retry loop at all for system-bug-only layers, immediate user Clarification once the content-retry budget is spent, and a hard separation between content failures and operational publish failures — is the concrete mechanism that prevents validation failures from ever turning into silent, unbounded AI spend or a merchant staring at a stuck, unexplained state.
 
 ---
 
-## 12. Failure feedback into the Clarification / Operation-Plan flow
+## 12. Summary table
 
-A validation hard block is never handled by silently regenerating and retrying without limit — this is stated explicitly per the design brief and is a direct application of Principle 4 (ask instead of guessing) and Principle 9 (cost-aware AI: unbounded regeneration burns AI credits with no guaranteed convergence).
+| Layer | Checks | Runs at | Typical hard block | Typical warning |
+|---|---|---|---|---|
+| 1. Configuration | Store Configuration is well-formed per doc 08 | Every AI op / editor save / pre-publish | Missing required field, wrong type, duplicate id | none |
+| 2. Section | `type` exists in the Section Library (doc 07) | Every AI op / editor save / pre-publish | Unknown/nonexistent section type | Deprecated but still-supported type |
+| 3. Settings | Settings match the section's contract (doc 07/08) | Every AI op / editor save / pre-publish | Wrong type, missing required field, out-of-range/enum value, exceeds `maxBlocks` | Deprecated-but-accepted field value |
+| 4. Assets | Referenced images/assets exist and resolve | Alongside settings validation / pre-publish | Broken/dead asset reference | Approaching size limit, poor aspect ratio |
+| 5. Product references | Product references point at real, current Product Data | Alongside settings validation / pre-publish | Nonexistent product id, stale field reference | Incomplete underlying product data |
+| 6. Preview | LiquidJS Preview Renderer (doc 09) renders without error | Continuously during editing / final pre-publish pass | Render throw, blank output, renderer error | Non-fatal render notice |
+| 7. Shopify | Admin API / platform limits will accept the write | Publish time, pre-write | Size/count limit exceeded, permission/scope denial | Approaching soft limit, deprecated field |
+| 8. Publish | The publish write actually completed end to end | Publish time, post-write | Write failure, read-back mismatch, storefront check failure | Detected propagation delay |
 
-```
-On hard block at any layer:
-  1. The failing Operation (and, per doc 14 §8, its whole OperationPlan transaction) is rolled back —
-     nothing partial is ever left applied to the ThemeModel.
-  2. ValidationSummary detail (which layer, which specific check, the offending entries/paths/messages)
-     is attached to the OperationPlan record and made available to the Planner/Clarification logic
-     (doc 11/13), NOT just logged for developers.
-  3. Bounded regeneration for generative operations specifically:
-     - The Planner is allowed ONE automatic re-generation attempt per failed generative Operation,
-       informed by the specific validation failure detail (e.g. "the generated Liquid had an unclosed
-       tag at line 12" fed back as context, not a bare "try again").
-     - If the re-generation attempt ALSO fails validation, auto-retry stops. The system surfaces a
-       Clarification to the user: what was attempted, why it failed in plain language, and options
-       (rephrase the request narrower, proceed with a structural-only alternative if one exists, or
-       cancel) — this is a hard cap, not a soft suggestion, precisely to satisfy Principle 9.
-     - This retry budget (one automatic attempt) is a per-Operation counter tracked on the
-       OperationPlan record, so a multi-step plan with two generative steps gets one retry budget
-       EACH, not one shared across the whole plan.
-  4. For structural operations (never requiresNewCode), there is no "regeneration" concept at all —
-     a structural-operation validation failure always means the Planner chose an unsafe or
-     out-of-bounds structural change (e.g. planned a setting value outside its declared range), which
-     routes straight to re-planning against the corrected constraint (the Planner already has the
-     Manifest's SettingDef bounds available — this should be self-correcting on replan without
-     needing a user round-trip) rather than to user-facing Clarification, UNLESS the replanned
-     alternative itself is ambiguous, in which case normal Clarification (doc 13) applies.
-  5. Warnings (any layer) never block the transaction and never trigger regeneration — they are
-     attached to the ValidationSummary and surfaced in the plan-review UI / history entry for the
-     user's awareness, and the operation proceeds.
-```
-
-This distinction — one bounded automatic retry for generative failures, no retry loop at all, immediate user Clarification once the budget is spent — is the concrete mechanism that prevents the failure mode the design brief calls out: validation failure on a generative operation must never silently retry with more AI generation without limit.
+All hard blocks at layers 1–6 route through the bounded, one-automatic-retry AI feedback loop (§11) before reaching the merchant as a Clarification; layers 7–8 are operational and surface directly in the Publish UI with a direct recovery action. All warnings, at every layer, are non-blocking, persisted on the `Operation` record's `validationResult` (doc 14 §4), and surfaced to the user for awareness at plan-review time and in AI operation history.
 
 ---
 
-## 13. Summary table
+## Future / Advanced Architecture
 
-| Layer | Checks | Typical hard block | Typical warning |
-|---|---|---|---|
-| 1. Schema | Operation well-formed | Missing target field, unknown type | none |
-| 2. Theme-model | ThemeModel stays structurally valid | Exceeds `maxBlocks`, dangling section ref, unknown `settingId` | none |
-| 3. Shopify | Admin API / platform limits | Asset over size limit, permission denial | Deprecated field, soft limit approach |
-| 4. Liquid syntax | Pre-upload parse via theme-check-equivalent | Unclosed tag, unknown filter, malformed `{% schema %}` | Style/best-practice lint findings |
-| 5. JSON | template/settings_data/schema conformance | Dangling `order` entry, duplicate block type | Unused preset block reference |
-| 6. Asset-reference | No dangling references | Removed section still listed in template | none |
-| 7. Runtime/rendering | Actual render succeeds | Liquid runtime error, 500 on preview render | Non-fatal render warnings |
-| 8. Responsive | Automatable subset only | Structurally negative/invalid computed width | Overflow/clipping detected, visibility flag |
-| 9. Regression | Diff entries stay within declared target scope | Any out-of-scope `DiffEntry` | none |
+The pipeline above assumes every Liquid template it validates data against is our own, fixed, code-reviewed Section Library — which is why there is no Liquid-syntax-validation layer and no cross-cutting regression/scope-validation layer here. An earlier, heavier design explored both, for a world where an AI could generate or modify arbitrary Liquid/CSS/JS against an unknown merchant's existing theme:
 
-All hard blocks roll back the entire `OperationPlan` transaction (doc 14 §8) and route to Clarification/re-plan with a bounded, per-operation single-retry budget for generative operations only (§12). All warnings are non-blocking, persisted on `ThemeOperation.validationResult`, and surfaced to the user for awareness at plan-review time and in AI operation history (doc 14 §4).
+- **Liquid syntax validation** — parsing/linting AI-generated Liquid source (e.g. via Shopify's `theme-check` tooling) before it's ever uploaded, catching unbalanced tags, unknown filters, and malformed schema blocks pre-upload rather than discovering them via a failed Admin API write.
+- **Regression/scope validation** — proving that a generated code change touched only the paths it declared it would touch, by cross-checking the resulting Diff's entries (doc 14) against the operation's declared scope and hard-blocking anything outside it, since free-form generated code can have side effects a fixed template's own author would never introduce.
+
+Neither is needed for MVP: the Section Library is fixed and reviewed like any other application code, so there is no AI-generated Liquid to lint, and the blast radius of any one Operation is already bounded by construction (it can only ever touch settings/content on the sections it explicitly targets, per doc 07/08). Both are noted here only in case a future "arbitrary theme" or "AI-authored section" mode is ever built on top of this system — at which point they would slot back in as additional layers between what is today Section validation and Preview validation.
