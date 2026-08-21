@@ -5,7 +5,7 @@ import { ImportResult, requiredFieldsMissing } from "./types";
 import { getSampleNormalizedProduct, SAMPLE_PRODUCT_RAW } from "./sample";
 import { discoverProductUrls, mapWithConcurrency, DiscoverySource, MAX_FETCHED_PRODUCTS, DISCOVERY_CONCURRENCY } from "./discovery";
 import { detectSupplierPlatform, SupplierPlatform, SUPPLIER_PLATFORM_LABELS, unsupportedSupplierMessage } from "./source";
-import { extractAmazonHtmlFallback } from "./suppliers/amazon";
+import { AmazonHtmlFallback, extractAmazonHtmlFallback } from "./suppliers/amazon";
 
 /**
  * Full import pipeline: ProductFetcher -> RawProductExtractor -> ProductNormalizer
@@ -122,9 +122,10 @@ export interface SupplierImportResult {
   result: ImportResult;
 }
 
-const SUPPLIER_HTML_FALLBACKS: Partial<
-  Record<SupplierPlatform, (html: string) => { image: string | null; price: number | null; currency: string | null }>
-> = {
+/** Every supplier fallback returns the same shape, whether or not it can fill each field. */
+export type SupplierHtmlFallback = (html: string) => AmazonHtmlFallback;
+
+const SUPPLIER_HTML_FALLBACKS: Partial<Record<SupplierPlatform, SupplierHtmlFallback>> = {
   amazon: extractAmazonHtmlFallback,
 };
 
@@ -135,6 +136,19 @@ function applyHtmlFallback(result: ImportResult, platform: SupplierPlatform, htm
   const extra = fallback(html);
   const normalized = { ...result.normalized };
   let changed = false;
+  // Title is the one field a supplier fallback outranks the generic extraction on. These
+  // pages carry no og:title, so the generic path can only reach for the <title> tag — which
+  // is the marketplace listing title ("<product> : Amazon.in: Home & Kitchen"), not the
+  // product name. That title is what the AI gets briefed on and what renders as the store
+  // name in the header, so a cleaner supplier-read title replaces it.
+  if (extra.title && extra.title !== normalized.title) {
+    normalized.title = extra.title;
+    changed = true;
+  }
+  if (!normalized.vendor && extra.brand) {
+    normalized.vendor = extra.brand;
+    changed = true;
+  }
   if (normalized.images.length === 0 && extra.image) {
     normalized.images = [{ url: extra.image, altText: normalized.title }];
     changed = true;

@@ -1,0 +1,75 @@
+.color-scheme-{{ section.id }}.color-custom { --color-background: {{ section.settings.custom_colors_background.red }},
+{{ section.settings.custom_colors_background.green }}, {{ section.settings.custom_colors_background.blue }};
+--gradient-background:
+
+{% if section.settings.custom_gradient_background != blank -%}
+{{- section.settings.custom_gradient_background -}}
+{%- else -%}
+{{- section.settings.custom_colors_background -}}
+{%- endif -%}
+;
+
+--color-foreground: {{ section.settings.custom_colors_text.red }}, {{ section.settings.custom_colors_text.green }},
+{{ section.settings.custom_colors_text.blue }}; --color-button:
+{{ section.settings.custom_colors_solid_button_background.red }},
+{{ section.settings.custom_colors_solid_button_background.green }},
+{{ section.settings.custom_colors_solid_button_background.blue }}; --color-button-text:
+{{ section.settings.custom_colors_solid_button_text.red }},
+{{ section.settings.custom_colors_solid_button_text.green }},
+{{ section.settings.custom_colors_solid_button_text.blue }}; --color-base-outline-button-labels:
+{{ section.settings.custom_colors_outline_button.red }}, {{ section.settings.custom_colors_outline_button.green }},
+{{ section.settings.custom_colors_outline_button.blue }}; }
+
+{% if section.settings.custom_image_background != blank %}
+.color-scheme-{{ section.id }}.color-custom {
+  position: relative !important;
+  isolation: isolate !important;
+}
+
+.color-scheme-{{ section.id }}.color-custom::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  background: url('{{ section.settings.custom_image_background | image_url: width: 1500 }}') center center / cover no-repeat !important;
+  opacity: {{ section.settings.custom_image_background_opacity | default: 100 | divided_by: 100.0 }} !important;
+}
+
+.color-scheme-{{ section.id }}.color-custom > * {
+  position: relative !important;
+  z-index: 1 !important;
+}
+{% endif %}
+
+{% if section.settings.custom_mobile_image_background != blank %}
+@media screen and (max-width: 740px) {
+  .color-scheme-{{ section.id }}.color-custom::after {
+    background: url('{{ section.settings.custom_mobile_image_background | image_url: width: 1500 }}') center center / cover no-repeat !important;
+  }
+}
+{% endif %}
+
+{% if section.settings.pattern_bg != 'none' %}
+{% render 'pattern-background' %}
+{% endif %}
+
+   .cards-color-scheme-{{ section.id }}.color-custom {
+    --color-background: {{ section.settings.custom_cards_colors_background.red }},
+    {{ section.settings.custom_cards_colors_background.green }},
+    {{ section.settings.custom_cards_colors_background.blue }};
+    --gradient-background: {% if section.settings.custom_cards_gradient_background != blank %}{{ section.settings.custom_cards_gradient_background }}
+  {% else %}{{ section.settings.custom_cards_colors_background }}
+  {% endif %};
+    --color-foreground: {{ section.settings.custom_cards_colors_text.red }},
+    {{ section.settings.custom_cards_colors_text.green }},
+    {{ section.settings.custom_cards_colors_text.blue }};
+  }
+   {% if section.settings.custom_cards_colors_heading != blank %}
+     .cards-color-scheme-{{ section.id }}.color-custom h3 {
+      --color-foreground: {{ section.settings.custom_cards_colors_heading.red }}, {{ section.settings.custom_cards_colors_heading.green }}, {{ section.settings.custom_cards_colors_heading.blue }};
+    }
+   {% endif %} 

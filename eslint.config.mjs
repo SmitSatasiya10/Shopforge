@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Base Theme is vendored Shopify theme source, not Shopforge code — it is
+    // authored and reviewed upstream, so our lint rules do not apply to it.
+    "public/base-theme/**",
+    // Curated AI section/block schemas, copied in as data.
+    "lib/ai/catalog/**",
   ]),
 ]);
 
