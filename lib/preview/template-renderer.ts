@@ -9,6 +9,7 @@ import { loadThemeSettings } from "./theme-settings";
 import { extractSectionSchema, ShopifySettingDef } from "./section-schema";
 import { ResolveContext, defaultResolveContext, resolveSettings } from "@/lib/shopify-compat/resolve-settings";
 import { defaultLinkLists } from "@/lib/shopify-compat/setting-drops";
+import { normalizeRenderTagArgs } from "@/lib/shopify-compat/render-args";
 
 export interface RenderTemplateOptions {
   /** The template JSON to render — the AI-generated one, or one read from the theme. */
@@ -171,8 +172,16 @@ async function renderSectionGroup(
  * Always a fresh render, never a DOM patch.
  */
 export async function renderTemplate(opts: RenderTemplateOptions): Promise<string> {
-  const { readTemplate, template, product, storeName } = opts;
+  const { template, product, storeName } = opts;
   const templateName = opts.templateName ?? "index";
+
+  // Every .liquid source — sections, snippets (via the engine's fs), and the layout — gets
+  // Shopify's bare `{% render 'x', section %}` shorthand rewritten to `section: section`;
+  // LiquidJS would otherwise pass `section: undefined` and shadow the global (render-args.ts).
+  const readTemplate: TemplateReader = async (path) => {
+    const raw = await opts.readTemplate(path);
+    return path.endsWith(".liquid") ? normalizeRenderTagArgs(raw) : raw;
+  };
 
   const [locale, settings] = await Promise.all([
     readJson<Record<string, unknown>>(readTemplate, "locales/en.default.json", {}),

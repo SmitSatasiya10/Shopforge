@@ -83,6 +83,18 @@ export default function EditorPage() {
       .catch(() => setLoadError("Could not load this project"));
   }, [projectId]);
 
+  // The image toggle starts from the server's SHOPFORGE_GENERATE_IMAGES env default; the
+  // checkbox then overrides it per run. Without this the checkbox's initial `false` would
+  // always be sent in the generate body, silently overriding the env setting.
+  useEffect(() => {
+    fetch(`/api/project/${projectId}/generate`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (typeof data.generateImagesDefault === "boolean") setGenerateImages(data.generateImagesDefault);
+      })
+      .catch(() => {});
+  }, [projectId]);
+
   // Schema labels are `t:` keys into the theme's schema locale file.
   useEffect(() => {
     readTemplate("locales/en.default.schema.json")
