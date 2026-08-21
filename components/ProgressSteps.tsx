@@ -1,12 +1,14 @@
 import { Fragment } from "react";
 
-const STEPS = ["Start", "Product URL", "Products", "Analysis"] as const;
+const STEPS = ["Start", "Product URL", "Products", "Analysis", "Language", "Persona"] as const;
 
 // Header/progress area shared by the Start Store -> URL entry -> Products Found ->
-// Analysis flow (docs/product-phases/02-product-import.md,
-// product-analysis-progress-screen-prompt.md). Back is omitted on the first step since
-// there's nowhere to go back to.
-export function ProgressSteps({ step, onBack }: { step: 1 | 2 | 3 | 4; onBack?: () => void }) {
+// Analysis -> Customer Language -> Customer Persona flow
+// (docs/product-phases/02-product-import.md, product-analysis-progress-screen-prompt.md,
+// store-content-language-selection-implementation.md,
+// product_based_customer_persona_implementation.md). Back is omitted on the first step
+// since there's nowhere to go back to.
+export function ProgressSteps({ step, onBack }: { step: 1 | 2 | 3 | 4 | 5 | 6; onBack?: () => void }) {
   return (
     <div className="flex items-center gap-4 border-b border-neutral-800 bg-neutral-950 px-4 py-4 sm:px-8">
       {onBack ? (

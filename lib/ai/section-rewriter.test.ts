@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyScopedRewrite, sanitizeRewrittenSection } from "./section-rewriter";
+import { applyScopedRewrite, buildRewriteMessages, sanitizeRewrittenSection } from "./section-rewriter";
 import type { SectionSchema, BlockSchema } from "./catalog";
 import type { ShopifySection } from "@/lib/preview/shopify-template";
 import { NormalizedProductSchema } from "@/lib/product/types";
@@ -186,6 +186,75 @@ describe("applyScopedRewrite", () => {
   it("returns the original untouched when the model dropped the scoped setting", () => {
     const rewritten: typeof original = { type: "image-with-text", settings: {} };
     expect(applyScopedRewrite(original, rewritten, { blockPath: [], settingId: "heading" })).toBe(original);
+  });
+});
+
+describe("buildRewriteMessages", () => {
+  const baseOptions = {
+    product,
+    sectionId: "s1",
+    section: original,
+    instruction: "Make the heading punchier",
+  };
+
+  it("carries the project's customer language into the rewrite prompt", () => {
+    const content = buildRewriteMessages({ ...baseOptions, language: "de" }, schema, blocks).find(
+      (m) => m.role === "user",
+    )!.content;
+    expect(content).toContain("TARGET LANGUAGE:");
+    expect(content).toContain("German (de)");
+    expect(content).toContain("must be written in German");
+  });
+
+  it("defaults to English when the project has no language", () => {
+    const content = buildRewriteMessages(baseOptions, schema, blocks).find((m) => m.role === "user")!.content;
+    expect(content).toContain("English (en)");
+  });
+
+  it("carries the project's customer persona into the rewrite prompt", () => {
+    const content = buildRewriteMessages(
+      {
+        ...baseOptions,
+        customerPersona: {
+          type: "generated",
+          id: "frequent-traveler",
+          name: "Frequent Traveler",
+          description: "Values stylish organization for travel essentials",
+        },
+      },
+      schema,
+      blocks,
+    ).find((m) => m.role === "user")!.content;
+    expect(content).toContain("TARGET CUSTOMER PERSONA:");
+    expect(content).toContain("Target customer persona: Frequent Traveler");
+  });
+
+  it("omits the persona block when the project has none", () => {
+    const content = buildRewriteMessages(baseOptions, schema, blocks).find((m) => m.role === "user")!.content;
+    expect(content).not.toContain("TARGET CUSTOMER PERSONA:");
+  });
+
+  it("carries the project's marketing angle into the rewrite prompt", () => {
+    const content = buildRewriteMessages(
+      {
+        ...baseOptions,
+        marketingAngle: {
+          id: "polished-travel",
+          title: "Polished Travel, Without the Hassle",
+          description: "For professionals who want organized essentials.",
+          selectionType: "ai",
+        },
+      },
+      schema,
+      blocks,
+    ).find((m) => m.role === "user")!.content;
+    expect(content).toContain("MARKETING ANGLE:");
+    expect(content).toContain('Marketing angle: "Polished Travel, Without the Hassle"');
+  });
+
+  it("omits the angle block when the project has none", () => {
+    const content = buildRewriteMessages(baseOptions, schema, blocks).find((m) => m.role === "user")!.content;
+    expect(content).not.toContain("MARKETING ANGLE:");
   });
 });
 

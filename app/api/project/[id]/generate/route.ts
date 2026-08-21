@@ -5,6 +5,8 @@ import { generateStore } from "@/lib/ai/content-generator";
 import { AiConfigError } from "@/lib/ai/config";
 import { OpenRouterError } from "@/lib/ai/openrouter";
 import { parseConfiguration, StoreConfiguration } from "@/lib/store-config/store";
+import { parseCustomerPersona } from "@/lib/store-config/persona";
+import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
 
 // POST /api/project/:id/generate — regenerates both page templates from the project's
 // imported product using OpenRouter, and replaces the project's Store Configuration.
@@ -29,6 +31,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const generated = await generateStore(normalized, {
+      // The customer-language and persona selections made during onboarding: all
+      // customer-facing copy is generated in this language, written for this buyer
+      // (store-content-language-selection-implementation.md,
+      // product_based_customer_persona_implementation.md).
+      language: project.language,
+      customerPersona: parseCustomerPersona(project.personaJson),
+      marketingAngle: parseMarketingAngle(project.marketingAngleJson),
       config: {
         ...(typeof body.generateImages === "boolean" ? { generateImages: body.generateImages } : {}),
         ...(typeof body.model === "string" && body.model ? { model: body.model } : {}),

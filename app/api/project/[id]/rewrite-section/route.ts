@@ -6,6 +6,8 @@ import { presetById } from "@/lib/ai/rewrite-presets";
 import { AiConfigError } from "@/lib/ai/config";
 import { OpenRouterError } from "@/lib/ai/openrouter";
 import { PAGE_TEMPLATES, PageTemplate, parseConfiguration } from "@/lib/store-config/store";
+import { parseCustomerPersona } from "@/lib/store-config/persona";
+import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
 
 // POST /api/project/:id/rewrite-section — rewrites ONE section of one page template with AI
 // and persists the result (docs/SECTION-AI-EDITING.md). Unlike /generate this never touches
@@ -81,6 +83,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       sectionId: body.sectionId,
       section,
       instruction,
+      // Rewrites honor the same customer store-content language and persona as full generation.
+      language: project.language,
+      customerPersona: parseCustomerPersona(project.personaJson),
+      marketingAngle: parseMarketingAngle(project.marketingAngleJson),
       scope,
       config: typeof body.model === "string" && body.model ? { model: body.model } : {},
       signal: req.signal,
