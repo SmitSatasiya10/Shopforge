@@ -1,5 +1,41 @@
 import { describe, it, expect } from "vitest";
-import { extractAmazonHtmlFallback } from "./amazon";
+import {
+  canonicalAmazonProductUrl,
+  extractAmazonHtmlFallback,
+  parseAmazonAsin,
+  parseAmazonTitleHint,
+} from "./amazon";
+
+describe("Amazon URL parsing", () => {
+  it("parses the ASIN from /dp/, /gp/product/, and /gp/aw/d/ URLs", () => {
+    expect(parseAmazonAsin("https://www.amazon.in/Some-Product/dp/B0ABCDE123?ref=x")).toBe("B0ABCDE123");
+    expect(parseAmazonAsin("https://www.amazon.com/gp/product/B0ABCDE123")).toBe("B0ABCDE123");
+    expect(parseAmazonAsin("https://www.amazon.co.uk/gp/aw/d/B0ABCDE123/")).toBe("B0ABCDE123");
+    expect(parseAmazonAsin("https://www.amazon.in/dp/b0abcde123")).toBe("B0ABCDE123"); // case-normalized
+  });
+
+  it("returns null when the URL names no ASIN (search/category/homepage)", () => {
+    expect(parseAmazonAsin("https://www.amazon.in/s?k=tree+lamp")).toBeNull();
+    expect(parseAmazonAsin("https://www.amazon.in/")).toBeNull();
+    expect(parseAmazonAsin("https://www.amazon.in/dp/TOOSHORT")).toBeNull();
+    expect(parseAmazonAsin("not a url")).toBeNull();
+  });
+
+  it("turns the pre-/dp/ slug into a title hint, preserving product-specific words", () => {
+    expect(parseAmazonTitleHint("https://www.amazon.in/Cherry-Blossom-Tree-Lamp-Pink/dp/B0ABCDE123")).toBe(
+      "Cherry Blossom Tree Lamp Pink",
+    );
+    expect(parseAmazonTitleHint("https://www.amazon.in/dp/B0ABCDE123")).toBeNull();
+    expect(parseAmazonTitleHint("https://www.amazon.com/gp/product/B0ABCDE123")).toBeNull();
+  });
+
+  it("canonicalizes to https://<host>/dp/<ASIN>, stripping slug and tracking parameters", () => {
+    expect(
+      canonicalAmazonProductUrl("https://www.amazon.in/Cherry-Blossom-Lamp/dp/B0ABCDE123?ref=sr_1_1&keywords=lamp"),
+    ).toBe("https://www.amazon.in/dp/B0ABCDE123");
+    expect(canonicalAmazonProductUrl("https://www.amazon.in/s?k=lamp")).toBeNull();
+  });
+});
 
 // Amazon product pages expose no JSON-LD/Open Graph data, but do statically render a
 // #landingImage <img src> and a .a-price .a-offscreen price string — this is what the

@@ -1,11 +1,27 @@
 import { fetchProductHtml, fetchTextWithLimits, ProductFetchError, tryFetchShopifyProductJson } from "./fetcher";
 import { extractFromHtml } from "./extractor";
 import { normalizeFromJsonLd, normalizeFromOpenGraph, normalizeFromShopifyJson } from "./normalizer";
-import { ImportResult, requiredFieldsMissing } from "./types";
+import { ImportResult, NormalizedProduct, deriveImportStatus, requiredFieldsMissing } from "./types";
 import { getSampleNormalizedProduct, SAMPLE_PRODUCT_RAW } from "./sample";
 import { discoverProductUrls, mapWithConcurrency, DiscoverySource, MAX_FETCHED_PRODUCTS, DISCOVERY_CONCURRENCY } from "./discovery";
 import { detectSupplierPlatform, SupplierPlatform, SUPPLIER_PLATFORM_LABELS, unsupportedSupplierMessage } from "./source";
-import { extractAmazonHtmlFallback } from "./suppliers/amazon";
+import {
+  canonicalAmazonProductUrl,
+  extractAmazonHtmlFallback,
+  parseAmazonAsin,
+  parseAmazonTitleHint,
+} from "./suppliers/amazon";
+import {
+  canonicalEtsyListingUrl,
+  enrichEtsySearchCandidates,
+  parseEtsyListingId,
+  parseEtsyListingTitleHint,
+} from "./suppliers/etsy";
+import { searchProductFallback } from "./search-fallback";
+import { enrichCandidatesFromPages } from "./search-fallback/page-enrich";
+import { discoverEtsyShops } from "./search-fallback/shop-discovery";
+import { resolveEtsyShopNames } from "./search-fallback/vendor-resolution";
+import type { ProductSearchInput } from "./search-fallback/types";
 
 /**
  * Full import pipeline: ProductFetcher -> RawProductExtractor -> ProductNormalizer
@@ -29,7 +45,7 @@ async function importFromShopifyJsonOrHtml(
       htmlFetched: false,
       html: null,
       result: {
-        status: missing.length === 0 ? "succeeded" : missing.includes("title") ? "failed" : "partial",
+        status: deriveImportStatus(missing),
         error: null,
         missingFields: missing,
         raw: shopifyJson,
@@ -79,7 +95,7 @@ async function importFromShopifyJsonOrHtml(
     htmlFetched: true,
     html,
     result: {
-      status: missing.length === 0 ? "succeeded" : missing.includes("title") ? "failed" : "partial",
+      status: deriveImportStatus(missing),
       error: null,
       missingFields: missing,
       raw: extraction.data,
@@ -106,21 +122,28 @@ export function importSampleProduct(): ImportResult {
 }
 
 /**
- * Supplier-link import (supplier-competitor-import-prompt.md §3-7). Every supported
- * platform funnels through the same fetch -> extract -> normalize pipeline as a Shopify
- * product page (none of the five expose a public structured-data endpoint like Shopify's
- * `.json`, so there is no platform-specific parsing to branch on yet). The "adapter" is
- * just which platform a URL was detected as, plus an optional per-platform static-HTML
- * fallback (SUPPLIER_HTML_FALLBACKS) that fills gaps the generic JSON-LD/Open Graph
- * extraction left empty — e.g. Amazon exposes neither, but its server-rendered HTML still
- * has a plain #landingImage <img src> and a visible price string, so that's read directly
- * rather than left blank. This never bypasses bot protection — it only reads more of the
- * HTML the site already sent back for the one legitimate request already made.
+ * Supplier-link import (supplier-competitor-import-prompt.md §3-7). Every supported platform
+ * runs the same two-stage flow:
+ * 1. Direct retrieval — the same fetch -> extract -> normalize pipeline as a Shopify product
+ *    page, plus an optional per-platform static-HTML fallback (SUPPLIER_HTML_FALLBACKS) that
+ *    fills gaps the generic JSON-LD/Open Graph extraction left empty (Amazon exposes neither,
+ *    but its server-rendered HTML still has a plain #landingImage <img src> and a visible price
+ *    string). This never bypasses bot protection — it only reads more of the HTML the site
+ *    already sent back for the one legitimate request already made. When this stage produces a
+ *    usable result, the web-search fallback never runs.
+ * 2. Generic web-search fallback (search-fallback/index.ts) — only when direct retrieval fails
+ *    or returns too little to trust (Etsy 403s behind DataDome on essentially every automated
+ *    request; Amazon commonly returns an HTTP-200 captcha shell with no product data). It
+ *    searches with the platform-specific context in SUPPLIER_SEARCH_CONTEXT and either finds
+ *    the exact listing or a small set of clearly-labeled related listings — never silently
+ *    substituting one for the other, and never fabricating data. Platform-specific enrichment
+ *    (SUPPLIER_SEARCH_ENRICHERS, e.g. Etsy shop RSS) then fills images/prices the text-only
+ *    search tools can't see.
  */
-export interface SupplierImportResult {
-  platform: SupplierPlatform | null;
-  result: ImportResult;
-}
+export type SupplierImportResult =
+  | { platform: null; mode: "product"; result: ImportResult }
+  | { platform: SupplierPlatform; mode: "product"; result: ImportResult }
+  | { platform: SupplierPlatform; mode: "related"; results: ImportResult[] };
 
 const SUPPLIER_HTML_FALLBACKS: Partial<
   Record<SupplierPlatform, (html: string) => { image: string | null; price: number | null; currency: string | null }>
@@ -151,7 +174,124 @@ function applyHtmlFallback(result: ImportResult, platform: SupplierPlatform, htm
     ...result,
     normalized,
     missingFields: missing,
-    status: missing.length === 0 ? "succeeded" : missing.includes("title") ? "failed" : "partial",
+    status: deriveImportStatus(missing),
+  };
+}
+
+/**
+ * A direct-retrieval result is "sufficient" when it has enough to identify and display the
+ * product (title + at least one image) — not necessarily complete. A missing title means
+ * nothing usable was found at all; a missing image means what was found can't be trusted or
+ * shown, so both are worth trying the web-search fallback for. Missing price/variants alone
+ * isn't reason enough to run a search we don't need (generic-web-search-fallback.md §4).
+ */
+function isDirectResultSufficient(result: ImportResult): boolean {
+  if (result.status === "succeeded") return true;
+  return result.status === "partial" && !result.missingFields.includes("images");
+}
+
+function importResultFromNormalized(normalized: NormalizedProduct): ImportResult {
+  const missing = requiredFieldsMissing(normalized);
+  return { status: deriveImportStatus(missing), error: null, missingFields: missing, raw: null, normalized };
+}
+
+/**
+ * Per-platform context for the generic web-search fallback: the canonical product URL
+ * (locale prefix and tracking parameters stripped), the platform's product identifier, and
+ * every reliable signal partial direct extraction produced. The title is the primary search
+ * signal — when extraction produced none (the usual case behind a bot wall), the URL slug
+ * turned back into words is used instead ("cherry-blossom-tree-lamp" -> "cherry blossom tree
+ * lamp"), never a stripped-down generic term.
+ */
+const SUPPLIER_SEARCH_CONTEXT: Record<SupplierPlatform, (url: string, direct: ImportResult) => ProductSearchInput> = {
+  etsy: (url, direct) => ({
+    sourcePlatform: "etsy",
+    sourceUrl: canonicalEtsyListingUrl(url) ?? url,
+    listingId: parseEtsyListingId(url),
+    title: direct.normalized?.title ?? parseEtsyListingTitleHint(url),
+    vendor: direct.normalized?.vendor ?? null,
+    description: direct.normalized?.description ?? null,
+    price: direct.normalized?.price ?? null,
+    currency: direct.normalized?.currency ?? null,
+  }),
+  amazon: (url, direct) => ({
+    sourcePlatform: "amazon",
+    sourceUrl: canonicalAmazonProductUrl(url) ?? url,
+    listingId: parseAmazonAsin(url),
+    title: direct.normalized?.title ?? parseAmazonTitleHint(url),
+    vendor: direct.normalized?.vendor ?? null,
+    description: direct.normalized?.description ?? null,
+    price: direct.normalized?.price ?? null,
+    currency: direct.normalized?.currency ?? null,
+  }),
+};
+
+/**
+ * Post-search top-up from a platform's own public data — search candidates come from text-only
+ * tools that never see image URLs, so after the generic candidate-page enrichment each
+ * platform fills the remaining gaps from an endpoint it leaves open (Etsy: shop-name
+ * resolution + per-shop RSS + relevant same-shop top-ups). Amazon has no bot-open equivalent,
+ * so its candidates rely on the page fetch and search layer alone (its image CDN URLs pass
+ * the search layer's trusted-image check).
+ */
+type SupplierSearchEnricher = (args: {
+  input: ProductSearchInput;
+  products: NormalizedProduct[];
+  mode: "exact" | "related";
+}) => Promise<NormalizedProduct[]>;
+
+const SUPPLIER_SEARCH_ENRICHERS: Partial<Record<SupplierPlatform, SupplierSearchEnricher>> = {
+  etsy: ({ input, products, mode }) =>
+    enrichEtsySearchCandidates({
+      requestedTitle: input.title,
+      requestedListingId: input.listingId,
+      products,
+      mode,
+      resolveShops: resolveEtsyShopNames,
+      discoverShops: discoverEtsyShops,
+    }),
+};
+
+async function runSupplierSearchFallback(
+  platform: SupplierPlatform,
+  url: string,
+  direct: ImportResult,
+): Promise<SupplierImportResult> {
+  const input = SUPPLIER_SEARCH_CONTEXT[platform](url, direct);
+  const searchResult = await searchProductFallback(input);
+  const platformEnrich = SUPPLIER_SEARCH_ENRICHERS[platform] ?? (async ({ products }) => products);
+
+  if (searchResult.matchType === "exact") {
+    const fetched = await enrichCandidatesFromPages(platform, [searchResult.product]);
+    const [enriched] = await platformEnrich({ input, products: fetched, mode: "exact" });
+    return { platform, mode: "product", result: importResultFromNormalized(enriched) };
+  }
+  if (searchResult.matchType === "related" && searchResult.products.length > 0) {
+    const fetched = await enrichCandidatesFromPages(platform, searchResult.products);
+    const enriched = await platformEnrich({ input, products: fetched, mode: "related" });
+    // Platform enrichment can recover the REQUESTED listing itself (Etsy: found by ID in a
+    // discovered shop's feed) — that's the exact product, not a "related" suggestion.
+    const exactHit = enriched.find((p) => p.source === "search_exact");
+    if (exactHit) {
+      return { platform, mode: "product", result: importResultFromNormalized(exactHit) };
+    }
+    return { platform, mode: "related", results: enriched.map(importResultFromNormalized) };
+  }
+
+  // No trustworthy candidate found. A partial direct result (has a title, missing image or
+  // price) is still more honest than a hard failure — keep it and let the UI show "No image" /
+  // "Price unavailable" rather than substituting anything.
+  if (direct.status === "partial") {
+    return { platform, mode: "product", result: direct };
+  }
+  const message =
+    searchResult.matchType === "error"
+      ? searchResult.error
+      : `We couldn't retrieve this ${SUPPLIER_PLATFORM_LABELS[platform]} product, and no matching or related products were found.`;
+  return {
+    platform,
+    mode: "product",
+    result: { status: "failed", error: message, missingFields: [], raw: null, normalized: null },
   };
 }
 
@@ -163,6 +303,7 @@ export async function importSupplierProduct(url: string): Promise<SupplierImport
   } catch {
     return {
       platform: null,
+      mode: "product",
       result: { status: "failed", error: `"${url}" is not a valid URL`, missingFields: [], raw: null, normalized: null },
     };
   }
@@ -171,36 +312,21 @@ export async function importSupplierProduct(url: string): Promise<SupplierImport
   if (!platform) {
     return {
       platform: null,
+      mode: "product",
       result: { status: "failed", error: unsupportedSupplierMessage(), missingFields: [], raw: null, normalized: null },
     };
   }
 
   const { result: fetched, html } = await importFromShopifyJsonOrHtml(url);
   const result = applyHtmlFallback(fetched, platform, html);
-
-  if (result.status === "failed" && likelyBotBlocked(result)) {
-    return {
-      platform,
-      result: {
-        ...result,
-        error: `We couldn't import this product from ${SUPPLIER_PLATFORM_LABELS[platform]}. The site may be blocking automated access, or the page may require you to be signed in.`,
-      },
-    };
+  if (isDirectResultSufficient(result)) {
+    return { platform, mode: "product", result };
   }
-  return { platform, result };
-}
 
-/**
- * A fetch failure "looks like" a bot block when it's a timeout/unreachable (several of these
- * platforms stall automated requests rather than returning a clean error) or an HTTP status
- * commonly used for bot defense/rate limiting/auth walls. A plain 404 is left as-is — that's
- * "product not found", not "blocked", and deserves its own message.
- */
-function likelyBotBlocked(result: ImportResult): boolean {
-  if (result.errorReason === "unreachable") return true;
-  if (result.errorReason !== "http_error") return false;
-  const status = Number(result.error?.match(/Server responded (\d{3})/)?.[1]);
-  return [401, 403, 429, 500, 502, 503].includes(status);
+  // Direct retrieval failed or returned too little to trust — a 403 bot wall (Etsy), an
+  // HTTP-200 captcha shell with no product data (Amazon), or a page with no recognizable
+  // structured data. Fall back to the generic web-search service instead of failing outright.
+  return runSupplierSearchFallback(platform, url, result);
 }
 
 export interface StoreDiscoveryMeta {

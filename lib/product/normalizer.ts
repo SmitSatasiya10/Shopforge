@@ -8,7 +8,7 @@ import { JsonLdExtraction, OpenGraphExtraction } from "./extractor";
 // one Normalized Product Contract (prototype-phase-plan.md §9). Never let a
 // malformed upstream field crash normalization — coerce or drop it instead.
 
-function toNumber(value: unknown): number | null {
+export function toNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
     const n = Number.parseFloat(value.replace(/[^0-9.]/g, ""));
@@ -17,7 +17,7 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-function toStringOrNull(value: unknown): string | null {
+export function toStringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 

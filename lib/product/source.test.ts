@@ -3,13 +3,8 @@ import { detectSupplierPlatform, unsupportedSupplierMessage, SUPPORTED_SUPPLIER_
 
 describe("detectSupplierPlatform", () => {
   const cases: [string, string][] = [
-    ["https://www.aliexpress.com/item/123.html", "aliexpress"],
-    ["https://aliexpress.us/item/123.html", "aliexpress"],
     ["https://www.amazon.com/dp/B08N5WRWNW", "amazon"],
     ["https://www.amazon.co.uk/dp/B08N5WRWNW", "amazon"],
-    ["https://zendrop.com/products/example", "zendrop"],
-    ["https://app.zendrop.com/products/example", "zendrop"],
-    ["https://teemdrop.com/products/example", "teemdrop"],
     ["https://www.etsy.com/listing/1502712698", "etsy"],
   ];
 
@@ -21,25 +16,32 @@ describe("detectSupplierPlatform", () => {
     expect(detectSupplierPlatform(new URL("https://example-supplier.com/product/1"))).toBeNull();
   });
 
+  // AliExpress, Zendrop, and TeemDrop are intentionally not supported (no legitimate
+  // programmatic access exists for TeemDrop; AliExpress/Zendrop are out of scope for now) —
+  // these guard against silently re-adding them.
+  it("returns null for platforms that are intentionally not supported", () => {
+    expect(detectSupplierPlatform(new URL("https://www.aliexpress.com/item/123.html"))).toBeNull();
+    expect(detectSupplierPlatform(new URL("https://zendrop.com/products/example"))).toBeNull();
+    expect(detectSupplierPlatform(new URL("https://teemdrop.com/products/example"))).toBeNull();
+  });
+
   it("does not match a lookalike hostname (prefix/suffix confusion)", () => {
     expect(detectSupplierPlatform(new URL("https://notaliexpress.com/item/1"))).toBeNull();
     expect(detectSupplierPlatform(new URL("https://amazon.evil.com/dp/1"))).toBeNull();
   });
 
   it("covers every documented supported platform", () => {
-    expect(SUPPORTED_SUPPLIER_PLATFORMS.sort()).toEqual(
-      ["aliexpress", "amazon", "zendrop", "teemdrop", "etsy"].sort(),
-    );
+    expect(SUPPORTED_SUPPLIER_PLATFORMS.sort()).toEqual(["amazon", "etsy"].sort());
   });
 });
 
 describe("unsupportedSupplierMessage", () => {
-  it("names every supported platform", () => {
+  it("names every supported platform, and none of the unsupported ones", () => {
     const message = unsupportedSupplierMessage();
-    expect(message).toContain("AliExpress");
     expect(message).toContain("Amazon");
-    expect(message).toContain("Zendrop");
-    expect(message).toContain("Teemdrop");
     expect(message).toContain("Etsy");
+    expect(message).not.toContain("AliExpress");
+    expect(message).not.toContain("Zendrop");
+    expect(message).not.toContain("Teemdrop");
   });
 });
