@@ -26,7 +26,7 @@ export const NormalizedProductSchema = z.object({
   options: z.array(z.object({ name: z.string(), values: z.array(z.string()) })).default([]),
   vendor: z.string().nullable(),
   productUrl: z.string(),
-  source: z.enum(["shopify", "generic_html", "sample"]),
+  source: z.enum(["shopify", "generic_html", "sample", "search_exact", "search_related"]),
 });
 
 export type NormalizedProduct = z.infer<typeof NormalizedProductSchema>;
@@ -52,4 +52,10 @@ export function requiredFieldsMissing(product: NormalizedProduct): string[] {
   if (product.price === null) missing.push("price");
   if (product.variants.length === 0) missing.push("variants");
   return missing;
+}
+
+/** A missing title means there's nothing usable to show at all; anything else is partial. */
+export function deriveImportStatus(missing: string[]): ImportStatus {
+  if (missing.length === 0) return "succeeded";
+  return missing.includes("title") ? "failed" : "partial";
 }

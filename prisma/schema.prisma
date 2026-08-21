@@ -15,9 +15,9 @@ datasource db {
 model Product {
   id                    String   @id @default(uuid())
   sourceUrl             String
-  sourcePlatform        String // "shopify" | "generic_html" | "sample"
+  sourcePlatform        String // "shopify" | "generic_html" | "sample" | "search_exact" | "search_related"
   importSource          String   @default("shopify") // which Start-screen entry point: "shopify" | "supplier" | "competitor" | "sample"
-  supplierPlatform      String? // detected supplier platform for importSource="supplier": "aliexpress" | "amazon" | "zendrop" | "teemdrop" | "etsy"
+  supplierPlatform      String? // detected supplier platform for importSource="supplier": "amazon" | "etsy"
   importStatus          String // pending | importing | succeeded | partial | failed
   importError           String?
   importedFieldsMissing String[] @default([])

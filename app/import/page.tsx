@@ -30,6 +30,7 @@ function ImportPageInner() {
   const source = readSource(searchParams.get("source"));
   const partialFailed = Number(searchParams.get("partialFailed") ?? "0");
   const partialTotal = Number(searchParams.get("partialTotal") ?? "0");
+  const related = searchParams.get("related") === "1";
   const ids = productId ? [productId] : productIdsParam ? productIdsParam.split(",").filter(Boolean) : [];
 
   if (step === "analysis" && selected) {
@@ -46,11 +47,96 @@ function ImportPageInner() {
   return (
     <div className="flex flex-1 flex-col bg-neutral-950 text-neutral-50">
       {ids.length > 0 ? (
-        <ProductResults ids={ids} source={source} partialFailed={partialFailed} partialTotal={partialTotal} />
+        <ProductResults ids={ids} source={source} partialFailed={partialFailed} partialTotal={partialTotal} related={related} />
+      ) : source === "shopify" && step !== "url" ? (
+        <ConnectShopify />
       ) : (
         <ImportForm source={source} />
       )}
     </div>
+  );
+}
+
+// Placeholder until the Shopforge Shopify app exists — swap in the real App Store listing URL.
+const SHOPIFY_APP_STORE_URL = "https://apps.shopify.com/";
+
+// Connect Shopify Store step: the Shopify entry point asks the merchant to install the
+// Shopforge app first, instead of pasting a URL. The real OAuth/app install isn't built
+// yet, so "Continue" falls through to the existing URL-entry step (?step=url) to keep the
+// flow usable end-to-end.
+function ConnectShopify() {
+  const router = useRouter();
+
+  return (
+    <>
+      <ProgressSteps step={2} onBack={() => router.push("/")} />
+      <div className="flex flex-1 flex-col lg:flex-row">
+        {/* Left: connect actions */}
+        <div className="flex flex-1 flex-col px-6 py-12 sm:px-12 lg:px-16">
+          <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
+            <div className="pt-4 lg:pt-12">
+              <h1 className="text-3xl font-semibold tracking-tight">Connect your Shopify store</h1>
+              <p className="mt-3 text-base text-neutral-400">
+                Install the Shopforge app to import your products.
+              </p>
+
+              <a
+                href={SHOPIFY_APP_STORE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-10 flex w-full items-center justify-center gap-3 rounded-xl border border-neutral-700 bg-neutral-900 px-6 py-4 text-base font-semibold transition hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400"
+              >
+                <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true" fill="#95BF47">
+                  <path d="M15.34 2.98c-.14-.01-.3-.02-.47-.02-.2-.62-.5-1.2-.9-1.66C13.42.68 12.83.4 12.2.4c-.13 0-.26.01-.39.04C11.34.14 10.83 0 10.35 0 7.9 0 6.73 3.06 6.36 4.61l-2.1.65c-.65.2-.67.22-.75.83L1.8 19.31 14.55 21.7l6.9-1.49S15.6 3 15.34 2.98ZM12.9 3.7l-1.66.51c0-.09.01-.17.01-.27 0-.81-.11-1.47-.3-1.98.75.09 1.5.98 1.95 1.74Zm-2.62-1.6c.2.5.34 1.2.34 2.17v.14l-2.7.83c.35-1.32 1.16-2.72 2.36-3.14Zm-1.5-1.05c.19 0 .38.06.56.19-1.4.66-2.35 2.34-2.76 4.32l-2.13.66C5.03 4.36 6.24 1.05 8.78 1.05Z" />
+                </svg>
+                Install Shopforge on Shopify
+              </a>
+
+              <p className="mt-4 flex items-center justify-center gap-2 text-sm text-neutral-400">
+                <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="2.5" y="2.5" width="15" height="15" rx="4" />
+                  <path d="m6.5 10.5 2.5 2.5 4.5-5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                You&apos;ll be redirected to the Shopify App Store
+              </p>
+            </div>
+
+            <div className="mt-auto pt-16">
+              <button
+                type="button"
+                onClick={() => router.push("/import?source=shopify&step=url")}
+                className="w-full rounded-xl bg-neutral-50 px-6 py-4 text-base font-semibold text-neutral-900 transition hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400"
+              >
+                Continue
+              </button>
+              <p className="mt-3 text-center text-sm text-neutral-500">Try out for free</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: install-steps illustration */}
+        <div className="hidden flex-1 items-center justify-center border-l border-neutral-900 bg-neutral-950 bg-[radial-gradient(circle,rgba(255,255,255,0.07)_1px,transparent_1px)] [background-size:22px_22px] lg:flex">
+          <div className="mx-8 max-w-md rounded-2xl border border-neutral-800 bg-neutral-900 p-5 shadow-2xl shadow-black/60">
+            <div className="overflow-hidden rounded-xl bg-gradient-to-br from-orange-400 via-rose-400 to-emerald-500 p-6" aria-hidden="true">
+              <div className="rounded-lg bg-neutral-950/90 p-4">
+                <div className="h-2 w-24 rounded bg-neutral-700" />
+                <div className="mt-2 h-2 w-32 rounded bg-neutral-800" />
+                <div className="mt-4 h-8 rounded-md border border-neutral-700 bg-neutral-800" />
+                <div className="mt-2 h-2 w-28 rounded bg-neutral-800" />
+                <div className="mt-4 flex justify-end">
+                  <div className="h-14 w-20 rounded-md border border-neutral-700 bg-neutral-800 p-2">
+                    <div className="h-1.5 w-10 rounded bg-neutral-600" />
+                    <div className="mt-1 h-1.5 w-8 rounded bg-neutral-700" />
+                    <div className="mt-2 h-3 rounded-sm bg-neutral-700" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="mt-4 text-center text-lg font-semibold">Follow these steps to install the app</p>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -74,9 +160,10 @@ const STAGE_STEP_MS = 900;
 
 const SOURCE_COPY: Record<
   ProductImportSource,
-  { heading: string; description: string; placeholder: string; submitLabel: string; label: string }
+  { icon: string; heading: string; description: string; placeholder: string; submitLabel: string; label: string; badges?: string[] }
 > = {
   shopify: {
+    icon: "🛍️",
     heading: "Import your product",
     description: "Enter a Shopify product URL, or a store homepage to browse its products",
     placeholder: "https://store.com/products/example",
@@ -84,13 +171,16 @@ const SOURCE_COPY: Record<
     label: "Shopify product or store URL",
   },
   supplier: {
+    icon: "🔗",
     heading: "Import from a supplier link",
-    description: `Paste the supplier product URL. Supports ${SUPPORTED_SUPPLIER_LABEL_LIST}.`,
+    description: "Paste the supplier product URL — we'll extract everything for you.",
     placeholder: "https://example-supplier.com/product/...",
     submitLabel: "Import product",
     label: "Supplier product URL",
+    badges: SUPPORTED_SUPPLIER_LABEL_LIST.split(", "),
   },
   competitor: {
+    icon: "🏬",
     heading: "Import from a competitor store",
     description: "Paste the competitor store URL — we'll look for products to import.",
     placeholder: "https://competitor-store.com",
@@ -181,6 +271,15 @@ function ImportForm({ source }: { source: ProductImportSource }) {
         return;
       }
 
+      if (data.mode === "related") {
+        // The exact product couldn't be confirmed, but web search found similar listings —
+        // route to the same Products Found grid, flagged so it labels these as related rather
+        // than as the requested product.
+        const ids = data.products.map((p: ProductDTO) => p.id).join(",");
+        router.push(`/import?source=${source}&productIds=${ids}&related=1`);
+        return;
+      }
+
       // mode === "store"
       if (data.products.length === 0) {
         setError(
@@ -208,12 +307,40 @@ function ImportForm({ source }: { source: ProductImportSource }) {
 
   return (
     <>
-      <ProgressSteps step={2} onBack={() => router.push("/")} />
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-16">
-        <h1 className="text-2xl font-semibold">{copy.heading}</h1>
-        <p className="mt-2 text-sm text-neutral-400">{copy.description}</p>
+      <ProgressSteps
+        step={2}
+        onBack={() => router.push(source === "shopify" ? "/import?source=shopify" : "/")}
+      />
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-6 py-16">
+        <div className="text-center">
+          <span
+            className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-neutral-800 bg-neutral-900 text-3xl"
+            aria-hidden="true"
+          >
+            {copy.icon}
+          </span>
+          <h1 className="mt-6 text-3xl font-semibold tracking-tight">{copy.heading}</h1>
+          <p className="mt-3 text-base text-neutral-400">{copy.description}</p>
+          {copy.badges && (
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <span className="text-xs text-neutral-500">Supports</span>
+              {copy.badges.map((badge) => (
+                <span
+                  key={badge}
+                  className="rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-xs font-medium text-neutral-300"
+                >
+                  {badge}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
 
-        <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3" noValidate>
+        <form
+          onSubmit={handleSubmit}
+          className="mt-10 flex flex-col gap-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-6 shadow-lg shadow-black/30"
+          noValidate
+        >
           <label htmlFor="product-url" className="sr-only">
             {copy.label}
           </label>
@@ -228,16 +355,16 @@ function ImportForm({ source }: { source: ProductImportSource }) {
             placeholder={copy.placeholder}
             aria-invalid={error ? "true" : "false"}
             aria-describedby={error ? "product-url-error" : undefined}
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-3 text-sm text-neutral-50 placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 disabled:opacity-60"
+            className="rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3.5 text-base text-neutral-50 transition placeholder:text-neutral-500 focus-visible:border-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 disabled:opacity-60"
           />
           <button
             type="submit"
-            disabled={loading}
-            className="rounded-lg bg-neutral-50 px-4 py-3 text-sm font-medium text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-60"
+            disabled={loading || url.trim() === ""}
+            className="rounded-xl bg-neutral-50 px-4 py-3.5 text-base font-semibold text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-60"
           >
             {loading ? activeStages[Math.min(stageIndex, activeStages.length - 1)] : copy.submitLabel}
           </button>
-          <div aria-live="polite" className="min-h-[1.25rem]">
+          <div aria-live="polite" className="min-h-[1.25rem] text-center">
             {error && (
               <p id="product-url-error" className="text-sm text-red-400">
                 {error}
@@ -259,11 +386,13 @@ function ProductResults({
   source,
   partialFailed,
   partialTotal,
+  related = false,
 }: {
   ids: string[];
   source: ProductImportSource;
   partialFailed: number;
   partialTotal: number;
+  related?: boolean;
 }) {
   const router = useRouter();
   const [products, setProducts] = useState<ProductDTO[] | null>(null);
@@ -300,7 +429,10 @@ function ProductResults({
 
   return (
     <>
-      <ProgressSteps step={3} onBack={() => router.push(`/import?source=${source}`)} />
+      <ProgressSteps
+        step={3}
+        onBack={() => router.push(source === "shopify" ? "/import?source=shopify&step=url" : `/import?source=${source}`)}
+      />
       <div className={`mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-8 ${selectedProduct ? "pb-28" : ""}`}>
         {error && (
           <p role="alert" className="text-sm text-red-400">
@@ -311,22 +443,40 @@ function ProductResults({
 
         {products && products.length > 0 && (
           <>
-            <h1 className="text-2xl font-semibold">{products.length > 1 ? "Products found" : "Product found"}</h1>
-            <p className="mt-1 text-sm text-neutral-400">Select a product to continue</p>
-            {partialFailed > 0 && (
-              <p className="mt-1 text-sm text-amber-400">
-                {partialTotal} products found. {partialFailed} product{partialFailed === 1 ? "" : "s"} couldn&apos;t be
-                imported.
+            <div className="text-center">
+              <h1 className="text-3xl font-semibold tracking-tight">
+                {related
+                  ? "We couldn't find the exact product"
+                  : products.length > 1
+                    ? "Products found"
+                    : "Product found"}
+              </h1>
+              <p className="mt-3 text-base text-neutral-400">
+                {related
+                  ? "We found similar products that may help — select one to continue"
+                  : "Select a product to continue"}
               </p>
-            )}
+              {products.length > 1 && !related && (
+                <p className="mt-2 text-sm text-neutral-500">
+                  {products.length} products imported
+                </p>
+              )}
+              {partialFailed > 0 && (
+                <p className="mt-2 text-sm text-amber-400">
+                  {partialTotal} products found. {partialFailed} product{partialFailed === 1 ? "" : "s"} couldn&apos;t be
+                  imported.
+                </p>
+              )}
+            </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {products.map((product) => (
                 <ProductCard
                   key={product.id}
                   product={product}
                   selected={product.id === selectedId}
                   onSelect={() => setSelectedId(product.id)}
+                  badge={related ? "Related" : undefined}
                 />
               ))}
             </div>

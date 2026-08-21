@@ -80,15 +80,32 @@ export async function POST(req: NextRequest) {
     body.source === "supplier" || body.source === "competitor" ? body.source : "shopify";
 
   if (source === "supplier") {
-    const { platform, result } = await importSupplierProduct(body.url);
-    if (platform === null) {
+    const outcome = await importSupplierProduct(body.url);
+    if (outcome.platform === null) {
       // Invalid URL or an unsupported supplier — nothing was fetched, so nothing is persisted.
-      return NextResponse.json({ error: result.error }, { status: 422 });
+      return NextResponse.json({ error: outcome.result.error }, { status: 422 });
     }
-    const product = await persistResult(result, body.url, { importSource: "supplier", supplierPlatform: platform });
+
+    if (outcome.mode === "related") {
+      // The exact product couldn't be confirmed, but the web-search fallback found similar
+      // listings — persist them as normal (partial) products so they flow through the existing
+      // Products Found -> select -> analysis pipeline, and let the client label them as related
+      // rather than as the requested product.
+      const products = await Promise.all(
+        outcome.results.map((r) =>
+          persistResult(r, body.url, { importSource: "supplier", supplierPlatform: outcome.platform }),
+        ),
+      );
+      return NextResponse.json({ mode: "related" as const, products }, { status: 201 });
+    }
+
+    const product = await persistResult(outcome.result, body.url, {
+      importSource: "supplier",
+      supplierPlatform: outcome.platform,
+    });
     return NextResponse.json(
       { mode: "product" as const, products: [product] },
-      { status: result.status === "failed" ? 422 : 201 },
+      { status: outcome.result.status === "failed" ? 422 : 201 },
     );
   }
 
