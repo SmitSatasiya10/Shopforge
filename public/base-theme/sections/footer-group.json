@@ -1,0 +1,82 @@
+{
+  "name": "t:sections.footer.name",
+  "type": "footer",
+  "sections": {
+    "footer": {
+      "type": "footer",
+      "blocks": {
+        "fc645871-d789-4cfa-8584-4f8a29b6ce92": {
+          "type": "image",
+          "disabled": true,
+          "settings": {
+            "image": "shopify://shop_images/primary-logo.png",
+            "image_width": 550,
+            "alignment": "center",
+            "url": "",
+            "width_desktop": 12,
+            "width_mobile": "2"
+          }
+        },
+        "footer-links-1": {
+          "type": "link_list",
+          "settings": {
+            "heading": "Quick Links",
+            "menu": "main-menu"
+          }
+        },
+        "footer-newsletter-1": {
+          "type": "email_signup",
+          "settings": {
+            "heading": "Join Our Pack",
+            "subtext": "<p>Sign up for exclusive deals on pet supplies, new arrivals, and tail-wagging tips for your furry friends.</p>",
+            "button_label": "Subscribe"
+          }
+        }
+      },
+      "block_order": [
+        "fc645871-d789-4cfa-8584-4f8a29b6ce92",
+        "footer-links-1",
+        "footer-newsletter-1"
+      ],
+      "custom_css": [],
+      "settings": {
+        "color_scheme": "accent-1",
+        "custom_colors_background": "#ff7f50",
+        "custom_gradient_background": "",
+        "custom_colors_text": "#ff7f50",
+        "custom_colors_solid_button_background": "#ffffff",
+        "custom_colors_solid_button_text": "#121212",
+        "custom_colors_outline_button": "#ffffff",
+        "pattern_bg": "none",
+        "pattern_color": "#003934",
+        "pattern_size": 20,
+        "pattern_thickness": 2,
+        "pattern_angle": 45,
+        "pattern_opacity_mode": "low",
+        "pattern_opacity_low": 7,
+        "pattern_opacity_normal": 80,
+        "footer_bg_image_size": "cover",
+        "footer_bg_image_position": "center center",
+        "footer_bg_image_repeat": false,
+        "footer_overlay_color": "#000000",
+        "footer_overlay_opacity": 0,
+        "enable_follow_on_shop": false,
+        "show_social": true,
+        "enable_country_selector": false,
+        "enable_language_selector": true,
+        "payment_enable": true,
+        "enabled_payment_types": "",
+        "show_policy": true,
+        "branding_text": "",
+        "top_page_width": "normal",
+        "bottom_page_width": "normal",
+        "margin_top": 0,
+        "padding_top": 52,
+        "padding_bottom": 20
+      }
+    }
+  },
+  "order": [
+    "footer"
+  ]
+}

@@ -25,7 +25,27 @@ describe("extractAmazonHtmlFallback", () => {
 
   it("returns nulls when neither element is present", () => {
     const result = extractAmazonHtmlFallback("<html><body>no product here</body></html>");
-    expect(result).toEqual({ image: null, price: null, currency: null });
+    expect(result).toEqual({ title: null, brand: null, image: null, price: null, currency: null });
+  });
+
+  it("reads #productTitle rather than the marketplace <title>", () => {
+    const html = `
+      <html><head><title>Gurubhai Equipments Round Catering Burner 10x10 Inch : Amazon.in: Home &amp; Kitchen</title></head>
+      <body><span id="productTitle">  Gurubhai Equipments Round Catering Burner 10x10 Inch  </span></body></html>
+    `;
+    expect(extractAmazonHtmlFallback(html).title).toBe("Gurubhai Equipments Round Catering Burner 10x10 Inch");
+  });
+
+  it("strips the marketplace suffix when #productTitle is absent", () => {
+    const html = `<html><head><title>Round Catering Burner : Amazon.in: Home &amp; Kitchen</title></head><body></body></html>`;
+    expect(extractAmazonHtmlFallback(html).title).toBe("Round Catering Burner");
+  });
+
+  it("reads the brand from the byline, in either of its two phrasings", () => {
+    const visit = `<a id="bylineInfo">Visit the Gurubhai Equipments Store</a>`;
+    expect(extractAmazonHtmlFallback(visit).brand).toBe("Gurubhai Equipments");
+    const branded = `<a id="bylineInfo">Brand: Gurubhai Equipments</a>`;
+    expect(extractAmazonHtmlFallback(branded).brand).toBe("Gurubhai Equipments");
   });
 
   it("handles USD pricing", () => {

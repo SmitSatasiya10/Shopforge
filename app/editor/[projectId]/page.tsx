@@ -2,67 +2,122 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { PreviewFrame, SelectInfo } from "@/components/PreviewFrame";
+import { PreviewFrame, SelectInfo, SelectionRect } from "@/components/PreviewFrame";
 import { SettingsPanel } from "@/components/SettingsPanel";
-import { renderStorePreview } from "@/lib/preview/liquid-renderer";
+import { AiRewritePopover } from "@/components/AiRewritePopover";
+import { SectionToolbar } from "@/components/SectionToolbar";
+import { InlineTextToolbar } from "@/components/InlineTextToolbar";
+import { renderTemplate } from "@/lib/preview/template-renderer";
 import { createFetchTemplateReader } from "@/lib/preview/template-loader";
-import { getSectionDefinition } from "@/lib/sections/registry";
-import { StoreConfiguration } from "@/lib/store-config/types";
+import {
+  loadBlockSchema,
+  loadSectionSchema,
+  ShopifySectionSchema,
+  ShopifySettingDef,
+} from "@/lib/preview/section-schema";
+import { PAGE_TEMPLATES, PageTemplate, parseConfiguration, StoreConfiguration } from "@/lib/store-config/store";
+import { deriveStoreName } from "@/lib/store-config/store-name";
+import {
+  getBlockAt,
+  moveSection,
+  removeBlockAt,
+  removeSection,
+  replaceSection,
+  setSettingAtPath,
+  setSettingsAtPath,
+} from "@/lib/store-config/template-ops";
+import { applyMagicBrush, cycleColorScheme, rollPalette, PALETTES } from "@/lib/editor/magic-brush";
+import {
+  locateBlockPathByType,
+  locateTextSetting,
+  normalizeText,
+  PRODUCT_TITLE_SETTING,
+  TextBinding,
+} from "@/lib/editor/setting-locator";
+import { applyAlign, applyColor, cycleWeight, findTextControls, stepSize } from "@/lib/editor/text-controls";
 import type { ProductDTO } from "@/lib/product/db-mapping";
 import { toNormalizedProduct } from "@/lib/product/db-mapping";
 
-// Builder/editor chrome (prototype-phase-plan.md §15/§16). Selection + inline text
-// editing come from the iframe via PreviewFrame; structural/style settings come from
-// the settings panel. Every change updates Store Configuration state, never the DOM.
+// Builder/editor chrome. Selection comes from the iframe via PreviewFrame; edits go through
+// the section toolbar (magic brush / AI rewrite / move / delete), the inline text toolbar,
+// or the Inspector — and every one of them updates the template JSON, never the DOM
+// (docs/product-spec/06-preview-architecture.md, docs/EDITOR-TOOLBARS.md).
 export default function EditorPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const [product, setProduct] = useState<ProductDTO | null>(null);
   const [configuration, setConfiguration] = useState<StoreConfiguration | null>(null);
+  const [page, setPage] = useState<PageTemplate>("product");
   const [html, setHtml] = useState("");
   const [selection, setSelection] = useState<SelectInfo | null>(null);
+  const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
+  const [schema, setSchema] = useState<{ type: string; schema: ShopifySectionSchema | null } | null>(null);
+  const [boundDefs, setBoundDefs] = useState<{ key: string; defs: ShopifySettingDef[] } | null>(null);
+  const [schemaLocale, setSchemaLocale] = useState<Record<string, unknown>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [generating, setGenerating] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [showRewrite, setShowRewrite] = useState(false);
+  const [generateImages, setGenerateImages] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [previewHeight, setPreviewHeight] = useState(600);
 
   const readTemplate = useMemo(() => createFetchTemplateReader(), []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const paletteIndex = useRef(-1);
 
   useEffect(() => {
     fetch(`/api/project/${projectId}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.error) {
-          setLoadError(data.error);
-          return;
-        }
+        if (data.error) return setLoadError(data.error);
         setProduct(data.product);
-        setConfiguration(data.project.configurationJson as StoreConfiguration);
+        try {
+          setConfiguration(parseConfiguration(data.project.configurationJson));
+        } catch {
+          setLoadError("This project's configuration predates the current theme. Regenerate it.");
+        }
       })
       .catch(() => setLoadError("Could not load this project"));
   }, [projectId]);
 
-  // Always a fresh render() on every configuration/product change — never a DOM patch
-  // (docs/product-spec/06-preview-architecture.md).
+  // Schema labels are `t:` keys into the theme's schema locale file.
+  useEffect(() => {
+    readTemplate("locales/en.default.schema.json")
+      .then((raw) => setSchemaLocale(JSON.parse(raw)))
+      .catch(() => setSchemaLocale({}));
+  }, [readTemplate]);
+
+  // The section toolbar clamps itself into the preview's height.
+  useEffect(() => {
+    const el = previewRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setPreviewHeight(el.clientHeight));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Always a fresh render on every template/product change — never a DOM patch.
   useEffect(() => {
     if (!configuration) return;
     let cancelled = false;
-    renderStorePreview({
-      configuration,
+    renderTemplate({
+      template: configuration.templates[page],
       product: product ? toNormalizedProduct(product) : null,
-      storeName: product?.vendor ?? product?.title ?? "Shopforge Demo",
+      storeName: deriveStoreName(product),
       readTemplate,
+      templateName: page,
     })
-      .then((rendered) => {
-        if (!cancelled) setHtml(rendered);
-      })
-      .catch((err) => {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Render failed");
-      });
+      .then((rendered) => !cancelled && setHtml(rendered))
+      .catch((err) => !cancelled && setLoadError(err instanceof Error ? err.message : "Render failed"));
     return () => {
       cancelled = true;
     };
-  }, [configuration, product, readTemplate]);
+  }, [configuration, page, product, readTemplate]);
 
-  // Debounced persistence — configuration is never lost on reload (persistence test).
+  // Debounced persistence — configuration is never lost on reload.
   useEffect(() => {
     if (!configuration) return;
     queueMicrotask(() => setSaveState("saving"));
@@ -80,56 +135,434 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configuration]);
 
-  const updateSetting = useCallback((sectionId: string, settingId: string, value: string | boolean) => {
-    setConfiguration((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        pages: {
-          product: {
-            ...prev.pages.product,
-            sections: prev.pages.product.sections.map((s) =>
-              s.id === sectionId ? { ...s, settings: { ...s.settings, [settingId]: value } } : s,
-            ),
-          },
-        },
-      };
+  // The clicked section's schema drives the Inspector. The loaded schema is stored with the
+  // type it belongs to, so a stale result for a previously-selected section is ignored by
+  // derivation rather than by clearing state on every selection change.
+  useEffect(() => {
+    const type = selection?.sectionType;
+    if (!type) return;
+    let cancelled = false;
+    loadSectionSchema(readTemplate, type).then((loaded) => {
+      if (!cancelled) setSchema({ type, schema: loaded });
     });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [selection?.sectionType, readTemplate]);
 
-  const handleSelect = useCallback((info: SelectInfo) => setSelection(info), []);
+  const activeSchema = schema && schema.type === selection?.sectionType ? schema.schema : null;
+
+  const currentTemplate = configuration?.templates[page] ?? null;
+  const selectedSection = selection?.sectionId ? currentTemplate?.sections[selection.sectionId] : undefined;
+  const binding = selection?.binding ?? null;
+  // Product-name text binds to the Product record, not a template setting — no schema
+  // controls or AI rewrite apply to it (docs/EDITOR-TOOLBARS.md).
+  const isProductTitleBinding = binding?.settingId === PRODUCT_TITLE_SETTING;
+  const boundNode =
+    selectedSection && binding ? getBlockAt(selectedSection, binding.blockPath) : undefined;
+
+  // Schema settings for the bound text's owner: a nested block's come from the section's
+  // own {% schema %} when declared there, else from the theme-block file blocks/<type>.liquid.
+  const boundKey = binding
+    ? `${selection!.sectionType}:${boundNode && "type" in boundNode ? boundNode.type : "section"}:${binding.blockPath.length}`
+    : null;
+  useEffect(() => {
+    if (!binding || !selection?.sectionType || !boundNode) return;
+    const key = boundKey!;
+    if (binding.blockPath.length === 0) return; // section-level: activeSchema covers it
+    const blockType = (boundNode as { type: string }).type;
+    let cancelled = false;
+    loadSectionSchema(readTemplate, selection.sectionType).then(async (sectionSchema) => {
+      const declared = sectionSchema?.blocks?.find((b) => b.type === blockType)?.settings;
+      const defs = declared ?? (await loadBlockSchema(readTemplate, blockType))?.settings ?? [];
+      if (!cancelled) setBoundDefs({ key, defs });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boundKey, readTemplate]);
+
+  // The section-level pseudo-binding (product title with no product_title block found) has
+  // no schema; anchored to a block, the block's own schema drives the controls as usual.
+  const boundSettingDefs = binding && !(isProductTitleBinding && binding.blockPath.length === 0)
+    ? binding.blockPath.length === 0
+      ? (activeSchema?.settings ?? [])
+      : boundDefs?.key === boundKey
+        ? boundDefs.defs
+        : []
+    : [];
+  const textControls = findTextControls(boundSettingDefs);
+  const boundValues = useMemo(() => {
+    const defaults: Record<string, unknown> = {};
+    for (const def of boundSettingDefs) if (def.id && def.default !== undefined) defaults[def.id] = def.default;
+    return { ...defaults, ...(boundNode?.settings ?? {}) };
+  }, [boundSettingDefs, boundNode]);
+
+  /** Every mutation of the current page's template funnels through here. */
+  const updateTemplate = useCallback(
+    (mutate: (template: NonNullable<typeof currentTemplate>) => NonNullable<typeof currentTemplate>) => {
+      setConfiguration((prev) => {
+        if (!prev) return prev;
+        const template = prev.templates[page];
+        const next = mutate(template);
+        if (next === template) return prev;
+        return { ...prev, templates: { ...prev.templates, [page]: next } };
+      });
+    },
+    [page],
+  );
+
+  const updateSetting = useCallback(
+    (sectionId: string, settingId: string, value: unknown) => {
+      updateTemplate((template) => {
+        const section = template.sections[sectionId];
+        if (!section) return template;
+        return replaceSection(template, sectionId, setSettingAtPath(section, [], settingId, value));
+      });
+    },
+    [updateTemplate],
+  );
+
+  const generate = useCallback(async () => {
+    setGenerating(true);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/project/${projectId}/generate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ generateImages }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? "Generation failed");
+        return;
+      }
+      setConfiguration(parseConfiguration(data.project.configurationJson));
+      const g = data.generation;
+      setNotice(
+        `Generated with ${g.model}: ${g.index.sections} homepage sections, ${g.product.sections} product-page sections. ` +
+          `Images — ${g.product.images.generated} generated, ${g.product.images.fromProduct} from the product.`,
+      );
+    } catch {
+      setNotice("Generation failed");
+    } finally {
+      setGenerating(false);
+    }
+  }, [projectId, generateImages]);
+
+  // One section, one instruction — the server replaces just that section in the stored
+  // configuration and returns the whole updated project (docs/SECTION-AI-EDITING.md).
+  // When the popover was opened from the inline text toolbar, the request carries the
+  // binding and the server guarantees only that one setting changes.
+  const selectedSectionId = selection?.sectionId ?? null;
+  const selectedSectionType = selection?.sectionType ?? null;
+  const rewriteSection = useCallback(
+    async (options: { prompt?: string; preset?: string }) => {
+      if (!selectedSectionId) return;
+      setRewriting(true);
+      setNotice(null);
+      try {
+        const res = await fetch(`/api/project/${projectId}/rewrite-section`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            page,
+            sectionId: selectedSectionId,
+            ...(binding ? { blockPath: binding.blockPath, settingId: binding.settingId } : {}),
+            ...options,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setNotice(data.error ?? "Rewrite failed");
+          return;
+        }
+        setConfiguration(parseConfiguration(data.project.configurationJson));
+      } catch {
+        setNotice("Rewrite failed");
+      } finally {
+        setRewriting(false);
+      }
+    },
+    [projectId, page, selectedSectionId, binding],
+  );
+
+  // Magic brush: the section's own schema names its color settings; a random curated
+  // palette (never the same one twice in a row) is written into them (docs/EDITOR-TOOLBARS.md).
+  const magicBrush = useCallback(async () => {
+    if (!selectedSectionId || !selectedSectionType) return;
+    const sectionSchema = await loadSectionSchema(readTemplate, selectedSectionType);
+    const index = rollPalette(paletteIndex.current);
+    const palette = PALETTES[index];
+    const result = { outcome: "none" as "palette" | "scheme" | "none", schemeLabel: "" };
+    updateTemplate((template) => {
+      const section = template.sections[selectedSectionId];
+      if (!section) return template;
+      const brushed = applyMagicBrush(section, sectionSchema, palette);
+      if (brushed !== section) {
+        result.outcome = "palette";
+        return replaceSection(template, selectedSectionId, brushed);
+      }
+      // No custom color settings — fall back to stepping the section's color_scheme select.
+      const cycled = cycleColorScheme(section, sectionSchema);
+      if (!cycled) return template;
+      result.outcome = "scheme";
+      result.schemeLabel = cycled.label;
+      return replaceSection(template, selectedSectionId, cycled.section);
+    });
+    if (result.outcome === "palette") {
+      paletteIndex.current = index;
+      setNotice(`Magic brush: "${palette.name}" palette applied. Click again for another.`);
+    } else if (result.outcome === "scheme") {
+      setNotice(`Magic brush: "${result.schemeLabel}" color scheme applied. Click again for the next.`);
+    } else {
+      setNotice("This section has no brushable color settings.");
+    }
+  }, [selectedSectionId, selectedSectionType, readTemplate, updateTemplate]);
+
+  const handleMove = useCallback(
+    (delta: -1 | 1) => {
+      if (!selectedSectionId) return;
+      updateTemplate((template) => moveSection(template, selectedSectionId, delta));
+    },
+    [selectedSectionId, updateTemplate],
+  );
+
+  const handleDeleteSection = useCallback(() => {
+    if (!selectedSectionId) return;
+    if (!window.confirm("Delete this section?")) return;
+    updateTemplate((template) => removeSection(template, selectedSectionId));
+    setSelection(null);
+    setShowRewrite(false);
+  }, [selectedSectionId, updateTemplate]);
+
+  const handleDeleteBlock = useCallback(() => {
+    if (!selectedSectionId || !binding || binding.blockPath.length === 0) return;
+    if (!window.confirm("Delete this block?")) return;
+    updateTemplate((template) => {
+      const section = template.sections[selectedSectionId];
+      if (!section) return template;
+      return replaceSection(template, selectedSectionId, removeBlockAt(section, binding.blockPath));
+    });
+    // Keep the section selected; the text (and its block) is gone.
+    setSelection((prev) => (prev ? { ...prev, binding: null, settingId: null, editable: null } : prev));
+  }, [selectedSectionId, binding, updateTemplate]);
+
+  const writeBoundSettings = useCallback(
+    (values: Record<string, unknown> | null) => {
+      if (!values || !selectedSectionId || !binding) return;
+      updateTemplate((template) => {
+        const section = template.sections[selectedSectionId];
+        if (!section) return template;
+        return replaceSection(template, selectedSectionId, setSettingsAtPath(section, binding.blockPath, values));
+      });
+    },
+    [selectedSectionId, binding, updateTemplate],
+  );
+
+  // Selection resolver for PreviewFrame: does this rendered text belong to a setting?
+  // The product name comes first: text matching `product.title` renders product DATA
+  // (`{{ product.title }}` in the theme), so editing it means renaming the product —
+  // even if some section setting happens to hold the same string.
+  const resolveText = useCallback(
+    (sectionId: string, text: string): TextBinding | null => {
+      const section = currentTemplate?.sections[sectionId];
+      if (product?.title && normalizeText(product.title) === normalizeText(text)) {
+        // Anchor to the section's product_title block when it has exactly one, so the
+        // toolbar can offer that block's schema controls (size, alignment) alongside
+        // the rename; text commits still go to the Product record either way.
+        const blockPath = section ? locateBlockPathByType(section, "product_title") : null;
+        return { blockPath: blockPath ?? [], settingId: PRODUCT_TITLE_SETTING };
+      }
+      return section ? locateTextSetting(section, text) : null;
+    },
+    [currentTemplate, product?.title],
+  );
+
+  const handleSelect = useCallback((info: SelectInfo) => {
+    setSelection(info);
+    setSelectionRect(info.rect);
+    setShowRewrite(false);
+  }, []);
+  const handleRectChange = useCallback((rect: SelectionRect | null) => setSelectionRect(rect), []);
   const handleTextCommit = useCallback(
-    (sectionId: string, settingId: string, value: string) => updateSetting(sectionId, settingId, value),
-    [updateSetting],
+    (sectionId: string, textBinding: TextBinding, value: string) => {
+      if (textBinding.settingId === PRODUCT_TITLE_SETTING) {
+        // Renaming the product: update local state (re-renders the preview everywhere the
+        // title appears) and persist to the Product record, not the template JSON.
+        setProduct((prev) => (prev ? { ...prev, title: value } : prev));
+        setSaveState("saving");
+        fetch(`/api/project/${projectId}/product`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title: value }),
+        })
+          .then((res) => {
+            if (!res.ok) throw new Error();
+            setSaveState("saved");
+          })
+          .catch(() => setNotice("Could not save the product name."));
+        return;
+      }
+      updateTemplate((template) => {
+        const section = template.sections[sectionId];
+        if (!section) return template;
+        return replaceSection(
+          template,
+          sectionId,
+          setSettingAtPath(section, textBinding.blockPath, textBinding.settingId, value),
+        );
+      });
+    },
+    [updateTemplate, projectId],
   );
 
   if (loadError) return <p className="p-8 text-sm text-red-600">{loadError}</p>;
   if (!configuration) return <p className="p-8 text-sm text-neutral-500">Loading…</p>;
 
-  const selectedInstance = configuration.pages.product.sections.find((s) => s.id === selection?.sectionId);
-  const selectedDef = selectedInstance ? getSectionDefinition(selectedInstance.type) ?? null : null;
-
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-2 text-sm text-neutral-500">
-        <span>{product?.title ?? "Untitled store"}</span>
-        <span>{saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}</span>
+    // `min-h-0` at every level of this column: a flex item defaults to `min-height: auto`,
+    // which refuses to shrink below its content. Without it the Inspector's full height
+    // pushes the editor past the viewport and the whole document scrolls instead of the panel.
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex items-center justify-between gap-4 border-b border-neutral-200 px-4 py-2 text-sm">
+        <span className="text-neutral-600">{product?.title ?? "Untitled store"}</span>
+
+        <div className="flex items-center gap-1 rounded border border-neutral-200 p-0.5">
+          {PAGE_TEMPLATES.map((name) => (
+            <button
+              key={name}
+              onClick={() => {
+                setPage(name);
+                setSelection(null);
+                setShowRewrite(false);
+              }}
+              className={`rounded px-3 py-1 text-xs capitalize ${
+                page === name ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              {name === "index" ? "Homepage" : "Product page"}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-neutral-600" title="When off, image settings are filled from the imported product's own photos and no image model is called.">
+            <input
+              type="checkbox"
+              checked={generateImages}
+              onChange={(e) => setGenerateImages(e.target.checked)}
+            />
+            Generate images
+          </label>
+          <button
+            onClick={generate}
+            disabled={generating}
+            className="rounded bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+          >
+            {generating ? "Generating…" : "Generate content"}
+          </button>
+          <span className="w-14 text-right text-xs text-neutral-400">
+            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}
+          </span>
+        </div>
       </header>
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1">
+
+      {notice ? (
+        <p className="border-b border-neutral-200 bg-neutral-50 px-4 py-2 text-xs text-neutral-600">{notice}</p>
+      ) : null}
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div ref={previewRef} className="relative min-h-0 min-w-0 flex-1">
           <PreviewFrame
             html={html}
             selectedSectionId={selection?.sectionId ?? null}
             onSelect={handleSelect}
             onTextCommit={handleTextCommit}
+            resolveText={resolveText}
+            onRectChange={handleRectChange}
           />
+
+          {selection?.sectionId && !binding ? (
+            <SectionToolbar
+              rect={selectionRect}
+              containerHeight={previewHeight}
+              busy={rewriting}
+              onMagicBrush={magicBrush}
+              onRewrite={() => setShowRewrite((v) => !v)}
+              onEditSection={() => setPanelOpen(true)}
+              onMove={handleMove}
+              onDelete={handleDeleteSection}
+            />
+          ) : null}
+
+          {selection?.sectionId && binding && selectionRect ? (
+            <InlineTextToolbar
+              rect={selectionRect}
+              controls={textControls}
+              values={boundValues}
+              busy={rewriting}
+              canDeleteBlock={binding.blockPath.length > 0}
+              onRewrite={() =>
+                isProductTitleBinding
+                  ? setNotice("The product name is product data — type the new name directly into the title.")
+                  : setShowRewrite(true)
+              }
+              onStepSize={(direction) =>
+                textControls.size &&
+                writeBoundSettings(stepSize(textControls.size, boundValues[textControls.size.settingId], direction))
+              }
+              onCycleWeight={() =>
+                textControls.weight &&
+                writeBoundSettings(cycleWeight(textControls.weight, boundValues[textControls.weight.settingId]))
+              }
+              onAlign={(value) => textControls.align && writeBoundSettings(applyAlign(textControls.align, value))}
+              onPickColor={(hex) => textControls.color && writeBoundSettings(applyColor(textControls.color, hex))}
+              onDeleteBlock={handleDeleteBlock}
+              onClose={() => {
+                setSelection(null);
+                setShowRewrite(false);
+              }}
+            />
+          ) : null}
+
+          {selection?.sectionId && showRewrite ? (
+            <AiRewritePopover
+              sectionLabel={
+                binding ? `the "${binding.settingId}" text` : (selection.sectionType ?? "this section")
+              }
+              rect={selectionRect}
+              containerHeight={previewHeight}
+              busy={rewriting}
+              onSubmit={rewriteSection}
+              onClose={() => setShowRewrite(false)}
+            />
+          ) : null}
         </div>
-        <SettingsPanel
-          definition={selectedDef}
-          values={selectedInstance?.settings ?? {}}
-          onChange={(settingId, value) => selectedInstance && updateSetting(selectedInstance.id, settingId, value)}
-          onClose={() => setSelection(null)}
-        />
+        {panelOpen ? (
+          <SettingsPanel
+            sectionType={selection?.sectionType ?? null}
+            schema={activeSchema}
+            schemaLocale={schemaLocale}
+            values={selectedSection?.settings ?? {}}
+            onChange={(settingId, value) =>
+              selection?.sectionId && updateSetting(selection.sectionId, settingId, value)
+            }
+            onClose={() => setSelection(null)}
+            onCollapse={() => setPanelOpen(false)}
+          />
+        ) : (
+          // Collapsed Inspector: a slim rail that reopens it, so the preview gets the width.
+          <button
+            onClick={() => setPanelOpen(true)}
+            title="Open settings"
+            className="flex w-8 shrink-0 flex-col items-center gap-2 border-l border-neutral-200 pt-4 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900"
+          >
+            <span aria-hidden>⚙</span>
+            <span className="text-[10px] tracking-widest uppercase [writing-mode:vertical-rl]">Settings</span>
+          </button>
+        )}
       </div>
     </div>
   );

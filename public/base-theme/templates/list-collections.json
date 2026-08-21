@@ -1,0 +1,46 @@
+{
+  "sections": {
+    "main": {
+      "type": "main-list-collections",
+      "settings": {
+        "title": "Collections",
+        "title_highlight_color": "#003934",
+        "sort": "alphabetical",
+        "image_ratio": "square",
+        "custon_styling": false,
+        "card_style": "standard",
+        "cards_color_scheme": "background-1",
+        "card_text_alignment": "left",
+        "cards_corner_radius": 10,
+        "card_title_limited_lines": "unlimited",
+        "card_title_position": "over-bottom",
+        "cards_title_overlay_color": "#000000",
+        "cards_title_overlay_opacity": 40,
+        "cards_title_over_color": "#ffffff",
+        "cards_desktop_title_size": 24,
+        "cards_mobile_title_size": 16,
+        "cards_show_arrow": true,
+        "cards_cta_label": "",
+        "cards_cta_style": "secondary",
+        "cards_cta_full_width": false,
+        "cards_cta_color": "#003934",
+        "cards_desktop_cta_size": 16,
+        "cards_mobile_cta_size": 14,
+        "cards_cta_height": 220,
+        "cards_cta_padding": 200,
+        "cards_cta_top_margin": 100,
+        "desktop_page_width": "normal",
+        "columns_desktop": 3,
+        "desktop_spacing": 40,
+        "mobile_full_page": false,
+        "columns_mobile": "2",
+        "mobile_spacing": 15,
+        "padding_top": 48,
+        "padding_bottom": 36
+      }
+    }
+  },
+  "order": [
+    "main"
+  ]
+}

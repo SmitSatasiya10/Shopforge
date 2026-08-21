@@ -1,0 +1,10 @@
+{% if section.settings.custom_padding %}
+  @media screen and (max-width: 749px) { .section-{{ section.id }}-padding { padding-top:
+  {{ section.settings.custom_padding_top }}px; padding-bottom: {{ section.settings.custom_padding_bottom }}px; } }
+{% else %}
+  .section-{{ section.id }}-padding { padding-top: {{ section.settings.padding_top | times: 0.75 | round: 0 }}px;
+  padding-bottom: {{ section.settings.padding_bottom | times: 0.75 | round: 0 }}px; }
+{% endif %}
+
+@media screen and (min-width: 750px) { .section-{{ section.id }}-padding { padding-top:
+{{ section.settings.padding_top }}px; padding-bottom: {{ section.settings.padding_bottom }}px; } }

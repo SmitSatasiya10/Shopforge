@@ -1,0 +1,364 @@
+{
+  "order": [
+    "hero-slideshow",
+    "category-icons",
+    "featured-products",
+    "promo-highlight",
+    "product-collage",
+    "usp-columns",
+    "testimonials",
+    "promo-ticker",
+    "newsletter-signup"
+  ],
+  "sections": {
+    "usp-columns": {
+      "type": "custom-columns-new",
+      "blocks": {
+        "usp-1": {
+          "type": "column",
+          "settings": {
+            "icon": "local_shipping",
+            "text": "<p>Free express shipping on all orders over $50.</p>",
+            "image": "",
+            "title": "Free Shipping",
+            "filled_icon": true
+          }
+        },
+        "usp-2": {
+          "type": "column",
+          "settings": {
+            "icon": "verified_user",
+            "text": "<p>Every product comes with our hassle-free warranty.</p>",
+            "image": "",
+            "title": "2-Year Warranty",
+            "filled_icon": true
+          }
+        },
+        "usp-3": {
+          "type": "column",
+          "settings": {
+            "icon": "support_agent",
+            "text": "<p>Our expert team is here to help you anytime.</p>",
+            "image": "",
+            "title": "24/7 Support",
+            "filled_icon": true
+          }
+        }
+      },
+      "settings": {
+        "visibility": "always-display",
+        "color_scheme": "background-1",
+        "row_gap_desktop": 40,
+        "column_gap_desktop": 40,
+        "desktop_page_width": "normal",
+        "desktop_vertical_alignment": "center"
+      },
+      "block_order": [
+        "usp-1",
+        "usp-2",
+        "usp-3"
+      ]
+    },
+    "promo-ticker": {
+      "type": "horizontal-ticker",
+      "blocks": {
+        "ticker-1": {
+          "type": "text",
+          "settings": {
+            "text": "<p>Free Shipping on Orders Over $50</p>"
+          }
+        },
+        "ticker-2": {
+          "type": "text",
+          "settings": {
+            "text": "<p>24/7 Customer Support Available</p>"
+          }
+        },
+        "ticker-3": {
+          "type": "text",
+          "settings": {
+            "text": "<p>2-Year Warranty on All Electronics</p>"
+          }
+        }
+      },
+      "settings": {
+        "speed": 3,
+        "direction": "normal",
+        "pause_on_hover": true
+      },
+      "block_order": [
+        "ticker-1",
+        "ticker-2",
+        "ticker-3"
+      ]
+    },
+    "testimonials": {
+      "type": "testimonials",
+      "blocks": {
+        "testimonial-1": {
+          "type": "column",
+          "settings": {
+            "text": "<p>The best electronics store I've ever shopped at. Fast delivery and the product quality exceeded my expectations. Will definitely be coming back for more.</p>",
+            "image": "",
+            "author": "Alex R.",
+            "star_rating": 5
+          }
+        },
+        "testimonial-2": {
+          "type": "column",
+          "settings": {
+            "text": "<p>Incredible customer service and an amazing selection of smart home devices. The team helped me find exactly what I needed for my new apartment.</p>",
+            "image": "",
+            "author": "Sarah M.",
+            "star_rating": 5
+          }
+        }
+      },
+      "settings": {
+        "title": "What Tech Lovers Say",
+        "show_stars": "true",
+        "visibility": "always-display",
+        "image_ratio": "circle",
+        "show_quotes": "true",
+        "columns_desktop": 2,
+        "column_alignment": "center",
+        "cards_color_scheme": "background-1"
+      },
+      "block_order": [
+        "testimonial-1",
+        "testimonial-2"
+      ]
+    },
+    "category-icons": {
+      "type": "icon-bar",
+      "blocks": {
+        "col-1": {
+          "type": "column",
+          "settings": {
+            "icon": "laptop",
+            "text": "<p>Desktops, laptops, and accessories</p>",
+            "image": "",
+            "title": "Computers",
+            "filled_icon": true
+          }
+        },
+        "col-2": {
+          "type": "column",
+          "settings": {
+            "icon": "smartphone",
+            "text": "<p>Phones, tablets, and wearables</p>",
+            "image": "",
+            "title": "Mobile",
+            "filled_icon": true
+          }
+        },
+        "col-3": {
+          "type": "column",
+          "settings": {
+            "icon": "headphones",
+            "text": "<p>Headphones, speakers, and sound systems</p>",
+            "image": "",
+            "title": "Audio",
+            "filled_icon": true
+          }
+        },
+        "col-4": {
+          "type": "column",
+          "settings": {
+            "icon": "photo_camera",
+            "text": "<p>Digital cameras and drones</p>",
+            "image": "",
+            "title": "Cameras",
+            "filled_icon": true
+          }
+        }
+      },
+      "settings": {
+        "text": "<p>Browse our wide range of electronics and find exactly what you need.</p>",
+        "title": "Shop by Category",
+        "alignment": "center",
+        "icon_size": "medium",
+        "icon_layout": "vertical",
+        "columns_desktop": 4,
+        "title_highlight_1_color": "#E85D04"
+      },
+      "block_order": [
+        "col-1",
+        "col-2",
+        "col-3",
+        "col-4"
+      ]
+    },
+    "hero-slideshow": {
+      "type": "slideshow",
+      "blocks": {
+        "slide-1": {
+          "type": "slide",
+          "settings": {
+            "text": "<p>Discover cutting-edge gadgets and premium tech accessories designed for the modern lifestyle.</p>",
+            "image": "",
+            "heading": "Next-Gen Electronics",
+            "subheading": "Innovation at Your Fingertips",
+            "text_color": "#FFFFFF",
+            "button_link": "",
+            "button_label": "Shop Now",
+            "content_position": "center"
+          }
+        },
+        "slide-2": {
+          "type": "slide",
+          "settings": {
+            "text": "<p>Transform your home with intelligent devices that bring convenience, security, and efficiency.</p>",
+            "image": "",
+            "heading": "Smart Home Essentials",
+            "subheading": "Upgrade Your Living Space",
+            "text_color": "#FFFFFF",
+            "button_link": "",
+            "button_label": "Explore Collection",
+            "content_position": "center-left"
+          }
+        }
+      },
+      "settings": {
+        "visibility": "always-display",
+        "auto_rotate": "true",
+        "slide_height": "large",
+        "slider_visual": "dots",
+        "show_text_below": "false"
+      },
+      "block_order": [
+        "slide-1",
+        "slide-2"
+      ]
+    },
+    "product-collage": {
+      "type": "collage",
+      "blocks": {
+        "image-1": {
+          "type": "image",
+          "settings": {
+            "image": "",
+            "width": 100,
+            "alignment": "center"
+          }
+        },
+        "product-1": {
+          "type": "product",
+          "settings": {
+            "product": "",
+            "second_image": false
+          }
+        },
+        "product-2": {
+          "type": "product",
+          "settings": {
+            "product": "",
+            "second_image": true
+          }
+        }
+      },
+      "settings": {
+        "title": "Editor's Picks",
+        "heading": "Curated for You",
+        "mobile_layout": "collage",
+        "desktop_layout": "left"
+      },
+      "block_order": [
+        "image-1",
+        "product-1",
+        "product-2"
+      ]
+    },
+    "promo-highlight": {
+      "type": "image-with-text",
+      "blocks": {
+        "text-1": {
+          "type": "text",
+          "settings": {
+            "text": "<p>Save up to 40% on select electronics this season. From powerful laptops to smart home devices, upgrade your tech without breaking the bank.</p>"
+          }
+        },
+        "button-1": {
+          "type": "button",
+          "settings": {
+            "link": "",
+            "button_label": "Shop the Sale",
+            "button_style_secondary": "false"
+          }
+        },
+        "heading-1": {
+          "type": "heading",
+          "settings": {
+            "title": "Summer Tech Sale",
+            "heading_size": "h1"
+          }
+        }
+      },
+      "settings": {
+        "image": "",
+        "height": "large",
+        "layout": "image_first",
+        "desktop_content_position": "middle",
+        "mobile_content_alignment": "center",
+        "desktop_content_alignment": "left"
+      },
+      "block_order": [
+        "heading-1",
+        "text-1",
+        "button-1"
+      ]
+    },
+    "featured-products": {
+      "type": "featured-collection",
+      "settings": {
+        "title": "Featured Products",
+        "collection": "",
+        "image_ratio": "square",
+        "show_vendor": "false",
+        "show_view_all": "true",
+        "columns_mobile": "2",
+        "columns_desktop": 4,
+        "enable_quick_add": "true",
+        "products_to_show": 4,
+        "show_secondary_image": "true"
+      }
+    },
+    "newsletter-signup": {
+      "type": "newsletter",
+      "blocks": {
+        "heading-1": {
+          "type": "heading",
+          "settings": {
+            "title": "Stay in the Loop",
+            "heading_size": "h2"
+          }
+        },
+        "paragraph-1": {
+          "type": "paragraph",
+          "settings": {
+            "text": "<p>Subscribe to our newsletter for exclusive deals, new product drops, and tech tips delivered straight to your inbox.</p>"
+          }
+        },
+        "email-form-1": {
+          "type": "email_form",
+          "settings": {
+            "placeholder": "Enter your email",
+            "button_label": "Join"
+          }
+        }
+      },
+      "settings": {
+        "full_width": "false",
+        "button_type": "solid",
+        "button_label": "Subscribe",
+        "color_scheme": "accent-1",
+        "button_style_secondary": "false"
+      },
+      "block_order": [
+        "heading-1",
+        "paragraph-1",
+        "email-form-1"
+      ]
+    }
+  }
+}
