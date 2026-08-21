@@ -430,14 +430,16 @@ export default function EditorPage() {
     [updateTemplate, projectId],
   );
 
-  if (loadError) return <p className="p-8 text-sm text-red-600">{loadError}</p>;
-  if (!configuration) return <p className="p-8 text-sm text-neutral-500">Loading…</p>;
+  if (loadError) return <p className="flex-1 bg-white p-8 text-sm text-red-600">{loadError}</p>;
+  if (!configuration) return <p className="flex-1 bg-white p-8 text-sm text-neutral-500">Loading…</p>;
 
   return (
     // `min-h-0` at every level of this column: a flex item defaults to `min-height: auto`,
     // which refuses to shrink below its content. Without it the Inspector's full height
     // pushes the editor past the viewport and the whole document scrolls instead of the panel.
-    <div className="flex min-h-0 flex-1 flex-col">
+    // Explicit light background: the editor chrome is designed light, and without this it
+    // inherits the body background, which goes dark under `prefers-color-scheme: dark`.
+    <div className="flex min-h-0 flex-1 flex-col bg-white text-neutral-900">
       <header className="flex items-center justify-between gap-4 border-b border-neutral-200 px-4 py-2 text-sm">
         <span className="text-neutral-600">{product?.title ?? "Untitled store"}</span>
 

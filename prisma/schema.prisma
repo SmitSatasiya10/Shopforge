@@ -32,6 +32,8 @@ model Product {
   variants        Json     @default("[]")
   options         Json     @default("[]")
   rawData         Json?
+  personaOptionsJson Json? // cached AI persona options for the wizard: { language, options: [4 x PersonaOption] }
+  marketingAnglesJson Json? // cached AI marketing angles: { language, personaKey, options: [4 x MarketingAngleOption], recommendedId }
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -45,6 +47,9 @@ model Project {
   productId         String  @unique
   product           Product @relation(fields: [productId], references: [id])
   configurationJson Json
+  language          String  @default("en") // target language for generated customer-facing store content (ISO 639-1)
+  personaJson       Json? // selected customer persona: { type: "generated", id, name, description } | { type: "custom", text }
+  marketingAngleJson Json? // selected marketing angle: { id, title, description, selectionType: "generated" | "ai" }
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

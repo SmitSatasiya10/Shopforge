@@ -6,6 +6,9 @@ import { loadCatalog, describeCatalog, SectionSchema, BlockSchema } from "./cata
 import { describeProduct } from "./content-generator";
 import { imageSettingIds } from "./images";
 import { getBlockAt, setSettingAtPath } from "@/lib/store-config/template-ops";
+import { languageInstruction } from "@/lib/store-config/language";
+import { personaInstruction, type CustomerPersona } from "@/lib/store-config/persona";
+import { marketingAngleInstruction, type MarketingAngle } from "@/lib/store-config/marketing-angle";
 
 // Section-scoped AI editing (docs/SECTION-AI-EDITING.md): "rewrite this section" with an
 // instruction — a typed prompt or a preset chip — rather than regenerating the whole page.
@@ -25,6 +28,16 @@ export interface RewriteSectionOptions {
   sectionId: string;
   section: ShopifySection;
   instruction: string;
+  /**
+   * The project's customer store-content language (ISO 639-1, e.g. "de"). Rewrites carry
+   * the same language constraint as full generation, so an edit never drifts a store's
+   * copy back to English.
+   */
+  language?: string;
+  /** The project's customer persona — rewrites keep speaking to the same buyer as full generation. */
+  customerPersona?: CustomerPersona | null;
+  /** The project's marketing angle — rewrites keep the same positioning as full generation. */
+  marketingAngle?: MarketingAngle | null;
   scope?: RewriteScope;
   config?: Partial<AiConfig>;
   signal?: AbortSignal;
@@ -186,6 +199,53 @@ export function applyScopedRewrite(
   return setSettingAtPath(original, scope.blockPath, scope.settingId, value);
 }
 
+/**
+ * The full message list sent for one section rewrite. Exported so tests can verify the
+ * project's customer language reaches the rewrite prompt, exactly like generation.
+ */
+export function buildRewriteMessages(
+  options: RewriteSectionOptions,
+  schema: SectionSchema,
+  blocks: BlockSchema[],
+): { role: "system" | "user"; content: string }[] {
+  const persona = personaInstruction(options.customerPersona);
+  const angle = marketingAngleInstruction(options.marketingAngle);
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: [
+        `SECTION SCHEMA (the only settings and blocks you may use):`,
+        describeCatalog([schema], blocks),
+        ``,
+        `PRODUCT:`,
+        describeProduct(options.product),
+        ``,
+        `TARGET LANGUAGE:`,
+        languageInstruction(options.language),
+        ...(persona ? [``, `TARGET CUSTOMER PERSONA:`, persona] : []),
+        ...(angle ? [``, `MARKETING ANGLE:`, angle] : []),
+        ``,
+        `CURRENT SECTION JSON (id "${options.sectionId}"):`,
+        JSON.stringify(options.section, null, 2),
+        ``,
+        `INSTRUCTION:`,
+        options.instruction,
+        ...(options.scope
+          ? [
+              ``,
+              `SCOPE: change ONLY the setting "${options.scope.settingId}"` +
+                (options.scope.blockPath.length > 0
+                  ? ` inside block "${options.scope.blockPath.join("/")}"`
+                  : ``) +
+                `. Return every other setting and block exactly as given.`,
+            ]
+          : []),
+      ].join("\n"),
+    },
+  ];
+}
+
 /** Rewrites one section against its own catalog schema. Throws SectionNotRewritableError for types outside the catalog. */
 export async function rewriteSection(options: RewriteSectionOptions): Promise<RewriteSectionResult> {
   const config = loadAiConfig(options.config);
@@ -200,35 +260,7 @@ export async function rewriteSection(options: RewriteSectionOptions): Promise<Re
     signal: options.signal,
     // Rewrites should stay close to the original: lower temperature than full generation.
     temperature: 0.4,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [
-          `SECTION SCHEMA (the only settings and blocks you may use):`,
-          describeCatalog([schema], blocks),
-          ``,
-          `PRODUCT:`,
-          describeProduct(options.product),
-          ``,
-          `CURRENT SECTION JSON (id "${options.sectionId}"):`,
-          JSON.stringify(options.section, null, 2),
-          ``,
-          `INSTRUCTION:`,
-          options.instruction,
-          ...(options.scope
-            ? [
-                ``,
-                `SCOPE: change ONLY the setting "${options.scope.settingId}"` +
-                  (options.scope.blockPath.length > 0
-                    ? ` inside block "${options.scope.blockPath.join("/")}"`
-                    : ``) +
-                  `. Return every other setting and block exactly as given.`,
-              ]
-            : []),
-        ].join("\n"),
-      },
-    ],
+    messages: buildRewriteMessages(options, schema, blocks),
   });
 
   const parsed = parseJsonResponse<{ section?: unknown }>(raw);

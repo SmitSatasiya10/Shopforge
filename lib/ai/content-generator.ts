@@ -2,8 +2,11 @@ import { NormalizedProduct } from "@/lib/product/types";
 import { ShopifyTemplate, ShopifyTemplateSchema } from "@/lib/preview/shopify-template";
 import { AiConfig, loadAiConfig } from "./config";
 import { chat, parseJsonResponse } from "./openrouter";
-import { loadCatalog, describeCatalog, sectionsForTemplate, SectionSchema } from "./catalog";
+import { loadCatalog, describeCatalog, sectionsForTemplate, SectionSchema, BlockSchema } from "./catalog";
 import { resolveImages } from "./images";
+import { languageInstruction } from "@/lib/store-config/language";
+import { personaInstruction, type CustomerPersona } from "@/lib/store-config/persona";
+import { marketingAngleInstruction, type MarketingAngle } from "@/lib/store-config/marketing-angle";
 
 // Product -> Shopify template JSON, generated against the section catalog. The model writes
 // copy and chooses sections; it never writes Liquid, HTML or CSS (docs/product-spec/02 §1:
@@ -15,6 +18,24 @@ export type TemplateName = "index" | "product";
 export interface GenerateOptions {
   product: NormalizedProduct;
   templateName: TemplateName;
+  /**
+   * Target language for customer-facing store copy (ISO 639-1, e.g. "de") — the wizard's
+   * customer-language selection. Defaults to English. Only the generated copy is affected;
+   * the product's imported source data is never rewritten.
+   */
+  language?: string;
+  /**
+   * The buyer this store speaks to, chosen on the wizard's persona step
+   * (product_based_customer_persona_implementation.md). Shapes headlines, benefits, CTA
+   * wording and tone; omitted = write for a general audience.
+   */
+  customerPersona?: CustomerPersona | null;
+  /**
+   * The positioning chosen on the persona step's marketing-angle state
+   * (persona_step_marketing_angle_implementation.md). All customer-facing copy should
+   * consistently communicate it; omitted = no specific positioning constraint.
+   */
+  marketingAngle?: MarketingAngle | null;
   config?: Partial<AiConfig>;
   signal?: AbortSignal;
 }
@@ -118,6 +139,41 @@ function pruneToCatalog(
 }
 
 /**
+ * The full message list sent for one template generation. Exported so tests can verify the
+ * selected customer language actually reaches the generation layer — the language must be a
+ * prompt constraint, never just a UI selection.
+ */
+export function buildGenerationMessages(
+  options: GenerateOptions,
+  allowed: SectionSchema[],
+  blocks: BlockSchema[],
+): { role: "system" | "user"; content: string }[] {
+  const persona = personaInstruction(options.customerPersona);
+  const angle = marketingAngleInstruction(options.marketingAngle);
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: [
+        `SECTION CATALOG (the only sections and blocks you may use):`,
+        describeCatalog(allowed, blocks),
+        ``,
+        `PRODUCT:`,
+        describeProduct(options.product),
+        ``,
+        `TARGET LANGUAGE:`,
+        languageInstruction(options.language),
+        ...(persona ? [``, `TARGET CUSTOMER PERSONA:`, persona] : []),
+        ...(angle ? [``, `MARKETING ANGLE:`, angle] : []),
+        ``,
+        `TASK:`,
+        pageBrief(options.templateName, options.product),
+      ].join("\n"),
+    },
+  ];
+}
+
+/**
  * Generates one template. Image settings are populated after generation by the image toggle
  * (lib/ai/images.ts) — the model is told to leave them empty precisely so that step owns them.
  */
@@ -130,22 +186,7 @@ export async function generateTemplate(options: GenerateOptions): Promise<Genera
     config,
     json: true,
     signal: options.signal,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [
-          `SECTION CATALOG (the only sections and blocks you may use):`,
-          describeCatalog(allowed, blocks),
-          ``,
-          `PRODUCT:`,
-          describeProduct(options.product),
-          ``,
-          `TASK:`,
-          pageBrief(options.templateName, options.product),
-        ].join("\n"),
-      },
-    ],
+    messages: buildGenerationMessages(options, allowed, blocks),
   });
 
   const parsed = ShopifyTemplateSchema.parse(parseJsonResponse(raw));
@@ -171,7 +212,13 @@ export async function generateTemplate(options: GenerateOptions): Promise<Genera
 /** Generates the homepage and the product page for one imported product. */
 export async function generateStore(
   product: NormalizedProduct,
-  options: { config?: Partial<AiConfig>; signal?: AbortSignal } = {},
+  options: {
+    language?: string;
+    customerPersona?: CustomerPersona | null;
+    marketingAngle?: MarketingAngle | null;
+    config?: Partial<AiConfig>;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<Record<TemplateName, GenerateResult>> {
   const [index, productPage] = await Promise.all([
     generateTemplate({ product, templateName: "index", ...options }),

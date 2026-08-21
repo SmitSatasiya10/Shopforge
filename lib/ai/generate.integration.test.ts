@@ -63,4 +63,18 @@ describe.skipIf(!hasKey)("AI generation against the real theme", () => {
       expect(failures.length).toBe(0);
     }, 180000);
   }
+
+  // Customer store-content language: the homepage generated with language="de" should read
+  // in German (store-content-language-selection-implementation.md §12).
+  it("generates German customer-facing copy when language is 'de'", async () => {
+    const result = await generateTemplate({ product, templateName: "index", language: "de" });
+    const copy = JSON.stringify(result.template);
+    console.log(`[index/de] order: ${result.template.order?.join(" -> ")}`);
+    // Common German function words that essentially cannot all be absent from a real
+    // German page but are absent from English copy.
+    const germanMarkers = ["und", "der", "die", "das", "für", "mit", "Sie"];
+    const hits = germanMarkers.filter((w) => new RegExp(`\\b${w}\\b`, "i").test(copy));
+    console.log(`[index/de] German markers present: ${hits.join(", ")}`);
+    expect(hits.length).toBeGreaterThanOrEqual(3);
+  }, 180000);
 });
