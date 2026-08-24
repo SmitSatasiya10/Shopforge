@@ -1,14 +1,16 @@
 import { Fragment } from "react";
 
-const STEPS = ["Start", "Product URL", "Products", "Analysis", "Language", "Persona"] as const;
+const STEPS = ["Start", "Product URL", "Products", "Analysis", "Language", "Persona", "Images"] as const;
 
 // Header/progress area shared by the Start Store -> URL entry -> Products Found ->
-// Analysis -> Customer Language -> Customer Persona flow
+// Analysis -> Customer Language -> Customer Persona -> Product Images flow
 // (docs/product-phases/02-product-import.md, product-analysis-progress-screen-prompt.md,
 // store-content-language-selection-implementation.md,
-// product_based_customer_persona_implementation.md). Back is omitted on the first step
-// since there's nowhere to go back to.
-export function ProgressSteps({ step, onBack }: { step: 1 | 2 | 3 | 4 | 5 | 6; onBack?: () => void }) {
+// product_based_customer_persona_implementation.md,
+// shopforge-personalization-image-selection-plan.md). Marketing Angle is a substep of
+// Persona (never its own entry here); Product Images is a real 7th step. Back is omitted on
+// the first step since there's nowhere to go back to.
+export function ProgressSteps({ step, onBack }: { step: 1 | 2 | 3 | 4 | 5 | 6 | 7; onBack?: () => void }) {
   return (
     <div className="flex items-center gap-4 border-b border-neutral-800 bg-neutral-950 px-4 py-4 sm:px-8">
       {onBack ? (

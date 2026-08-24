@@ -8,6 +8,12 @@ import { toNormalizedProduct, toProductDTO } from "@/lib/product/db-mapping";
 import { DEFAULT_STORE_LANGUAGE, normalizeStoreLanguage } from "@/lib/store-config/language";
 import { PersonaOptionsCacheSchema, type CustomerPersona } from "@/lib/store-config/persona";
 import { MarketingAngleCacheSchema, type MarketingAngle } from "@/lib/store-config/marketing-angle";
+import {
+  ImageCandidatesCacheSchema,
+  MAX_SELECTED_IMAGES,
+  allCandidates,
+  type SelectedImages,
+} from "@/lib/store-config/product-images";
 import { Prisma } from "@/app/generated/prisma/client";
 
 // POST /api/project — { productId, name, language } -> creates the Project seeded with the
@@ -29,13 +35,18 @@ import { Prisma } from "@/app/generated/prisma/client";
 //   "angleSelectionType": "generated" (user picked the card) | "ai" ("Let AI decide" took
 //                         the model's recommended angle)
 // and is persisted as Project.marketingAngleJson.
+//
+// "imageSelection" (shopforge-personalization-image-selection-plan.md §9-18) is an ordered
+// array of candidate ids — at most MAX_SELECTED_IMAGES — from the product's cached image
+// candidates, order = gallery order, first = featured. Persisted as Project.selectedImagesJson;
+// Product.images is never overwritten.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body || typeof body.productId !== "string") {
     return NextResponse.json(
       {
         error:
-          "Provide { productId: string, name?: string, language?: string, personaId?: string, personaText?: string, angleId?: string, angleSelectionType?: \"generated\" | \"ai\" }",
+          "Provide { productId: string, name?: string, language?: string, personaId?: string, personaText?: string, angleId?: string, angleSelectionType?: \"generated\" | \"ai\", imageSelection?: string[] }",
       },
       { status: 400 },
     );
@@ -97,6 +108,30 @@ export async function POST(req: NextRequest) {
     };
   }
 
+  // The wizard's Product Images step (shopforge-personalization-image-selection-plan.md
+  // §9-18): an ordered list of candidate ids (order = gallery order, first = featured), each
+  // of which must be one of THIS product's cached candidates — same staleness rule as persona
+  // and angle above, so a selection made against a previous product/candidate set can never
+  // silently attach to a different one. Persisted on the Project, never on Product.images —
+  // the original imported product data is never overwritten.
+  let selectedImages: SelectedImages | null = null;
+  if (Array.isArray(body.imageSelection)) {
+    if (body.imageSelection.length > MAX_SELECTED_IMAGES) {
+      return NextResponse.json({ error: `At most ${MAX_SELECTED_IMAGES} images may be selected` }, { status: 400 });
+    }
+    const cache = ImageCandidatesCacheSchema.safeParse(product.imageCandidatesJson);
+    const byId = new Map((cache.success ? allCandidates(cache.data) : []).map((c) => [c.id, c]));
+    const images = [];
+    for (const candidateId of body.imageSelection) {
+      const candidate = typeof candidateId === "string" ? byId.get(candidateId) : undefined;
+      if (!candidate) {
+        return NextResponse.json({ error: `Unknown image "${String(candidateId)}" for this product` }, { status: 400 });
+      }
+      images.push(candidate);
+    }
+    selectedImages = { images };
+  }
+
   const existing = await prisma.project.findUnique({ where: { productId: product.id } });
   if (existing) {
     // Re-running the wizard for the same product with a different language or persona
@@ -105,6 +140,7 @@ export async function POST(req: NextRequest) {
       ...(language && language !== existing.language ? { language } : {}),
       ...(persona ? { personaJson: persona } : {}),
       ...(marketingAngle ? { marketingAngleJson: marketingAngle } : {}),
+      ...(selectedImages ? { selectedImagesJson: selectedImages } : {}),
     };
     if (Object.keys(data).length > 0) {
       const updated = await prisma.project.update({ where: { id: existing.id }, data });
@@ -115,14 +151,18 @@ export async function POST(req: NextRequest) {
 
   const configuration = await defaultConfiguration(createFsTemplateReader());
 
-  // Seed every image slot from the imported product's own photos, so the very first preview
-  // shows the real product rather than the theme's demo images. AI generation later replaces
-  // these (with product photos again, or generated images when the toggle is on); a product
-  // with no images leaves the theme defaults in place.
+  // Seed every image slot from the wizard's selected images when the Product Images step ran,
+  // so the very first preview reflects what the merchant actually picked rather than the raw
+  // scrape; otherwise fall back to the imported product's own photos as before. AI generation
+  // later replaces these (with the same images again, or generated images when the toggle is
+  // on); a product with no images leaves the theme defaults in place.
   const normalized = toNormalizedProduct(toProductDTO(product));
+  const seedProduct = selectedImages
+    ? { ...normalized, images: selectedImages.images.map((img) => ({ url: img.url, altText: img.altText })) }
+    : normalized;
   const { sections, blocks } = await loadCatalog();
   for (const template of Object.values(configuration.templates)) {
-    applyProductImages(collectImageTargets(template, sections, blocks), normalized);
+    applyProductImages(collectImageTargets(template, sections, blocks), seedProduct);
   }
 
   const project = await prisma.project.create({
@@ -133,6 +173,7 @@ export async function POST(req: NextRequest) {
       language: language ?? DEFAULT_STORE_LANGUAGE,
       ...(persona ? { personaJson: persona } : {}),
       ...(marketingAngle ? { marketingAngleJson: marketingAngle } : {}),
+      ...(selectedImages ? { selectedImagesJson: selectedImages } : {}),
       // Prisma's Json input type wants an index signature the configuration type does not
       // structurally have; round-tripping through JSON keeps this a plain-object write.
       configurationJson: JSON.parse(JSON.stringify(configuration)),

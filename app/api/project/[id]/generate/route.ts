@@ -7,6 +7,7 @@ import { OpenRouterError } from "@/lib/ai/openrouter";
 import { parseConfiguration, StoreConfiguration } from "@/lib/store-config/store";
 import { parseCustomerPersona } from "@/lib/store-config/persona";
 import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
+import { parseSelectedImages } from "@/lib/store-config/product-images";
 
 // POST /api/project/:id/generate — regenerates both page templates from the project's
 // imported product using OpenRouter, and replaces the project's Store Configuration.
@@ -28,6 +29,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const normalized = toProductDTO(project.product);
+  // The wizard's Product Images selection (shopforge-personalization-image-selection-plan.md
+  // §17), when present, is what hero/banner image settings round-robin-fill from — the
+  // merchant's curated set, not the raw scrape. Product.images itself is never modified.
+  const selectedImages = parseSelectedImages(project.selectedImagesJson);
+  if (selectedImages) {
+    normalized.images = selectedImages.images.map((img) => ({ url: img.url, altText: img.altText }));
+  }
 
   try {
     const generated = await generateStore(normalized, {

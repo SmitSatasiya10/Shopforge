@@ -37,6 +37,21 @@ describe("preview shims", () => {
     expect(html).toContain("display: block !important");
   });
 
+  it("un-escapes the gallery thumbnail's <img> markup, as the theme's own JS does on load", () => {
+    const html = applyPreviewShims(
+      '<html><head></head><body><button class="thumbnail">&lt;img src=&#34;https://cdn.example.com/a.jpg&#34; loading=&#34;lazy&#34; alt=&#34;Aurora Pet Bed&#34;&gt;</button></body></html>',
+    );
+    expect(html).toContain('<img src="https://cdn.example.com/a.jpg" loading="lazy" alt="Aurora Pet Bed">');
+    expect(html).not.toContain("&lt;img");
+  });
+
+  it("un-escapes a data: URI thumbnail image without corrupting the base64 payload", () => {
+    const html = applyPreviewShims(
+      '<html><head></head><body>&lt;img src=&#34;data:image/png;base64,QUJD&#34;&gt;</body></html>',
+    );
+    expect(html).toContain('<img src="data:image/png;base64,QUJD">');
+  });
+
   it("leaves the rest of the document untouched", () => {
     const html = applyPreviewShims('<html class="no-js"><head></head><body><p>hello</p></body></html>');
     expect(html).toContain("<p>hello</p>");

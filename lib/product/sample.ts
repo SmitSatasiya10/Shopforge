@@ -12,8 +12,14 @@ const SAMPLE_SHOPIFY_JSON = {
   body_html:
     "<p>A plush, machine-washable pet bed with memory-foam base and raised bolster edge for extra comfort and security.</p>",
   images: [
-    { src: "https://placehold.co/800x800/e8ddd0/3a3a3a?text=Aurora+Pet+Bed", alt: "Aurora Pet Bed" },
-    { src: "https://placehold.co/800x800/d9c9b8/3a3a3a?text=Side+View", alt: "Side view" },
+    {
+      src: "https://images.unsplash.com/photo-1581888227599-779811939961?w=800&h=800&fit=crop&auto=format",
+      alt: "Aurora Pet Bed",
+    },
+    {
+      src: "https://images.unsplash.com/photo-1598397678815-c5dc869035b8?w=800&h=800&fit=crop&auto=format",
+      alt: "Side view",
+    },
   ],
   variants: [
     { title: "Small", price: "59.00", sku: "APB-SM", compare_at_price: "79.00" },

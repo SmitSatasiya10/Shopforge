@@ -25,7 +25,7 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not load the sample product");
-      router.push(`/import?productId=${data.products[0].id}`);
+      router.push(`/import?productId=${data.products[0].id}&sample=1`);
     } catch (err) {
       setSampleError(err instanceof Error ? err.message : "Something went wrong");
       setLoadingSample(false);

@@ -17,6 +17,7 @@ import {
 } from "@/lib/store-config/language";
 import type { PersonaOption } from "@/lib/store-config/persona";
 import type { MarketingAngleOption } from "@/lib/store-config/marketing-angle";
+import { MAX_SELECTED_IMAGES, type ImageCandidatesCache } from "@/lib/store-config/product-images";
 
 export default function ImportPage() {
   return (
@@ -40,6 +41,13 @@ function ImportPageInner() {
   const partialFailed = Number(searchParams.get("partialFailed") ?? "0");
   const partialTotal = Number(searchParams.get("partialTotal") ?? "0");
   const related = searchParams.get("related") === "1";
+  // The Start screen's "Try a sample product" shortcut skips the Product URL / Connect
+  // Shopify step entirely, so the sample product never actually visited it — back from the
+  // Products step (or anywhere later in the wizard) must return straight to Start instead of
+  // to a step the merchant never saw. Threaded through the same backParam every later step
+  // already carries, so it survives forward/back navigation across the whole wizard.
+  const fromSample = searchParams.get("sample") === "1";
+  const sampleQuery = fromSample ? "&sample=1" : "";
   // Customer store-content language (store-content-language-selection-implementation.md)
   // and customer persona (product_based_customer_persona_implementation.md): both ride the
   // wizard URL like every other piece of wizard state, so back/forward restores them.
@@ -57,7 +65,8 @@ function ImportPageInner() {
     : "";
   const ids = productId ? [productId] : productIdsParam ? productIdsParam.split(",").filter(Boolean) : [];
 
-  const backParam = productId ? `productId=${productId}` : `productIds=${productIdsParam ?? ""}`;
+  const backParam =
+    (productId ? `productId=${productId}` : `productIds=${productIdsParam ?? ""}`) + sampleQuery;
 
   // Flow order after product selection: Analysis -> Language -> Persona -> project/editor.
   if (step === "analysis" && selected) {
@@ -96,9 +105,36 @@ function ImportPageInner() {
           initialCustomText={personaTextParam ?? ""}
           substep={searchParams.get("substep") === "angle" ? "angle" : "persona"}
           initialAngleId={searchParams.get("angle")}
+          imagesQuery={searchParams.get("images")}
         />
       </div>
     );
+  }
+
+  // Product Images step (shopforge-personalization-image-selection-plan.md §9-18): the last
+  // wizard screen, shown once persona + marketing angle are both resolved. angle/
+  // angleSelectionType here are always a concrete cached angle id and how it was chosen
+  // ("ai" already resolved to the model's recommended id) — never the "ai" sentinel used
+  // inside the Persona step's own state.
+  if (step === "images" && selected) {
+    const angleId = searchParams.get("angle");
+    if (angleId) {
+      return (
+        <div className="flex flex-1 flex-col bg-neutral-950 text-neutral-50">
+          <ImagesScreen
+            source={source}
+            backParam={backParam}
+            selectedProductId={selected}
+            language={language}
+            personaParam={personaParam}
+            personaTextParam={personaTextParam}
+            angleId={angleId}
+            angleSelectionType={searchParams.get("angleSelectionType") === "ai" ? "ai" : "generated"}
+            initialImageIds={searchParams.get("images")}
+          />
+        </div>
+      );
+    }
   }
 
   return (
@@ -112,6 +148,7 @@ function ImportPageInner() {
           related={related}
           language={language}
           personaQuery={personaQuery}
+          fromSample={fromSample}
         />
       ) : source === "shopify" && step !== "url" ? (
         <ConnectShopify />
@@ -454,6 +491,7 @@ function ProductResults({
   related = false,
   language,
   personaQuery,
+  fromSample = false,
 }: {
   ids: string[];
   source: ProductImportSource;
@@ -462,6 +500,9 @@ function ProductResults({
   related?: boolean;
   language: string | null;
   personaQuery: string;
+  /** Came in via the Start screen's "Try a sample product" shortcut, which skips the
+   * Product URL / Connect Shopify step — back must go straight to Start instead. */
+  fromSample?: boolean;
 }) {
   const router = useRouter();
   const [products, setProducts] = useState<ProductDTO[] | null>(null);
@@ -494,7 +535,9 @@ function ProductResults({
   // once that product's own options load.
   function goToAnalysis() {
     if (!selectedId) return;
-    const backParam = ids.length === 1 ? `productId=${ids[0]}` : `productIds=${ids.join(",")}`;
+    const backParam =
+      (ids.length === 1 ? `productId=${ids[0]}` : `productIds=${ids.join(",")}`) +
+      (fromSample ? "&sample=1" : "");
     router.push(
       `/import?source=${source}&${backParam}&selected=${selectedId}&step=analysis${language ? `&language=${language}` : ""}${personaQuery}`,
     );
@@ -506,7 +549,15 @@ function ProductResults({
     <>
       <ProgressSteps
         step={3}
-        onBack={() => router.push(source === "shopify" ? "/import?source=shopify&step=url" : `/import?source=${source}`)}
+        onBack={() =>
+          router.push(
+            fromSample
+              ? "/"
+              : source === "shopify"
+                ? "/import?source=shopify&step=url"
+                : `/import?source=${source}`,
+          )
+        }
       />
       <div className={`mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-8 ${selectedProduct ? "pb-28" : ""}`}>
         {error && (
@@ -829,6 +880,7 @@ function PersonaScreen({
   initialCustomText,
   substep,
   initialAngleId,
+  imagesQuery,
 }: {
   source: ProductImportSource;
   backParam: string;
@@ -838,6 +890,9 @@ function PersonaScreen({
   initialCustomText: string;
   substep: "persona" | "angle";
   initialAngleId: string | null;
+  /** A prior Product Images selection riding through, so going back to Angle and forward
+   * again (goToImages) restores it instead of starting the Images step over. */
+  imagesQuery: string | null;
 }) {
   const router = useRouter();
   const [reloadKey, setReloadKey] = useState(0);
@@ -1020,37 +1075,18 @@ function PersonaScreen({
     );
   }
 
-  // The angle state is the last wizard state: Continue creates the Project (persisting
-  // language + persona + marketing angle) and enters the editor.
-  const [continuing, setContinuing] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  async function handleAngleContinue() {
-    if (!canContinueAngle || !selectedAngleId || continuing) return;
+  // The angle state advances to the Product Images step (shopforge-personalization-image-
+  // selection-plan.md §9-18), which is now the wizard's last state — the angle "ai" sentinel
+  // is resolved to a concrete id here, once, so every screen after this one only ever deals
+  // with a real cached angle id.
+  function goToImages() {
+    if (!canContinueAngle || !selectedAngleId) return;
     const angleId = selectedAngleId === "ai" ? currentAngles?.recommendedId : selectedAngleId;
     if (!angleId) return;
-    setContinuing(true);
-    setSubmitError(null);
-    const res = await fetch("/api/project", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        productId: selectedProductId,
-        ...(language ? { language } : {}),
-        ...(selectedId === "custom"
-          ? { personaText: customText.trim() }
-          : { personaId: selectedId }),
-        angleId,
-        angleSelectionType: selectedAngleId === "ai" ? "ai" : "generated",
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setSubmitError(data.error ?? "Could not create the project");
-      setContinuing(false);
-      return;
-    }
-    router.push(`/editor/${data.project.id}`);
+    const angleSelectionType = selectedAngleId === "ai" ? "ai" : "generated";
+    router.push(
+      `/import?source=${source}&${backParam}&selected=${selectedProductId}&step=images${language ? `&language=${language}` : ""}${personaQueryString()}&angle=${encodeURIComponent(angleId)}&angleSelectionType=${angleSelectionType}${imagesQuery ? `&images=${encodeURIComponent(imagesQuery)}` : ""}`,
+    );
   }
 
   /** Angle-state back: return to the persona state of this same step. */
@@ -1183,18 +1219,13 @@ function PersonaScreen({
               )}
 
               <div className="mt-auto pt-10">
-                {submitError && (
-                  <p role="alert" className="mb-3 text-center text-sm text-red-400">
-                    {submitError}
-                  </p>
-                )}
                 <button
                   type="button"
-                  onClick={handleAngleContinue}
-                  disabled={!canContinueAngle || continuing}
+                  onClick={goToImages}
+                  disabled={!canContinueAngle}
                   className="w-full rounded-xl bg-neutral-50 px-6 py-4 text-base font-semibold text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400"
                 >
-                  {continuing ? "Creating your store…" : "Continue"}
+                  Continue
                 </button>
               </div>
             </div>
@@ -1379,6 +1410,255 @@ function PersonaScreen({
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+// Product Images step (shopforge-personalization-image-selection-plan.md §9-18). The wizard's
+// last screen: candidates (the product's own photos, AI-generated product photography, and
+// web-found photos of the same product) are fetched once per product — cached server-side, so
+// revisiting or a language/persona change never re-triggers generation/search — and the user
+// picks up to five, in the order they'll appear in the store's product gallery (first pick =
+// featured image). "Generate my store" persists the Project with everything collected in the
+// wizard (language, persona, marketing angle, this selection), kicks off the existing content-
+// generation call so the store isn't empty on arrival, and opens the editor.
+function ImagesScreen({
+  source,
+  backParam,
+  selectedProductId,
+  language,
+  personaParam,
+  personaTextParam,
+  angleId,
+  angleSelectionType,
+  initialImageIds,
+}: {
+  source: ProductImportSource;
+  backParam: string;
+  selectedProductId: string;
+  language: string | null;
+  personaParam: string | null;
+  personaTextParam: string | null;
+  angleId: string;
+  angleSelectionType: "generated" | "ai";
+  initialImageIds: string | null;
+}) {
+  const router = useRouter();
+  const [reloadKey, setReloadKey] = useState(0);
+  const requestKey = `${selectedProductId}|${reloadKey}`;
+  const [result, setResult] = useState<{
+    key: string;
+    candidates: ImageCandidatesCache | null;
+    error: string | null;
+  } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>(() =>
+    initialImageIds ? initialImageIds.split(",").filter(Boolean) : [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/product/${selectedProductId}/images`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...(personaParam === "custom" ? { personaText: personaTextParam } : personaParam ? { personaId: personaParam } : {}),
+        angleId,
+      }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (cancelled) return;
+        if (!ok) {
+          setResult({ key: requestKey, candidates: null, error: data.error ?? "Could not find images for this product" });
+          return;
+        }
+        const candidates = data as ImageCandidatesCache;
+        setResult({ key: requestKey, candidates, error: null });
+        const validIds = new Set([...candidates.primary, ...candidates.other].map((c) => c.id));
+        setSelectedIds((current) => current.filter((id) => validIds.has(id)));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResult({ key: requestKey, candidates: null, error: "Could not find images for this product" });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [requestKey, selectedProductId, personaParam, personaTextParam, angleId]);
+
+  const current = result?.key === requestKey ? result : null;
+  const candidates = current?.candidates ?? null;
+  const error = current?.error ?? null;
+
+  function toggle(id: string) {
+    setSelectedIds((ids) => {
+      if (ids.includes(id)) return ids.filter((existing) => existing !== id);
+      if (ids.length >= MAX_SELECTED_IMAGES) return ids; // at the cap — ignore, never silently swap
+      return [...ids, id];
+    });
+  }
+
+  const [generating, setGenerating] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const hasCandidates = candidates !== null && candidates.primary.length + candidates.other.length > 0;
+  const canGenerate = !generating && (selectedIds.length > 0 || !hasCandidates);
+
+  async function handleGenerate() {
+    if (!canGenerate) return;
+    setGenerating(true);
+    setSubmitError(null);
+    const res = await fetch("/api/project", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        productId: selectedProductId,
+        ...(language ? { language } : {}),
+        ...(personaParam === "custom" ? { personaText: personaTextParam } : { personaId: personaParam }),
+        angleId,
+        angleSelectionType,
+        imageSelection: selectedIds,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setSubmitError(data.error ?? "Could not create the project");
+      setGenerating(false);
+      return;
+    }
+    const projectId = data.project.id as string;
+    // Best-effort: a slow/failed generation call must not strand the merchant on this screen —
+    // the editor's own "Generate content" button can always retry once they're there.
+    await fetch(`/api/project/${projectId}/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ generateImages: false }),
+    }).catch(() => {});
+    router.push(`/editor/${projectId}`);
+  }
+
+  function goBack() {
+    // Restores the "ai" sentinel (rather than the resolved concrete id) so the angle screen
+    // highlights "Let AI decide" again instead of a card the merchant never actually clicked;
+    // the current selection rides along so a subsequent Continue back into this screen
+    // (goToImages) restores it instead of starting the Images step over.
+    const angleParam = angleSelectionType === "ai" ? "ai" : angleId;
+    router.push(
+      `/import?source=${source}&${backParam}&selected=${selectedProductId}&step=persona&substep=angle${language ? `&language=${language}` : ""}${personaParam ? `&persona=${encodeURIComponent(personaParam)}` : ""}${personaParam === "custom" && personaTextParam ? `&personaText=${encodeURIComponent(personaTextParam)}` : ""}&angle=${encodeURIComponent(angleParam)}${selectedIds.length > 0 ? `&images=${encodeURIComponent(selectedIds.join(","))}` : ""}`,
+    );
+  }
+
+  const cardClass = (selected: boolean) =>
+    `group relative aspect-square overflow-hidden rounded-xl border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 ${
+      selected ? "border-neutral-100" : "border-transparent hover:border-neutral-600"
+    }`;
+
+  function ImageCard({ candidate, selected }: { candidate: ImageCandidatesCache["primary"][number]; selected: boolean }) {
+    const position = selected ? selectedIds.indexOf(candidate.id) : -1;
+    return (
+      <button type="button" onClick={() => toggle(candidate.id)} className={cardClass(selected)} aria-pressed={selected}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={candidate.url} alt={candidate.altText ?? ""} className="h-full w-full object-cover" />
+        <span
+          className={`absolute inset-0 transition ${selected ? "bg-neutral-950/10" : "bg-neutral-950/0 group-hover:bg-neutral-950/20"}`}
+          aria-hidden="true"
+        />
+        <span
+          className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold transition ${
+            selected ? "border-neutral-100 bg-neutral-50 text-neutral-900" : "border-white/60 bg-black/30 text-transparent"
+          }`}
+          aria-hidden="true"
+        >
+          {selected ? (position === 0 ? "★" : position + 1) : ""}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <>
+      <ProgressSteps step={7} onBack={goBack} />
+      <div className={`mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-8 ${hasCandidates || error ? "pb-28" : ""}`}>
+        <div className="text-center">
+          <h1 className="text-3xl font-semibold tracking-tight">Your free AI-generated images</h1>
+          <p className="mt-3 text-base text-neutral-400">Select the AI images you want to use in your store</p>
+        </div>
+
+        {error && (
+          <div className="mx-auto mt-10 max-w-md rounded-xl border border-neutral-800 bg-neutral-900 p-6 text-center">
+            <p role="alert" className="text-sm text-red-400">
+              {error}
+            </p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="mt-4 rounded-lg border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-200 transition hover:bg-neutral-800"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!error && !candidates && (
+          <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-5" aria-hidden="true">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="aspect-square animate-pulse rounded-xl border border-neutral-800 bg-neutral-900" />
+            ))}
+            <p className="col-span-full mt-2 text-center text-sm text-neutral-500">Finding images for your product…</p>
+          </div>
+        )}
+
+        {candidates && !hasCandidates && (
+          <p className="mt-10 text-center text-sm text-neutral-400">
+            We couldn&apos;t find suitable images for this product. You can continue without images and add some later
+            in the editor.
+          </p>
+        )}
+
+        {candidates && candidates.primary.length > 0 && (
+          <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {candidates.primary.map((candidate) => (
+              <ImageCard key={candidate.id} candidate={candidate} selected={selectedIds.includes(candidate.id)} />
+            ))}
+          </div>
+        )}
+
+        {candidates && candidates.other.length > 0 && (
+          <div className="mt-10">
+            <h2 className="text-sm font-medium text-neutral-400">Other images we found for your product</h2>
+            <div className="mt-4 grid grid-cols-3 gap-2.5 sm:grid-cols-6">
+              {candidates.other.map((candidate) => (
+                <ImageCard key={candidate.id} candidate={candidate} selected={selectedIds.includes(candidate.id)} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {(hasCandidates || (candidates && !hasCandidates)) && (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur">
+          <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-4 py-4 sm:px-8">
+            <p className="text-sm text-neutral-400">
+              {hasCandidates ? `${selectedIds.length} of ${MAX_SELECTED_IMAGES} selected` : "No images selected"}
+            </p>
+            <div className="flex items-center gap-3">
+              {submitError && (
+                <p role="alert" className="text-sm text-red-400">
+                  {submitError}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                className="shrink-0 rounded-lg bg-neutral-50 px-5 py-3 text-sm font-medium text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-60"
+              >
+                {generating ? "Generating your store…" : "Generate my store"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
