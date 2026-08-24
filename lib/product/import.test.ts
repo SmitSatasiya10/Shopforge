@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const tryFetchShopifyProductJson = vi.fn();
 const fetchProductHtml = vi.fn();
+const resolveRedirectUrl = vi.fn();
 class MockProductFetchError extends Error {
   reason: string;
   constructor(message: string, reason: string) {
@@ -21,6 +22,7 @@ vi.mock("./fetcher", () => ({
   tryFetchShopifyProductJson: (...args: unknown[]) => tryFetchShopifyProductJson(...args),
   fetchProductHtml: (...args: unknown[]) => fetchProductHtml(...args),
   fetchTextWithLimits: vi.fn(),
+  resolveRedirectUrl: (...args: unknown[]) => resolveRedirectUrl(...args),
   ProductFetchError: MockProductFetchError,
 }));
 
@@ -74,6 +76,39 @@ describe("importSupplierProduct", () => {
     if (outcome.mode !== "product") throw new Error("expected mode 'product'");
     expect(outcome.platform).toBeNull();
     expect(outcome.result.error).not.toContain("AliExpress");
+  });
+
+  it("resolves an amzn.in short link via redirect and imports from the resolved URL", async () => {
+    resolveRedirectUrl.mockResolvedValueOnce("https://www.amazon.in/dp/B0ABCDE123");
+    tryFetchShopifyProductJson.mockResolvedValueOnce(FULL_SHOPIFY_JSON);
+
+    const outcome = await importSupplierProduct("https://amzn.in/d/0cuVjcaE");
+
+    expect(resolveRedirectUrl).toHaveBeenCalledWith("https://amzn.in/d/0cuVjcaE");
+    expect(outcome.platform).toBe("amazon");
+    expect(tryFetchShopifyProductJson).toHaveBeenCalledWith("https://www.amazon.in/dp/B0ABCDE123");
+    expect(outcome.mode === "product" && outcome.result.status).toBe("succeeded");
+  });
+
+  it("rejects an amzn.in short link that fails to resolve, without treating it as supported", async () => {
+    resolveRedirectUrl.mockResolvedValueOnce(null);
+
+    const outcome = await importSupplierProduct("https://amzn.in/d/0cuVjcaE");
+
+    if (outcome.mode !== "product") throw new Error("expected mode 'product'");
+    expect(outcome.platform).toBeNull();
+    expect(outcome.result.error).toMatch(/isn't supported yet/);
+    expect(tryFetchShopifyProductJson).not.toHaveBeenCalled();
+  });
+
+  it("rejects an amzn.in short link that redirects somewhere non-Amazon", async () => {
+    resolveRedirectUrl.mockResolvedValueOnce("https://example.com/not-amazon");
+
+    const outcome = await importSupplierProduct("https://amzn.in/d/0cuVjcaE");
+
+    if (outcome.mode !== "product") throw new Error("expected mode 'product'");
+    expect(outcome.platform).toBeNull();
+    expect(tryFetchShopifyProductJson).not.toHaveBeenCalled();
   });
 
   it("never calls the web-search fallback for Amazon when direct retrieval already succeeds", async () => {

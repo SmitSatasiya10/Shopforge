@@ -148,6 +148,24 @@ async function fetchWithTimeout(
   throw new ProductFetchError(`Too many redirects for "${url}"`, "http_error");
 }
 
+/**
+ * Resolves a URL (typically a link shortener, e.g. amzn.in/amzn.to) to its final destination.
+ * Uses GET, not HEAD — Amazon's shortener domains 404 on HEAD but redirect correctly on GET.
+ * The body is discarded unread; only the final response URL matters here. Reuses
+ * fetchWithTimeout's SSRF-safe, bounded redirect walk. Returns null on any failure (invalid
+ * URL, unreachable host, too many redirects) rather than throwing, since callers treat
+ * "couldn't resolve" the same as "not a link we recognize."
+ */
+export async function resolveRedirectUrl(url: string): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(url, { "User-Agent": USER_AGENT }, "GET");
+    await res.body?.cancel();
+    return res.url || url;
+  } catch {
+    return null;
+  }
+}
+
 /** Fetches raw HTML for a product page. Throws ProductFetchError, never returns a rejected promise for network issues. */
 export async function fetchProductHtml(url: string): Promise<string> {
   const parsed = parseProductUrl(url);
