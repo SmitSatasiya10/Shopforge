@@ -13,7 +13,10 @@ import { parseSelectedImages } from "@/lib/store-config/product-images";
 // Product.images in the database stays the untouched original import.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const project = await prisma.project.findUnique({ where: { id }, include: { product: true } });
+  const project = await prisma.project.findUnique({
+    where: { id },
+    include: { product: true, shopifyStore: true },
+  });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const product = toProductDTO(project.product);
@@ -28,6 +31,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       name: project.name,
       productId: project.productId,
       configurationJson: project.configurationJson,
+      shopifyShopDomain: project.shopifyStore?.shopDomain ?? null,
+      installedThemeShopifyId: project.installedThemeShopifyId,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     },

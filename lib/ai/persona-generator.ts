@@ -134,6 +134,11 @@ export async function generatePersonaOptions(
   const raw = await chat({
     config,
     json: true,
+    // Four short cards (a name + one sentence each) — nowhere near chat()'s 16000 default,
+    // which exists for generateTemplate()'s full-page output. Matches the structurally
+    // identical marketing-angle-generator.ts's budget: a lower ceiling here (previously 100)
+    // truncated the model's JSON mid-array on anything but the tersest possible output.
+    maxTokens: 2000,
     signal: options.signal,
     messages: buildPersonaMessages(options.product, options.language),
   });

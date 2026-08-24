@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 
-const STEPS = ["Start", "Product URL", "Products", "Analysis", "Language", "Persona", "Images"] as const;
+const STEPS = ["Source", "Product URL", "Products", "Analysis", "Language", "Persona", "Visuals"] as const;
 
 // Header/progress area shared by the Start Store -> URL entry -> Products Found ->
 // Analysis -> Customer Language -> Customer Persona -> Product Images flow
@@ -9,16 +9,18 @@ const STEPS = ["Start", "Product URL", "Products", "Analysis", "Language", "Pers
 // product_based_customer_persona_implementation.md,
 // shopforge-personalization-image-selection-plan.md). Marketing Angle is a substep of
 // Persona (never its own entry here); Product Images is a real 7th step. Back is omitted on
-// the first step since there's nowhere to go back to.
+// the first step since there's nowhere to go back to. Labels here are the shortened,
+// presentation-only names for the pipeline UI — step count and order stay 1:1 with the
+// underlying wizard state.
 export function ProgressSteps({ step, onBack }: { step: 1 | 2 | 3 | 4 | 5 | 6 | 7; onBack?: () => void }) {
   return (
-    <div className="flex items-center gap-4 border-b border-neutral-800 bg-neutral-950 px-4 py-4 sm:px-8">
+    <div className="flex items-center gap-4 border-b border-white/[0.08] bg-[#09090B] px-4 py-4 sm:px-8">
       {onBack ? (
         <button
           type="button"
           onClick={onBack}
           aria-label="Go back"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-neutral-800 text-neutral-400 transition hover:border-neutral-600 hover:bg-neutral-800 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-[#A1A1AA] transition duration-200 hover:border-white/20 hover:bg-white/5 hover:text-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8B5CF6]/60"
         >
           <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75">
             <path d="M12.5 4.5 7 10l5.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -29,7 +31,7 @@ export function ProgressSteps({ step, onBack }: { step: 1 | 2 | 3 | 4 | 5 | 6 | 
       )}
 
       <div
-        className="mx-auto flex w-full max-w-2xl items-center"
+        className="mx-auto flex w-full max-w-5xl items-center overflow-x-auto"
         role="progressbar"
         aria-valuenow={step}
         aria-valuemin={1}
@@ -42,16 +44,20 @@ export function ProgressSteps({ step, onBack }: { step: 1 | 2 | 3 | 4 | 5 | 6 | 
           return (
             <Fragment key={label}>
               {i > 0 && (
-                <div className={`mx-3 h-px min-w-4 flex-1 rounded-full ${done || current ? "bg-neutral-400" : "bg-neutral-800"}`} />
+                <div
+                  className={`mx-2.5 h-px min-w-4 flex-1 rounded-full transition-colors duration-300 sm:mx-3 ${
+                    done ? "bg-white/20" : "bg-white/[0.08]"
+                  }`}
+                />
               )}
               <div className="flex shrink-0 items-center gap-2.5">
                 <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition ${
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold transition duration-200 ${
                     done
-                      ? "bg-neutral-100 text-neutral-900"
+                      ? "border border-white/15 bg-white/[0.06] text-[#A1A1AA]"
                       : current
-                        ? "border-2 border-neutral-100 bg-neutral-900 text-neutral-100"
-                        : "border border-neutral-700 bg-neutral-950 text-neutral-500"
+                        ? "border-2 border-[#8B5CF6] bg-[#8B5CF6]/10 text-[#FAFAFA] shadow-[0_0_0_4px_rgba(139,92,246,0.14)]"
+                        : "border border-white/10 bg-transparent text-[#71717A]"
                   }`}
                   aria-hidden="true"
                 >
@@ -60,12 +66,12 @@ export function ProgressSteps({ step, onBack }: { step: 1 | 2 | 3 | 4 | 5 | 6 | 
                       <path d="m4.5 10.5 3.5 3.5 7.5-8" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   ) : (
-                    i + 1
+                    String(i + 1).padStart(2, "0")
                   )}
                 </span>
                 <span
-                  className={`hidden whitespace-nowrap text-sm sm:block ${
-                    current ? "font-medium text-neutral-100" : done ? "text-neutral-300" : "text-neutral-500"
+                  className={`hidden whitespace-nowrap text-[11px] font-medium tracking-[0.06em] uppercase sm:block ${
+                    current ? "text-[#FAFAFA]" : done ? "text-[#A1A1AA]" : "text-[#71717A]"
                   }`}
                 >
                   {label}

@@ -1,10 +1,16 @@
-import { fetchProductHtml, fetchTextWithLimits, ProductFetchError, tryFetchShopifyProductJson } from "./fetcher";
+import { fetchProductHtml, fetchTextWithLimits, ProductFetchError, resolveRedirectUrl, tryFetchShopifyProductJson } from "./fetcher";
 import { extractFromHtml } from "./extractor";
 import { normalizeFromJsonLd, normalizeFromOpenGraph, normalizeFromShopifyJson } from "./normalizer";
 import { ImportResult, NormalizedProduct, deriveImportStatus, requiredFieldsMissing } from "./types";
 import { getSampleNormalizedProduct, SAMPLE_PRODUCT_RAW } from "./sample";
 import { discoverProductUrls, mapWithConcurrency, DiscoverySource, MAX_FETCHED_PRODUCTS, DISCOVERY_CONCURRENCY } from "./discovery";
-import { detectSupplierPlatform, SupplierPlatform, SUPPLIER_PLATFORM_LABELS, unsupportedSupplierMessage } from "./source";
+import {
+  detectSupplierPlatform,
+  isAmazonShortUrl,
+  SupplierPlatform,
+  SUPPLIER_PLATFORM_LABELS,
+  unsupportedSupplierMessage,
+} from "./source";
 import {
   AmazonHtmlFallback,
   canonicalAmazonProductUrl,
@@ -323,7 +329,27 @@ export async function importSupplierProduct(url: string): Promise<SupplierImport
     };
   }
 
-  const platform = detectSupplierPlatform(parsed);
+  let platform = detectSupplierPlatform(parsed);
+  let resolvedUrl = url;
+
+  // amzn.in/amzn.to/a.co carry no "amazon" in the hostname at all, so detection above can never
+  // match them directly — follow the redirect once, then re-run detection on where it lands.
+  if (!platform && isAmazonShortUrl(parsed)) {
+    const finalUrl = await resolveRedirectUrl(url);
+    if (finalUrl) {
+      try {
+        const finalParsed = new URL(finalUrl);
+        const finalPlatform = detectSupplierPlatform(finalParsed);
+        if (finalPlatform) {
+          platform = finalPlatform;
+          resolvedUrl = finalUrl;
+        }
+      } catch {
+        // Malformed redirect target — fall through to the unsupported-supplier error below.
+      }
+    }
+  }
+
   if (!platform) {
     return {
       platform: null,
@@ -332,7 +358,7 @@ export async function importSupplierProduct(url: string): Promise<SupplierImport
     };
   }
 
-  const { result: fetched, html } = await importFromShopifyJsonOrHtml(url);
+  const { result: fetched, html } = await importFromShopifyJsonOrHtml(resolvedUrl);
   const result = applyHtmlFallback(fetched, platform, html);
   if (isDirectResultSufficient(result)) {
     return { platform, mode: "product", result };
@@ -341,7 +367,7 @@ export async function importSupplierProduct(url: string): Promise<SupplierImport
   // Direct retrieval failed or returned too little to trust — a 403 bot wall (Etsy), an
   // HTTP-200 captcha shell with no product data (Amazon), or a page with no recognizable
   // structured data. Fall back to the generic web-search service instead of failing outright.
-  return runSupplierSearchFallback(platform, url, result);
+  return runSupplierSearchFallback(platform, resolvedUrl, result);
 }
 
 export interface StoreDiscoveryMeta {
