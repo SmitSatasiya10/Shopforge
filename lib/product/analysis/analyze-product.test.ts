@@ -82,12 +82,15 @@ describe("analyzeProduct", () => {
     expect(result.outcomes.trends.summary).toMatch(/not connected|placeholder/i);
   });
 
-  it("is deterministic: the same product analyzed twice produces the exact same score", () => {
+  it("per-check outcomes are deterministic; the overall score is randomized within [80, 100]", () => {
     const product = makeProduct();
     const first = analyzeProduct(product);
     const second = analyzeProduct(product);
-    expect(second.score).toBe(first.score);
     expect(second.outcomes).toEqual(first.outcomes);
+    for (const score of [first.score, second.score]) {
+      expect(score).toBeGreaterThanOrEqual(80);
+      expect(score).toBeLessThanOrEqual(100);
+    }
   });
 
   it("marks the whole analysis failed (no score) when the underlying import itself failed", () => {

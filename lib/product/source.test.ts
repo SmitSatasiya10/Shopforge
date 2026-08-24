@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { detectSupplierPlatform, unsupportedSupplierMessage, SUPPORTED_SUPPLIER_PLATFORMS } from "./source";
+import {
+  detectSupplierPlatform,
+  isAmazonShortUrl,
+  unsupportedSupplierMessage,
+  SUPPORTED_SUPPLIER_PLATFORMS,
+} from "./source";
 
 describe("detectSupplierPlatform", () => {
   const cases: [string, string][] = [
@@ -32,6 +37,27 @@ describe("detectSupplierPlatform", () => {
 
   it("covers every documented supported platform", () => {
     expect(SUPPORTED_SUPPLIER_PLATFORMS.sort()).toEqual(["amazon", "etsy"].sort());
+  });
+});
+
+describe("isAmazonShortUrl", () => {
+  const shortUrls = [
+    "https://amzn.in/d/0cuVjcaE",
+    "https://amzn.to/3xyzabc",
+    "https://a.co/d/abc123",
+    "https://amzn.eu/d/abc123",
+  ];
+
+  it.each(shortUrls)("recognizes %s as an Amazon short link", (url) => {
+    expect(isAmazonShortUrl(new URL(url))).toBe(true);
+  });
+
+  it("does not treat a full amazon.<tld> URL as a short link", () => {
+    expect(isAmazonShortUrl(new URL("https://www.amazon.com/dp/B08N5WRWNW"))).toBe(false);
+  });
+
+  it("does not treat an unrelated host as an Amazon short link", () => {
+    expect(isAmazonShortUrl(new URL("https://example.com/d/abc123"))).toBe(false);
   });
 });
 

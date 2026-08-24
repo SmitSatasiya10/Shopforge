@@ -8,6 +8,7 @@ import { ProductCard } from "@/components/ProductCard";
 import { ProductAnalysis } from "@/components/product-analysis/ProductAnalysis";
 import { validateProductUrl } from "@/lib/product/url-validation";
 import { SUPPORTED_SUPPLIER_LABEL_LIST, type ProductImportSource } from "@/lib/product/source";
+import { formatProductPrice } from "@/lib/product/price-format";
 import {
   PRIMARY_STORE_LANGUAGES,
   OTHER_STORE_LANGUAGES,
@@ -48,6 +49,12 @@ function ImportPageInner() {
   // already carries, so it survives forward/back navigation across the whole wizard.
   const fromSample = searchParams.get("sample") === "1";
   const sampleQuery = fromSample ? "&sample=1" : "";
+  // Which Shopify store (if any) was connected via ConnectShopify's picker — threaded through
+  // backParam below like sample/language/persona so back navigation from anywhere later in the
+  // wizard returns to the picker instead of losing the connection and falling back to the
+  // generic "not connected" Connect Shopify screen.
+  const connectedShop = searchParams.get("connected");
+  const connectedQuery = connectedShop ? `&connected=${encodeURIComponent(connectedShop)}` : "";
   // Customer store-content language (store-content-language-selection-implementation.md)
   // and customer persona (product_based_customer_persona_implementation.md): both ride the
   // wizard URL like every other piece of wizard state, so back/forward restores them.
@@ -66,7 +73,7 @@ function ImportPageInner() {
   const ids = productId ? [productId] : productIdsParam ? productIdsParam.split(",").filter(Boolean) : [];
 
   const backParam =
-    (productId ? `productId=${productId}` : `productIds=${productIdsParam ?? ""}`) + sampleQuery;
+    (productId ? `productId=${productId}` : `productIds=${productIdsParam ?? ""}`) + sampleQuery + connectedQuery;
 
   // Flow order after product selection: Analysis -> Language -> Persona -> project/editor.
   if (step === "analysis" && selected) {
@@ -149,6 +156,7 @@ function ImportPageInner() {
           language={language}
           personaQuery={personaQuery}
           fromSample={fromSample}
+          connectedShop={connectedShop}
         />
       ) : source === "shopify" && step !== "url" ? (
         <ConnectShopify />
@@ -159,15 +167,190 @@ function ImportPageInner() {
   );
 }
 
-// Placeholder until the Shopforge Shopify app exists — swap in the real App Store listing URL.
-const SHOPIFY_APP_STORE_URL = "https://apps.shopify.com/";
+// Connect Shopify Store step: the merchant can connect their store via a real OAuth install
+// (app/api/shopify/install -> Shopify consent screen -> app/api/shopify/callback persists the
+// access token), or skip straight to pasting a product URL — connecting isn't required, since
+// product import itself works off a store's public product JSON either way
+// (lib/product/fetcher.ts tryFetchShopifyProductJson).
+interface ShopifyProductSummary {
+  id: string;
+  title: string;
+  handle: string;
+  imageUrl: string | null;
+  price: string | null;
+  currency: string | null;
+  productUrl: string;
+}
 
-// Connect Shopify Store step: the Shopify entry point asks the merchant to install the
-// Shopforge app first, instead of pasting a URL. The real OAuth/app install isn't built
-// yet, so "Continue" falls through to the existing URL-entry step (?step=url) to keep the
-// flow usable end-to-end.
 function ConnectShopify() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const connectedFromUrl = searchParams.get("connected");
+  const [shopInput, setShopInput] = useState("");
+  const [products, setProducts] = useState<ShopifyProductSummary[] | null>(null);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [importingUrl, setImportingUrl] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
+  // Remembers a store connected earlier in this browser, so landing here fresh (not just right
+  // after the OAuth redirect) still recognizes the connection instead of showing the blank
+  // connect form every time — this app connects one store at a time (docs/product-spec/
+  // DECISIONS.md), so "the connected store" is whichever ShopifyStore was touched most recently.
+  const [defaultShop, setDefaultShop] = useState<string | null>(null);
+  useEffect(() => {
+    if (connectedFromUrl) return;
+    fetch("/api/shopify/store")
+      .then((res) => res.json())
+      .then((data) => setDefaultShop(data.shopDomain ?? null))
+      .catch(() => {});
+  }, [connectedFromUrl]);
+  const connectedShop = connectedFromUrl ?? defaultShop;
+
+  async function disconnect() {
+    if (!connectedShop || disconnecting) return;
+    setDisconnecting(true);
+    try {
+      await fetch("/api/shopify/disconnect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ shop: connectedShop }),
+      });
+      setDefaultShop(null);
+      router.push("/import?source=shopify");
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!connectedShop) return;
+    fetch(`/api/shopify/products?shop=${encodeURIComponent(connectedShop)}`)
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          setProductsError(data.error ?? "Could not load products from this store.");
+          return;
+        }
+        setProducts(data.products);
+      })
+      .catch(() => setProductsError("Could not load products from this store."));
+  }, [connectedShop]);
+
+  async function selectProduct(product: ShopifyProductSummary) {
+    if (importingUrl) return;
+    setImportingUrl(product.productUrl);
+    setImportError(null);
+    try {
+      const res = await fetch("/api/shopify/products/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ shop: connectedShop, productId: product.id, productUrl: product.productUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.mode !== "product") {
+        setImportError(data.products?.[0]?.importError ?? data.error ?? "Import failed");
+        setImportingUrl(null);
+        return;
+      }
+      const imported = data.products[0];
+      if (imported.importStatus === "failed") {
+        setImportError(imported.importError ?? "Could not import this product.");
+        setImportingUrl(null);
+        return;
+      }
+      router.push(
+        `/import?source=shopify&productId=${imported.id}&connected=${encodeURIComponent(connectedShop ?? "")}`,
+      );
+    } catch {
+      setImportError("Something went wrong while importing. Please try again.");
+      setImportingUrl(null);
+    }
+  }
+
+  if (connectedShop) {
+    return (
+      <>
+        <ProgressSteps step={2} onBack={() => router.push("/")} />
+        <div className="mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-8">
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
+            <span>Connected to {connectedShop}</span>
+            <button
+              type="button"
+              onClick={disconnect}
+              disabled={disconnecting}
+              className="shrink-0 text-emerald-300/70 underline hover:text-emerald-200 disabled:opacity-60"
+            >
+              {disconnecting ? "Disconnecting…" : "Disconnect"}
+            </button>
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight">Choose a product</h1>
+          <p className="mt-3 text-base text-neutral-400">Select one of your store&apos;s products to build around.</p>
+
+          {importError && (
+            <p role="alert" className="mt-4 text-sm text-red-400">
+              {importError}
+            </p>
+          )}
+          {productsError && (
+            <p role="alert" className="mt-6 text-sm text-red-400">
+              {productsError}
+            </p>
+          )}
+          {!productsError && !products && (
+            <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4" aria-hidden="true">
+              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                <div key={i} className="aspect-square animate-pulse rounded-xl border border-neutral-800 bg-neutral-900" />
+              ))}
+            </div>
+          )}
+          {products && products.length === 0 && (
+            <p className="mt-8 text-sm text-neutral-400">This store has no products yet.</p>
+          )}
+          {products && products.length > 0 && (
+            <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {products.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => selectProduct(product)}
+                  disabled={importingUrl !== null}
+                  className="flex flex-col overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900 text-left transition hover:border-neutral-600 hover:bg-neutral-800 disabled:opacity-60"
+                >
+                  <div className="aspect-square bg-neutral-950">
+                    {product.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={product.imageUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-neutral-700">No image</div>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <p className="truncate text-sm font-medium text-neutral-100">{product.title}</p>
+                    {product.price !== null && (
+                      <p className="mt-1 text-xs text-neutral-400">
+                        {formatProductPrice(Number(product.price), product.currency)}
+                      </p>
+                    )}
+                  </div>
+                  {importingUrl === product.productUrl && (
+                    <p className="px-3 pb-3 text-xs text-neutral-400">Importing…</p>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => router.push("/import?source=shopify&step=url")}
+            className="mt-10 text-sm text-neutral-400 underline hover:text-neutral-200"
+          >
+            Paste a product URL instead
+          </button>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -179,27 +362,44 @@ function ConnectShopify() {
             <div className="pt-4 lg:pt-12">
               <h1 className="text-3xl font-semibold tracking-tight">Connect your Shopify store</h1>
               <p className="mt-3 text-base text-neutral-400">
-                Install the Shopforge app to import your products.
+                Connect your store for a smoother import, or skip this and paste a product URL directly.
               </p>
 
-              <a
-                href={SHOPIFY_APP_STORE_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-10 flex w-full items-center justify-center gap-3 rounded-xl border border-neutral-700 bg-neutral-900 px-6 py-4 text-base font-semibold transition hover:border-neutral-500 hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400"
+              <form
+                action="/api/shopify/install"
+                method="get"
+                className="mt-8 flex flex-col gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-5"
               >
-                <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true" fill="#95BF47">
-                  <path d="M15.34 2.98c-.14-.01-.3-.02-.47-.02-.2-.62-.5-1.2-.9-1.66C13.42.68 12.83.4 12.2.4c-.13 0-.26.01-.39.04C11.34.14 10.83 0 10.35 0 7.9 0 6.73 3.06 6.36 4.61l-2.1.65c-.65.2-.67.22-.75.83L1.8 19.31 14.55 21.7l6.9-1.49S15.6 3 15.34 2.98ZM12.9 3.7l-1.66.51c0-.09.01-.17.01-.27 0-.81-.11-1.47-.3-1.98.75.09 1.5.98 1.95 1.74Zm-2.62-1.6c.2.5.34 1.2.34 2.17v.14l-2.7.83c.35-1.32 1.16-2.72 2.36-3.14Zm-1.5-1.05c.19 0 .38.06.56.19-1.4.66-2.35 2.34-2.76 4.32l-2.13.66C5.03 4.36 6.24 1.05 8.78 1.05Z" />
-                </svg>
-                Install Shopforge on Shopify
-              </a>
+                <label htmlFor="shopify-domain" className="text-sm font-medium text-neutral-300">
+                  Your Shopify store domain
+                </label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    id="shopify-domain"
+                    name="shop"
+                    type="text"
+                    autoComplete="off"
+                    value={shopInput}
+                    onChange={(e) => setShopInput(e.target.value)}
+                    placeholder="your-store.myshopify.com"
+                    className="flex-1 rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-50 transition placeholder:text-neutral-500 focus-visible:border-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400"
+                  />
+                  <button
+                    type="submit"
+                    disabled={shopInput.trim() === ""}
+                    className="shrink-0 rounded-lg bg-neutral-50 px-5 py-3 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-60"
+                  >
+                    Connect store
+                  </button>
+                </div>
+              </form>
 
               <p className="mt-4 flex items-center justify-center gap-2 text-sm text-neutral-400">
                 <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <rect x="2.5" y="2.5" width="15" height="15" rx="4" />
                   <path d="m6.5 10.5 2.5 2.5 4.5-5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                You&apos;ll be redirected to the Shopify App Store
+                You&apos;ll be redirected to Shopify to approve access
               </p>
             </div>
 
@@ -207,9 +407,9 @@ function ConnectShopify() {
               <button
                 type="button"
                 onClick={() => router.push("/import?source=shopify&step=url")}
-                className="w-full rounded-xl bg-neutral-50 px-6 py-4 text-base font-semibold text-neutral-900 transition hover:bg-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400"
+                className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-6 py-4 text-base font-semibold text-neutral-50 transition hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400"
               >
-                Continue
+                Skip for now
               </button>
               <p className="mt-3 text-center text-sm text-neutral-500">Try out for free</p>
             </div>
@@ -492,6 +692,7 @@ function ProductResults({
   language,
   personaQuery,
   fromSample = false,
+  connectedShop = null,
 }: {
   ids: string[];
   source: ProductImportSource;
@@ -503,6 +704,9 @@ function ProductResults({
   /** Came in via the Start screen's "Try a sample product" shortcut, which skips the
    * Product URL / Connect Shopify step — back must go straight to Start instead. */
   fromSample?: boolean;
+  /** The store connected via ConnectShopify's picker, if any — back returns to that picker
+   * (still connected) rather than the generic paste-a-URL screen. */
+  connectedShop?: string | null;
 }) {
   const router = useRouter();
   const [products, setProducts] = useState<ProductDTO[] | null>(null);
@@ -537,7 +741,8 @@ function ProductResults({
     if (!selectedId) return;
     const backParam =
       (ids.length === 1 ? `productId=${ids[0]}` : `productIds=${ids.join(",")}`) +
-      (fromSample ? "&sample=1" : "");
+      (fromSample ? "&sample=1" : "") +
+      (connectedShop ? `&connected=${encodeURIComponent(connectedShop)}` : "");
     router.push(
       `/import?source=${source}&${backParam}&selected=${selectedId}&step=analysis${language ? `&language=${language}` : ""}${personaQuery}`,
     );
@@ -554,12 +759,14 @@ function ProductResults({
             fromSample
               ? "/"
               : source === "shopify"
-                ? "/import?source=shopify&step=url"
+                ? connectedShop
+                  ? `/import?source=shopify&connected=${encodeURIComponent(connectedShop)}`
+                  : "/import?source=shopify&step=url"
                 : `/import?source=${source}`,
           )
         }
       />
-      <div className={`mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-8 ${selectedProduct ? "pb-28" : ""}`}>
+      <div className={`mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-8 ${selectedProduct ? "pb-32" : ""}`}>
         {error && (
           <p role="alert" className="text-sm text-red-400">
             {error}
@@ -580,7 +787,7 @@ function ProductResults({
               <p className="mt-3 text-base text-neutral-400">
                 {related
                   ? "We found similar products that may help — select one to continue"
-                  : "Select a product to continue"}
+                  : "Select the product you want to build your store around."}
               </p>
               {products.length > 1 && !related && (
                 <p className="mt-2 text-sm text-neutral-500">
@@ -611,28 +818,43 @@ function ProductResults({
       </div>
 
       {selectedProduct && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-4 py-4 sm:px-8">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-800 bg-neutral-950/95 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.6)] backdrop-blur">
+          <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-4 py-3 sm:px-8">
             <div className="flex min-w-0 items-center gap-3">
               {selectedProduct.images[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={selectedProduct.images[0].url}
                   alt=""
-                  className="h-10 w-10 shrink-0 rounded-md border border-neutral-800 object-cover"
+                  className="h-11 w-11 shrink-0 rounded-md border border-neutral-800 object-cover"
                 />
               ) : (
-                <div className="h-10 w-10 shrink-0 rounded-md border border-neutral-800 bg-neutral-900" aria-hidden="true" />
+                <div className="h-11 w-11 shrink-0 rounded-md border border-neutral-800 bg-neutral-900" aria-hidden="true" />
               )}
-              <p className="truncate text-sm text-neutral-300">{selectedProduct.title ?? "Untitled product"}</p>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium tracking-wide text-neutral-500 uppercase">Selected product</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="truncate text-sm font-medium text-neutral-100">
+                    {selectedProduct.title ?? "Untitled product"}
+                  </p>
+                  {selectedProduct.price !== null && (
+                    <p className="shrink-0 text-sm text-neutral-400">
+                      {formatProductPrice(selectedProduct.price, selectedProduct.currency)}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
             <button
               type="button"
               onClick={goToAnalysis}
               disabled={selectedProduct.importStatus === "failed"}
-              className="shrink-0 rounded-lg bg-neutral-50 px-5 py-3 text-sm font-medium text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-60"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-neutral-50 px-5 py-3 text-sm font-medium text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-60"
             >
               Continue
+              <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 10h12M11 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
           </div>
         </div>
