@@ -35,23 +35,48 @@ interface PreviewFrameProps {
   resolveText: (sectionId: string, text: string) => TextBinding | null;
   /** Fired when the selected element's box moves (iframe scroll/resize, re-render), so toolbars track it. */
   onRectChange: (rect: SelectionRect | null) => void;
+  /**
+   * Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or Ctrl+Y) inside the preview. A keydown fired while the
+   * iframe holds focus (i.e. after any click inside it — the normal case, since selecting a
+   * section or text focuses the iframe's browsing context) targets the iframe's own document
+   * and never bubbles to the outer page, so the editor's own window-level shortcut handler
+   * can't see it. This is the same shortcut, listened for from inside instead.
+   */
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 /**
  * Editor affordances injected into the preview document: the selected section's outline,
  * a dashed hover outline on any text the editor can bind to a setting (so "this is
  * editable" is visible before clicking), and the active inline-edit outline.
+ *
+ * The text outlines use an em-based offset: theme headings render at line-height 1, so
+ * their glyphs (cap heights, descenders, padded highlight spans) overflow the border box
+ * the outline traces — a fixed pixel offset leaves large headings sticking out of the box.
  */
 const EDITOR_STYLES = `
   [data-sf-section-id].sf-selected { outline: 3px solid #22c55e; outline-offset: -3px; box-shadow: inset 0 0 0 3px rgba(34, 197, 94, 0.25), 0 0 0 1px rgba(34, 197, 94, 0.35); }
   [data-sf-section-id]:hover:not(.sf-selected) { outline: 2px dashed rgba(34, 197, 94, 0.55); outline-offset: -2px; }
-  .sf-text-hover { outline: 1.5px dashed #22c55e; outline-offset: 3px; cursor: text; border-radius: 2px; background-color: rgba(34, 197, 94, 0.12); box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12); }
-  [contenteditable="true"] { outline: 2px solid #22c55e !important; outline-offset: 3px; cursor: text; border-radius: 2px; background-color: rgba(34, 197, 94, 0.14) !important; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14) !important; }
+  .sf-text-hover { outline: 1.5px dashed #22c55e; outline-offset: max(3px, 0.25em); cursor: text; border-radius: 2px; background-color: rgba(34, 197, 94, 0.12); box-shadow: 0 0 0 max(3px, 0.25em) rgba(34, 197, 94, 0.12); }
+  [contenteditable="true"] { outline: 2px solid #22c55e !important; outline-offset: max(3px, 0.25em); cursor: text; border-radius: 2px; background-color: rgba(34, 197, 94, 0.14) !important; box-shadow: 0 0 0 max(3px, 0.25em) rgba(34, 197, 94, 0.14) !important; }
 `;
 
-function toRect(el: Element): SelectionRect {
+/**
+ * `getBoundingClientRect()` on an element inside the iframe is relative to the iframe's own
+ * viewport, not the outer page — they only coincide when the iframe fills its container at
+ * offset (0, 0). Passing the iframe's own rect (relative to the outer page) folds that offset
+ * back in, so the result stays correct even when the iframe is narrower than its container
+ * (the mobile preview) and centered with gutters on either side.
+ */
+function toRect(el: Element, frame?: SelectionRect | null): SelectionRect {
   const r = el.getBoundingClientRect();
-  return { top: r.top, left: r.left, width: r.width, height: r.height };
+  return {
+    top: r.top + (frame?.top ?? 0),
+    left: r.left + (frame?.left ?? 0),
+    width: r.width,
+    height: r.height,
+  };
 }
 
 /** The deepest ancestor-chain element that directly owns text — what a text click/hover "means". */
@@ -143,6 +168,8 @@ export function PreviewFrame({
   onTextCommit,
   resolveText,
   onRectChange,
+  onUndo,
+  onRedo,
 }: PreviewFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const trackedRef = useRef<Tracked | null>(null);
@@ -157,18 +184,23 @@ export function PreviewFrame({
   const resolveTextRef = useRef(resolveText);
   const onRectChangeRef = useRef(onRectChange);
   const selectedRef = useRef(selectedSectionId);
+  const onUndoRef = useRef(onUndo);
+  const onRedoRef = useRef(onRedo);
   // Latest-prop refs, synced after render so the load-time listeners never go stale.
   useEffect(() => {
     resolveTextRef.current = resolveText;
     onRectChangeRef.current = onRectChange;
     selectedRef.current = selectedSectionId;
+    onUndoRef.current = onUndo;
+    onRedoRef.current = onRedo;
   });
 
   /** Re-points the toolbars at the (possibly re-created) selected element and reports its box. */
   const reanchor = useCallback((doc: Document) => {
+    const frame = iframeRef.current?.getBoundingClientRect();
     const tracked = trackedRef.current;
     if (tracked && doc.contains(tracked.el)) {
-      onRectChangeRef.current(toRect(tracked.el));
+      onRectChangeRef.current(toRect(tracked.el, frame));
       return;
     }
     const id = selectedRef.current;
@@ -182,7 +214,7 @@ export function PreviewFrame({
     }
     const el = (tracked?.text ? findByText(section, tracked.text) : null) ?? section;
     trackedRef.current = { el, text: el === section ? null : (tracked?.text ?? null) };
-    onRectChangeRef.current(toRect(el));
+    onRectChangeRef.current(toRect(el, frame));
   }, []);
 
   // Apply html updates: in-place section swap when possible, full remount when structural
@@ -257,6 +289,36 @@ export function PreviewFrame({
       }
     };
 
+    // Product media gallery thumbnails: theme markup for real Shopify themes, driven entirely
+    // by media-gallery.js (customElements.define). The preview iframe never runs theme scripts
+    // (sandbox has no allow-scripts — see the class doc comment above), so that custom element
+    // never registers and clicking a thumbnail does nothing. Reproduce just enough of its
+    // setActiveMedia/setActiveThumbnail behavior to make clicks work in the preview:
+    //  - "thumbnail" layout: base.css hides every slide that isn't .is-active, so swapping the
+    //    class is enough.
+    //  - "thumbnail_slider" layout: every slide is display:block side by side in a scrolling
+    //    strip and .is-active doesn't affect visibility at all — the real JS instead scrolls
+    //    the strip so the target slide is the one in view.
+    // Both cases are handled here so it works regardless of which layout a section is set to.
+    const handleGalleryThumbnailClick = (e: MouseEvent) => {
+      const item = (e.target as HTMLElement).closest("[data-target]") as HTMLElement | null;
+      const gallery = item?.closest("media-gallery");
+      const mediaId = item?.getAttribute("data-target");
+      if (!item || !gallery || !mediaId) return;
+      const viewer = gallery.querySelector('[id^="GalleryViewer"]');
+      const activeMedia = Array.from(viewer?.querySelectorAll<HTMLElement>("[data-media-id]") ?? []).find(
+        (el) => el.getAttribute("data-media-id") === mediaId,
+      );
+      if (!activeMedia) return;
+      viewer?.querySelectorAll("[data-media-id]").forEach((el) => el.classList.remove("is-active"));
+      activeMedia.classList.add("is-active");
+      activeMedia.parentElement?.scrollTo({ left: activeMedia.offsetLeft, behavior: "smooth" });
+      gallery.querySelector('[id^="GalleryThumbnails"]')
+        ?.querySelectorAll("button")
+        .forEach((btn) => btn.removeAttribute("aria-current"));
+      item.querySelector("button")?.setAttribute("aria-current", "true");
+    };
+
     const handleClick = (e: MouseEvent) => {
       let node = e.target as HTMLElement | null;
       while (node && node !== doc.body) {
@@ -274,7 +336,7 @@ export function PreviewFrame({
             settingId,
             editable,
             binding,
-            rect: toRect(node),
+            rect: toRect(node, iframe.getBoundingClientRect()),
           });
           if (editable === "text" || editable === "richtext") {
             enableInlineEdit(node, sectionId, binding);
@@ -284,6 +346,7 @@ export function PreviewFrame({
         if (sectionEl) {
           const sectionId = sectionEl.getAttribute("data-sf-section-id")!;
           const sectionType = sectionEl.getAttribute("data-sf-section-type");
+          const frame = iframe.getBoundingClientRect();
 
           // No metadata — try to bind the clicked text to a setting by matching its
           // content against the section's JSON (docs/EDITOR-TOOLBARS.md).
@@ -292,11 +355,11 @@ export function PreviewFrame({
           const binding = textEl && text ? resolveTextRef.current(sectionId, text) : null;
           if (textEl && binding) {
             trackedRef.current = { el: textEl, text: text! };
-            onSelect({ sectionId, sectionType, settingId: binding.settingId, editable: "text", binding, rect: toRect(textEl) });
+            onSelect({ sectionId, sectionType, settingId: binding.settingId, editable: "text", binding, rect: toRect(textEl, frame) });
             enableInlineEdit(textEl, sectionId, binding);
           } else {
             trackedRef.current = { el: sectionEl, text: null };
-            onSelect({ sectionId, sectionType, settingId: null, editable: null, binding: null, rect: toRect(sectionEl) });
+            onSelect({ sectionId, sectionType, settingId: null, editable: null, binding: null, rect: toRect(sectionEl, frame) });
           }
           return;
         }
@@ -305,11 +368,38 @@ export function PreviewFrame({
     };
 
     const handleScroll = () => {
-      onRectChangeRef.current(trackedRef.current ? toRect(trackedRef.current.el) : null);
+      onRectChangeRef.current(
+        trackedRef.current ? toRect(trackedRef.current.el, iframeRef.current?.getBoundingClientRect()) : null,
+      );
     };
 
+    // Undo/redo: skipped while the key lands on a text field or the active inline edit — the
+    // browser's native contenteditable undo handles typing there instead of jumping the whole
+    // template back.
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const target = e.target as HTMLElement | null;
+      const isEditableFocus =
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (isEditableFocus) return;
+      if (key === "y") {
+        e.preventDefault();
+        onRedoRef.current();
+        return;
+      }
+      e.preventDefault();
+      if (e.shiftKey) onRedoRef.current();
+      else onUndoRef.current();
+    };
+
+    doc.addEventListener("click", handleGalleryThumbnailClick);
     doc.addEventListener("click", handleClick);
     doc.addEventListener("mouseover", handleOver);
+    doc.addEventListener("keydown", handleKeyDown);
     // Capture-phase so inner scroll containers report too, not just the document.
     doc.addEventListener("scroll", handleScroll, { capture: true, passive: true });
     iframe.contentWindow?.addEventListener("resize", handleScroll);

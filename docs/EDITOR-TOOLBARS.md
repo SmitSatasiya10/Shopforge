@@ -81,7 +81,10 @@ Product record via `PATCH /api/project/:id/product` (and local product state, wh
 re-renders the title everywhere it appears) instead of `configurationJson`. When the section
 holds exactly one `product_title` block, the binding anchors to it so the toolbar offers that
 block's own schema controls (size, alignment) — those writes go to the template as normal;
-only the text itself goes to the Product record. AI rewrite is declined with a notice.
+only the text itself goes to the Product record. AI rewrite works on it too, via its own
+`rewrite-product-title` endpoint ([lib/ai/title-rewriter.ts](../lib/ai/title-rewriter.ts))
+instead of `rewrite-section`'s catalog-scoped machinery — the result is written back to the
+Product record the same way a manual edit is.
 
 ### The floating toolbar
 
@@ -179,10 +182,33 @@ flowchart LR
   OPS --> SAVE[debounced PATCH configuration]
 ```
 
+## Undo / redo and the mobile preview toggle
+
+The header carries two more control groups now, both in
+[app/editor/[projectId]/page.tsx](../app/editor/[projectId]/page.tsx):
+
+- **Undo/redo** — `Ctrl`/`Cmd`+`Z` to undo, `Ctrl`/`Cmd`+`Shift`+`Z` or `Ctrl`+`Y` to redo (also
+  as toolbar buttons). Every commit to `configuration` or the product title snapshots the
+  prior state onto an in-memory history stack (`historyRef`, capped at 50 entries) before
+  applying the change; undo/redo pop that stack and go through the same `setConfiguration`/
+  `setProduct` path as everything else, so the existing debounced-save effects persist the
+  result normally — undoing and reloading the page doesn't come back. Edits within 700ms of
+  each other (dragging a slider, typing a sentence) coalesce onto the same history entry so
+  one undo reverts the whole gesture, not one keystroke. The shortcut is ignored while focus
+  is in an input, textarea, or contenteditable — the browser's native undo handles typing
+  there. Not implemented: undo history doesn't survive a page reload (it's in-memory only).
+- **Mobile preview toggle** (desktop/phone icons) — shrinks the preview `<iframe>` to a fixed
+  390px column instead of resizing the whole app; the theme's own responsive CSS reacts to
+  that narrower layout viewport the same way it would on a phone. Because the iframe no
+  longer necessarily fills its container, `PreviewFrame`'s `toRect()` folds the iframe's own
+  `getBoundingClientRect()` back into every selection rect — without that offset, the section/
+  text toolbars would still be positioned as if the iframe were full width.
+
 ## Deliberately not built yet
 
 - **Add a block** (the green "+ Add a block" in the reference) — needs a block palette UI
   and per-section default settings; next iteration.
 - **Font weight** — the toolbar supports it, but this theme's heading/text blocks expose no
   weight setting, so it never shows today.
-- **Undo history** — re-rolling the brush or re-rewriting is the current recovery path.
+- **Live device preview via QR code** — some competitors offer a "scan to preview on your
+  phone" panel backed by a public tunnel URL; out of scope here (no tunneling infrastructure).

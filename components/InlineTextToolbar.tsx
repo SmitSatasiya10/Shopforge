@@ -2,7 +2,7 @@
 
 import { Minus, Plus, Trash2, WandSparkles, X } from "lucide-react";
 import type { SelectionRect } from "./PreviewFrame";
-import type { TextControls } from "@/lib/editor/text-controls";
+import { sizeLabel, type TextControls } from "@/lib/editor/text-controls";
 
 interface InlineTextToolbarProps {
   rect: SelectionRect;
@@ -57,7 +57,6 @@ export function InlineTextToolbar({
   const top = rect.top > 56 ? rect.top - 48 : rect.top + rect.height + 8;
   const left = Math.max(8, rect.left);
 
-  const sizeValue = controls.size ? String(values[controls.size.settingId] ?? "") : "";
   const alignValue = controls.align ? String(values[controls.align.settingId] ?? "") : "";
   const weightValue = controls.weight ? String(values[controls.weight.settingId] ?? "") : "";
   const colorValue = controls.color ? String(values[controls.color.settingId] ?? "#000000") : "#000000";
@@ -106,7 +105,9 @@ export function InlineTextToolbar({
           <button onClick={() => onStepSize(-1)} disabled={busy} aria-label="Smaller" className="grid h-6 w-6 place-items-center rounded hover:bg-neutral-700 disabled:opacity-40">
             <Minus className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
-          <span className="min-w-6 text-center font-mono text-[11px] text-neutral-300 uppercase">{sizeValue || "–"}</span>
+          <span className="min-w-8 text-center font-mono text-[11px] text-neutral-300 uppercase">
+            {sizeLabel(controls.size, values[controls.size.settingId])}
+          </span>
           <button onClick={() => onStepSize(1)} disabled={busy} aria-label="Larger" className="grid h-6 w-6 place-items-center rounded hover:bg-neutral-700 disabled:opacity-40">
             <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>

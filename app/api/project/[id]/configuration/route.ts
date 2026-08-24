@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { recordCheckpoint } from "@/lib/history/checkpoint";
 
 // PATCH /api/project/:id/configuration — { configuration } -> replaces configurationJson.
 // Last-write-wins for this phase; no lockVersion/CAS (deferred, see plan's Setup Dependency
@@ -15,6 +16,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const project = await prisma.project.update({
       where: { id },
       data: { configurationJson: body.configuration },
+    });
+    const product = await prisma.product.findUnique({
+      where: { id: project.productId },
+      select: { title: true },
+    });
+    await recordCheckpoint(id, {
+      configurationJson: body.configuration,
+      productTitle: product?.title ?? null,
     });
     return NextResponse.json({ project });
   } catch {
