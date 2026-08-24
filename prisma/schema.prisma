@@ -67,6 +67,8 @@ model Project {
   marketingAngleJson Json? // selected marketing angle: { id, title, description, selectionType: "generated" | "ai" }
   selectedImagesJson Json? // selected product images from the wizard's Product Images step: { images: ImageCandidate[] } (max 5, order = gallery order, first = featured). Never overwrites Product.images.
 
+  versions ProjectVersion[]
+
   shopifyStoreId          String?
   shopifyStore            ShopifyStore? @relation(fields: [shopifyStoreId], references: [id])
   installedThemeShopifyId String? // Shopify theme GID, set after the first successful themeCreate; reused on later publishes
@@ -86,4 +88,21 @@ model PublishRecord {
   errorMessage   String?
 
   createdAt DateTime @default(now())
+}
+
+// A checkpoint of the editor's "recent changes" history — a whole-state snapshot, batched by
+// edit activity (see lib/history/checkpoint.ts), not a field-level diff. Shown in the editor's
+// history panel and used to restore the project to an earlier point in time.
+model ProjectVersion {
+  id                String   @id @default(uuid())
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  configurationJson Json
+  productTitle      String?
+  editCount         Int      @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, updatedAt])
 }

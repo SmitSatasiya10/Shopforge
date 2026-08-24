@@ -91,8 +91,8 @@ describe("rendering the real Base Theme", () => {
   }, 60_000);
 
   it("renders theme blocks, converting decimal prices to the cents Shopify's Liquid expects", async () => {
-    // The theme's own product.json configures main-product with only a title block, so the
-    // price path is exercised with an explicit price block rather than assumed.
+    // This test builds its own minimal template rather than loading templates/product.json,
+    // so the price path is exercised with an explicit price block rather than assumed.
     const template: ShopifyTemplate = {
       sections: {
         main: {

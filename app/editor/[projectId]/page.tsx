@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { AlertCircle, Monitor, Redo2, Smartphone, Undo2 } from "lucide-react";
 import { PreviewFrame, SelectInfo, SelectionRect } from "@/components/PreviewFrame";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { AiRewritePopover } from "@/components/AiRewritePopover";
 import { SectionToolbar } from "@/components/SectionToolbar";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { HistoryPanel } from "@/components/HistoryPanel";
 import { InlineTextToolbar } from "@/components/InlineTextToolbar";
 import { renderTemplate } from "@/lib/preview/template-renderer";
 import { createFetchTemplateReader } from "@/lib/preview/template-loader";
@@ -38,6 +41,16 @@ import { applyAlign, applyColor, cycleWeight, findTextControls, stepSize } from 
 import type { ProductDTO } from "@/lib/product/db-mapping";
 import { toNormalizedProduct } from "@/lib/product/db-mapping";
 
+interface Snapshot {
+  configuration: StoreConfiguration;
+  product: ProductDTO | null;
+}
+
+const HISTORY_LIMIT = 50;
+// Edits within this window of the previous one ride on the same undo step, so dragging a
+// slider or typing a sentence undoes as one action instead of one keystroke at a time.
+const HISTORY_COALESCE_MS = 700;
+
 // Builder/editor chrome. Selection comes from the iframe via PreviewFrame; edits go through
 // the section toolbar (magic brush / AI rewrite / move / delete), the inline text toolbar,
 // or the Inspector — and every one of them updates the template JSON, never the DOM
@@ -61,7 +74,16 @@ export default function EditorPage() {
   const [showRewrite, setShowRewrite] = useState(false);
   const [generateImages, setGenerateImages] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Which delete is awaiting confirmation in the ConfirmDialog (replaces window.confirm).
+  const [confirmDelete, setConfirmDelete] = useState<"section" | "block" | null>(null);
   const [previewHeight, setPreviewHeight] = useState(600);
+  const [viewport, setViewport] = useState<"desktop" | "mobile">("desktop");
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  // Transient toast for the inline toolbar's size stepper hitting either end of the scale —
+  // separate from `notice` (a persistent banner for load/save errors), since this is a brief,
+  // self-dismissing hint rather than something the user needs to act on or acknowledge.
+  const [sizeLimitNotice, setSizeLimitNotice] = useState<string | null>(null);
   const [shopifyShopDomain, setShopifyShopDomain] = useState<string | null>(null);
   const [shopInput, setShopInput] = useState("");
   const [publishing, setPublishing] = useState(false);
@@ -70,18 +92,35 @@ export default function EditorPage() {
 
   const readTemplate = useMemo(() => createFetchTemplateReader(), []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const productSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The initial load's setProduct isn't a user edit — skip the debounced save it would
+  // otherwise trigger. Also flipped true right before setProduct when the server already
+  // persisted the new title itself (AI rewrite), so the client doesn't re-save the same value.
+  const skipNextProductSave = useRef(true);
   const previewRef = useRef<HTMLDivElement>(null);
   const paletteIndex = useRef(-1);
+
+  // Undo/history: `configRef`/`productRef` mirror the latest state synchronously (updated at
+  // the same point as the setState calls, not via a separate effect) so a burst of edits
+  // never reads a stale "current" value. History itself lives in a ref — it doesn't need to
+  // re-render anything; `canUndo`/`canRedo` are the only reactive parts of it.
+  const configRef = useRef<StoreConfiguration | null>(null);
+  const productRef = useRef<ProductDTO | null>(null);
+  const historyRef = useRef<{ past: Snapshot[]; future: Snapshot[] }>({ past: [], future: [] });
+  const lastPushAtRef = useRef(0);
 
   useEffect(() => {
     fetch(`/api/project/${projectId}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) return setLoadError(data.error);
+        productRef.current = data.product;
         setProduct(data.product);
         setShopifyShopDomain(data.project.shopifyShopDomain ?? null);
         try {
-          setConfiguration(parseConfiguration(data.project.configurationJson));
+          const parsed = parseConfiguration(data.project.configurationJson);
+          configRef.current = parsed;
+          setConfiguration(parsed);
         } catch {
           setLoadError("This project's configuration predates the current theme. Regenerate it.");
         }
@@ -116,6 +155,12 @@ export default function EditorPage() {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!sizeLimitNotice) return;
+    const timer = setTimeout(() => setSizeLimitNotice(null), 2200);
+    return () => clearTimeout(timer);
+  }, [sizeLimitNotice]);
 
   // Always a fresh render on every template/product change — never a DOM patch.
   useEffect(() => {
@@ -153,6 +198,35 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configuration]);
 
+  // Debounced persistence for the product title — mirrors the configuration save above, so
+  // inline renames, AI rewrites, and undo/redo of the title all end up saved the same way.
+  useEffect(() => {
+    if (skipNextProductSave.current) {
+      skipNextProductSave.current = false;
+      return;
+    }
+    if (!product) return;
+    queueMicrotask(() => setSaveState("saving"));
+    if (productSaveTimer.current) clearTimeout(productSaveTimer.current);
+    const title = product.title;
+    productSaveTimer.current = setTimeout(() => {
+      fetch(`/api/project/${projectId}/product`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title }),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error();
+          setSaveState("saved");
+        })
+        .catch(() => setNotice("Could not save the product name."));
+    }, 500);
+    return () => {
+      if (productSaveTimer.current) clearTimeout(productSaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.title]);
+
   // The clicked section's schema drives the Inspector. The loaded schema is stored with the
   // type it belongs to, so a stale result for a previously-selected section is ignored by
   // derivation rather than by clearing state on every selection change.
@@ -173,8 +247,9 @@ export default function EditorPage() {
   const currentTemplate = configuration?.templates[page] ?? null;
   const selectedSection = selection?.sectionId ? currentTemplate?.sections[selection.sectionId] : undefined;
   const binding = selection?.binding ?? null;
-  // Product-name text binds to the Product record, not a template setting — no schema
-  // controls or AI rewrite apply to it (docs/EDITOR-TOOLBARS.md).
+  // Product-name text binds to the Product record, not a template setting — the schema
+  // controls that anchor to a real product_title block still apply, but AI rewrite goes
+  // through its own endpoint instead of rewrite-section (docs/EDITOR-TOOLBARS.md).
   const isProductTitleBinding = binding?.settingId === PRODUCT_TITLE_SETTING;
   const boundNode =
     selectedSection && binding ? getBlockAt(selectedSection, binding.blockPath) : undefined;
@@ -217,18 +292,128 @@ export default function EditorPage() {
     return { ...defaults, ...(boundNode?.settings ?? {}) };
   }, [boundSettingDefs, boundNode]);
 
+  // Records the state *before* an edit, so undo can restore it. Rapid-fire edits (dragging a
+  // slider, typing a sentence) land within HISTORY_COALESCE_MS of each other and are folded
+  // into the same undo step instead of each getting their own.
+  const pushHistory = useCallback(() => {
+    if (!configRef.current) return;
+    const now = Date.now();
+    const h = historyRef.current;
+    if (h.past.length > 0 && now - lastPushAtRef.current < HISTORY_COALESCE_MS) {
+      lastPushAtRef.current = now;
+      return;
+    }
+    lastPushAtRef.current = now;
+    h.past.push({ configuration: configRef.current, product: productRef.current });
+    if (h.past.length > HISTORY_LIMIT) h.past.shift();
+    h.future = [];
+    setCanUndo(true);
+    setCanRedo(false);
+  }, []);
+
+  const commitConfiguration = useCallback(
+    (next: StoreConfiguration) => {
+      pushHistory();
+      configRef.current = next;
+      setConfiguration(next);
+    },
+    [pushHistory],
+  );
+
+  const commitProduct = useCallback(
+    (next: ProductDTO) => {
+      pushHistory();
+      productRef.current = next;
+      setProduct(next);
+    },
+    [pushHistory],
+  );
+
+  const undo = useCallback(() => {
+    const h = historyRef.current;
+    if (!h.past.length || !configRef.current) return;
+    const snap = h.past.pop()!;
+    h.future.push({ configuration: configRef.current, product: productRef.current });
+    configRef.current = snap.configuration;
+    productRef.current = snap.product;
+    setConfiguration(snap.configuration);
+    setProduct(snap.product);
+    setSelection(null);
+    setShowRewrite(false);
+    lastPushAtRef.current = 0; // the next edit starts a fresh step, not coalesced with this jump
+    setCanUndo(h.past.length > 0);
+    setCanRedo(true);
+  }, []);
+
+  const redo = useCallback(() => {
+    const h = historyRef.current;
+    if (!h.future.length || !configRef.current) return;
+    const snap = h.future.pop()!;
+    h.past.push({ configuration: configRef.current, product: productRef.current });
+    configRef.current = snap.configuration;
+    productRef.current = snap.product;
+    setConfiguration(snap.configuration);
+    setProduct(snap.product);
+    setSelection(null);
+    setShowRewrite(false);
+    lastPushAtRef.current = 0;
+    setCanRedo(h.future.length > 0);
+    setCanUndo(true);
+  }, []);
+
+  // Applies a checkpoint picked from the "recent changes" history panel. Goes through the
+  // normal commit path (not a separate restore mechanism) so it autosaves, records its own
+  // checkpoint afterward, and is itself undoable like any other edit.
+  const restoreFromHistory = useCallback(
+    ({ configuration: restored, productTitle }: { configuration: StoreConfiguration; productTitle: string | null }) => {
+      commitConfiguration(restored);
+      if (productTitle && productRef.current && productTitle !== productRef.current.title) {
+        commitProduct({ ...productRef.current, title: productTitle });
+      }
+      setSelection(null);
+      setShowRewrite(false);
+    },
+    [commitConfiguration, commitProduct],
+  );
+
+  // Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z or Ctrl+Y to redo — skipped while focus is in a text
+  // input, textarea, or contenteditable (the inline preview text, the AI prompt box) so the
+  // browser's own native undo handles typing there instead of jumping the whole template back.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const active = document.activeElement;
+      const isEditableFocus =
+        active instanceof HTMLElement &&
+        (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (isEditableFocus) return;
+      if (key === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [undo, redo]);
+
   /** Every mutation of the current page's template funnels through here. */
   const updateTemplate = useCallback(
     (mutate: (template: NonNullable<typeof currentTemplate>) => NonNullable<typeof currentTemplate>) => {
-      setConfiguration((prev) => {
-        if (!prev) return prev;
-        const template = prev.templates[page];
-        const next = mutate(template);
-        if (next === template) return prev;
-        return { ...prev, templates: { ...prev.templates, [page]: next } };
-      });
+      const prev = configRef.current;
+      if (!prev) return;
+      const template = prev.templates[page];
+      const next = mutate(template);
+      if (next === template) return;
+      commitConfiguration({ ...prev, templates: { ...prev.templates, [page]: next } });
     },
-    [page],
+    [page, commitConfiguration],
   );
 
   const updateSetting = useCallback(
@@ -256,7 +441,7 @@ export default function EditorPage() {
         setNotice(data.error ?? "Generation failed");
         return;
       }
-      setConfiguration(parseConfiguration(data.project.configurationJson));
+      commitConfiguration(parseConfiguration(data.project.configurationJson));
       const g = data.generation;
       setNotice(
         `Generated with ${g.model}: ${g.index.sections} homepage sections, ${g.product.sections} product-page sections. ` +
@@ -267,7 +452,7 @@ export default function EditorPage() {
     } finally {
       setGenerating(false);
     }
-  }, [projectId, generateImages]);
+  }, [projectId, generateImages, commitConfiguration]);
 
   // Installs/reuses the project's Shopify theme, pushes the current Store Configuration onto
   // it, and publishes it live (lib/shopify/publish.ts). Only reachable once shopifyShopDomain
@@ -303,6 +488,25 @@ export default function EditorPage() {
       setRewriting(true);
       setNotice(null);
       try {
+        // The product title is product data, not a template setting (docs/EDITOR-TOOLBARS.md)
+        // — it has its own AI endpoint and persists to the Product record, not the template.
+        if (isProductTitleBinding) {
+          const res = await fetch(`/api/project/${projectId}/rewrite-product-title`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(options),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setNotice(data.error ?? "Rewrite failed");
+            return;
+          }
+          // The server already persisted this title — skip the debounced re-save it would
+          // otherwise trigger.
+          skipNextProductSave.current = true;
+          commitProduct(data.product);
+          return;
+        }
         const res = await fetch(`/api/project/${projectId}/rewrite-section`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -318,47 +522,41 @@ export default function EditorPage() {
           setNotice(data.error ?? "Rewrite failed");
           return;
         }
-        setConfiguration(parseConfiguration(data.project.configurationJson));
+        commitConfiguration(parseConfiguration(data.project.configurationJson));
       } catch {
         setNotice("Rewrite failed");
       } finally {
         setRewriting(false);
       }
     },
-    [projectId, page, selectedSectionId, binding],
+    [projectId, page, selectedSectionId, binding, isProductTitleBinding, commitConfiguration, commitProduct],
   );
 
   // Magic brush: the section's own schema names its color settings; a random curated
   // palette (never the same one twice in a row) is written into them (docs/EDITOR-TOOLBARS.md).
+  // No notice banner here: the recolored preview is its own feedback, and the notice bar
+  // sits in normal document flow above the preview — showing/hiding it on every click shifted
+  // the whole preview down and back up, reading as a blink on the section itself.
   const magicBrush = useCallback(async () => {
     if (!selectedSectionId || !selectedSectionType) return;
     const sectionSchema = await loadSectionSchema(readTemplate, selectedSectionType);
     const index = rollPalette(paletteIndex.current);
     const palette = PALETTES[index];
-    const result = { outcome: "none" as "palette" | "scheme" | "none", schemeLabel: "" };
+    let paletteApplied = false;
     updateTemplate((template) => {
       const section = template.sections[selectedSectionId];
       if (!section) return template;
       const brushed = applyMagicBrush(section, sectionSchema, palette);
       if (brushed !== section) {
-        result.outcome = "palette";
+        paletteApplied = true;
         return replaceSection(template, selectedSectionId, brushed);
       }
       // No custom color settings — fall back to stepping the section's color_scheme select.
       const cycled = cycleColorScheme(section, sectionSchema);
       if (!cycled) return template;
-      result.outcome = "scheme";
-      result.schemeLabel = cycled.label;
       return replaceSection(template, selectedSectionId, cycled.section);
     });
-    if (result.outcome === "palette") {
-      paletteIndex.current = index;
-      setNotice(`Magic brush: "${palette.name}" palette applied. Click again for another.`);
-    } else if (result.outcome === "scheme") {
-      setNotice(`Magic brush: "${result.schemeLabel}" color scheme applied. Click again for the next.`);
-    } else {
-      setNotice("This section has no brushable color settings.");
-    }
+    if (paletteApplied) paletteIndex.current = index;
   }, [selectedSectionId, selectedSectionType, readTemplate, updateTemplate]);
 
   const handleMove = useCallback(
@@ -371,7 +569,6 @@ export default function EditorPage() {
 
   const handleDeleteSection = useCallback(() => {
     if (!selectedSectionId) return;
-    if (!window.confirm("Delete this section?")) return;
     updateTemplate((template) => removeSection(template, selectedSectionId));
     setSelection(null);
     setShowRewrite(false);
@@ -379,7 +576,6 @@ export default function EditorPage() {
 
   const handleDeleteBlock = useCallback(() => {
     if (!selectedSectionId || !binding || binding.blockPath.length === 0) return;
-    if (!window.confirm("Delete this block?")) return;
     updateTemplate((template) => {
       const section = template.sections[selectedSectionId];
       if (!section) return template;
@@ -430,19 +626,10 @@ export default function EditorPage() {
     (sectionId: string, textBinding: TextBinding, value: string) => {
       if (textBinding.settingId === PRODUCT_TITLE_SETTING) {
         // Renaming the product: update local state (re-renders the preview everywhere the
-        // title appears) and persist to the Product record, not the template JSON.
-        setProduct((prev) => (prev ? { ...prev, title: value } : prev));
-        setSaveState("saving");
-        fetch(`/api/project/${projectId}/product`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ title: value }),
-        })
-          .then((res) => {
-            if (!res.ok) throw new Error();
-            setSaveState("saved");
-          })
-          .catch(() => setNotice("Could not save the product name."));
+        // title appears); the debounced effect above persists it to the Product record, not
+        // the template JSON.
+        if (!productRef.current) return;
+        commitProduct({ ...productRef.current, title: value });
         return;
       }
       updateTemplate((template) => {
@@ -455,7 +642,7 @@ export default function EditorPage() {
         );
       });
     },
-    [updateTemplate, projectId],
+    [updateTemplate, commitProduct],
   );
 
   if (loadError) return <p className="flex-1 bg-white p-8 text-sm text-red-600">{loadError}</p>;
@@ -490,6 +677,48 @@ export default function EditorPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="flex items-center gap-0.5 rounded border border-neutral-200 p-0.5">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+              className="rounded p-1.5 text-neutral-600 hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Shift+Z)"
+              className="rounded p-1.5 text-neutral-600 hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <HistoryPanel projectId={projectId} onRestore={restoreFromHistory} />
+
+          <div className="flex items-center gap-0.5 rounded border border-neutral-200 p-0.5">
+            <button
+              onClick={() => setViewport("desktop")}
+              title="Desktop preview"
+              className={`rounded p-1.5 ${
+                viewport === "desktop" ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              <Monitor className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => setViewport("mobile")}
+              title="Mobile preview"
+              className={`rounded p-1.5 ${
+                viewport === "mobile" ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
+              }`}
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
           <label className="flex items-center gap-1.5 text-xs text-neutral-600" title="When off, image settings are filled from the imported product's own photos and no image model is called.">
             <input
               type="checkbox"
@@ -567,15 +796,24 @@ export default function EditorPage() {
       ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div ref={previewRef} className="relative min-h-0 min-w-0 flex-1">
-          <PreviewFrame
-            html={html}
-            selectedSectionId={selection?.sectionId ?? null}
-            onSelect={handleSelect}
-            onTextCommit={handleTextCommit}
-            resolveText={resolveText}
-            onRectChange={handleRectChange}
-          />
+        <div
+          ref={previewRef}
+          className={`relative min-h-0 min-w-0 flex-1 ${
+            viewport === "mobile" ? "flex justify-center overflow-auto bg-neutral-200" : "overflow-hidden"
+          }`}
+        >
+          <div className={viewport === "mobile" ? "h-full w-97.5 shrink-0 border-x border-neutral-300 bg-white" : "h-full w-full"}>
+            <PreviewFrame
+              html={html}
+              selectedSectionId={selection?.sectionId ?? null}
+              onSelect={handleSelect}
+              onTextCommit={handleTextCommit}
+              resolveText={resolveText}
+              onRectChange={handleRectChange}
+              onUndo={undo}
+              onRedo={redo}
+            />
+          </div>
 
           {selection?.sectionId && !binding ? (
             <SectionToolbar
@@ -586,7 +824,7 @@ export default function EditorPage() {
               onRewrite={() => setShowRewrite((v) => !v)}
               onEditSection={() => setPanelOpen(true)}
               onMove={handleMove}
-              onDelete={handleDeleteSection}
+              onDelete={() => setConfirmDelete("section")}
             />
           ) : null}
 
@@ -597,22 +835,24 @@ export default function EditorPage() {
               values={boundValues}
               busy={rewriting}
               canDeleteBlock={binding.blockPath.length > 0}
-              onRewrite={() =>
-                isProductTitleBinding
-                  ? setNotice("The product name is product data — type the new name directly into the title.")
-                  : setShowRewrite(true)
-              }
-              onStepSize={(direction) =>
-                textControls.size &&
-                writeBoundSettings(stepSize(textControls.size, boundValues[textControls.size.settingId], direction))
-              }
+              onRewrite={() => setShowRewrite(true)}
+              onStepSize={(direction) => {
+                if (!textControls.size) return;
+                const patch = stepSize(textControls.size, boundValues[textControls.size.settingId], direction);
+                if (!patch) {
+                  setSizeLimitNotice(direction === 1 ? "Cannot make text bigger" : "Cannot make text smaller");
+                  return;
+                }
+                setSizeLimitNotice(null);
+                writeBoundSettings(patch);
+              }}
               onCycleWeight={() =>
                 textControls.weight &&
                 writeBoundSettings(cycleWeight(textControls.weight, boundValues[textControls.weight.settingId]))
               }
               onAlign={(value) => textControls.align && writeBoundSettings(applyAlign(textControls.align, value))}
               onPickColor={(hex) => textControls.color && writeBoundSettings(applyColor(textControls.color, hex))}
-              onDeleteBlock={handleDeleteBlock}
+              onDeleteBlock={() => setConfirmDelete("block")}
               onClose={() => {
                 setSelection(null);
                 setShowRewrite(false);
@@ -623,7 +863,11 @@ export default function EditorPage() {
           {selection?.sectionId && showRewrite ? (
             <AiRewritePopover
               sectionLabel={
-                binding ? `the "${binding.settingId}" text` : (selection.sectionType ?? "this section")
+                isProductTitleBinding
+                  ? "the product title"
+                  : binding
+                    ? `the "${binding.settingId}" text`
+                    : (selection.sectionType ?? "this section")
               }
               rect={selectionRect}
               containerHeight={previewHeight}
@@ -631,6 +875,15 @@ export default function EditorPage() {
               onSubmit={rewriteSection}
               onClose={() => setShowRewrite(false)}
             />
+          ) : null}
+
+          {sizeLimitNotice ? (
+            <div className="absolute right-4 bottom-4 z-30 flex items-center gap-2 rounded-full bg-red-50 py-2 pr-4 pl-2 text-xs font-medium text-red-700 shadow-lg ring-1 ring-red-200">
+              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-red-500 text-white">
+                <AlertCircle className="h-3 w-3" strokeWidth={2.5} />
+              </span>
+              {sizeLimitNotice}
+            </div>
           ) : null}
         </div>
         {panelOpen ? (
@@ -657,6 +910,23 @@ export default function EditorPage() {
           </button>
         )}
       </div>
+
+      {confirmDelete ? (
+        <ConfirmDialog
+          title={confirmDelete === "section" ? "Delete this section?" : "Delete this block?"}
+          message={
+            confirmDelete === "section"
+              ? "The section and everything in it will be removed from this page."
+              : "This block will be removed from its section."
+          }
+          confirmLabel="Delete"
+          onConfirm={() => {
+            (confirmDelete === "section" ? handleDeleteSection : handleDeleteBlock)();
+            setConfirmDelete(null);
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      ) : null}
     </div>
   );
 }

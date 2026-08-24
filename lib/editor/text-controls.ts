@@ -120,6 +120,38 @@ export function findTextControls(defs: ShopifySettingDef[] | undefined): TextCon
   return controls;
 }
 
+/**
+ * Generic small-to-large scale for the inline toolbar's size display — friendlier than a
+ * theme's own raw option value (h0/h1/h2/h3, meaningless to a merchant) or a bare pixel
+ * number, and independent of whatever wording a given block's schema happens to use.
+ */
+const SIZE_SCALE = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
+
+/**
+ * Friendly display label for the toolbar's size control. For a `select`, schema options are
+ * already documented as ascending visual size (see `SizeControl.options`), so position maps
+ * directly onto the scale — this theme's actual heading-size options (Extra small/Small/
+ * Medium/Large) land on exactly XS/S/M/L. For a `range`, there's no discrete step a theme
+ * names, so the continuous min..max domain is bucketed into the same scale by where the
+ * value falls. Falls back to the raw stored value when it can't be placed (unset, or more
+ * discrete options than the scale covers).
+ */
+export function sizeLabel(control: SizeControl, currentValue: unknown): string {
+  if (control.kind === "select") {
+    const options = control.options ?? [];
+    const index = options.indexOf(String(currentValue));
+    if (index === -1 || index >= SIZE_SCALE.length) return String(currentValue ?? "–");
+    return SIZE_SCALE[index];
+  }
+  const min = control.min ?? 0;
+  const max = control.max ?? min + 1;
+  const value = typeof currentValue === "number" ? currentValue : Number(currentValue);
+  if (!Number.isFinite(value) || max <= min) return String(currentValue ?? "–");
+  const fraction = Math.min(1, Math.max(0, (value - min) / (max - min)));
+  const bucket = Math.round(fraction * (SIZE_SCALE.length - 1));
+  return SIZE_SCALE[bucket];
+}
+
 /** The setting writes for one −/+ step. Returns null at the end of the scale. */
 export function stepSize(
   control: SizeControl,

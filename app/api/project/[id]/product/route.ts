@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { toProductDTO } from "@/lib/product/db-mapping";
+import { recordCheckpoint } from "@/lib/history/checkpoint";
 
 // PATCH /api/project/:id/product — { title } -> renames the imported product. The product
 // page's <h1> renders `{{ product.title }}` (product data, not a template setting), so the
@@ -13,12 +14,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Provide { title: string }" }, { status: 400 });
   }
 
-  const project = await prisma.project.findUnique({ where: { id }, select: { productId: true } });
+  const project = await prisma.project.findUnique({
+    where: { id },
+    select: { productId: true, configurationJson: true },
+  });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const product = await prisma.product.update({
     where: { id: project.productId },
     data: { title },
+  });
+  await recordCheckpoint(id, {
+    configurationJson: project.configurationJson,
+    productTitle: title,
   });
   return NextResponse.json({ product: toProductDTO(product) });
 }
