@@ -108,7 +108,11 @@ async function assertHostnameIsPublic(hostname: string): Promise<void> {
  * hostname re-checked against the SSRF rules above before being followed, so a redirect
  * can't be used to smuggle a request to a private address past the initial check.
  */
-async function fetchWithTimeout(url: string, headers: Record<string, string>): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  headers: Record<string, string>,
+  method: "GET" | "HEAD" = "GET",
+): Promise<Response> {
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const parsed = parseProductUrl(current);
@@ -117,6 +121,7 @@ async function fetchWithTimeout(url: string, headers: Record<string, string>): P
     let res: Response;
     try {
       res = await fetch(parsed.toString(), {
+        method,
         headers,
         signal: withTimeout(undefined, FETCH_TIMEOUT_MS),
         redirect: "manual",
@@ -209,6 +214,32 @@ export async function fetchJsonWithLimits(url: string): Promise<unknown | null> 
     return JSON.parse(text);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Checks that a candidate image URL is a real, reachable image before it's ever shown to a
+ * merchant or persisted (shopforge-personalization-image-selection-plan.md §12: "image URL is
+ * reachable or usable"). A HEAD request through the same SSRF-safe fetch used for product
+ * pages, checking only the status and content-type — the image bytes themselves are never
+ * downloaded here. Never throws; an unreachable host, a non-2xx response, a host a HEAD
+ * request can't reach, or a non-image content-type are all just "not valid" rather than an
+ * error, since a broken/wrong-typed candidate should be silently dropped, not surfaced.
+ */
+export async function validateImageUrl(url: string): Promise<boolean> {
+  let parsed: URL;
+  try {
+    parsed = parseProductUrl(url);
+  } catch {
+    return false;
+  }
+  try {
+    const res = await fetchWithTimeout(parsed.toString(), { "User-Agent": USER_AGENT, Accept: "image/*" }, "HEAD");
+    if (!res.ok) return false;
+    const contentType = res.headers.get("content-type") ?? "";
+    return contentType.toLowerCase().startsWith("image/");
+  } catch {
+    return false;
   }
 }
 

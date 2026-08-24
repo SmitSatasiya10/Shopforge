@@ -27,7 +27,11 @@ export function loadAiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
     baseUrl: overrides.baseUrl ?? process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
     generateImages:
       overrides.generateImages ?? envFlag(process.env.SHOPFORGE_GENERATE_IMAGES, false),
-    imageModel: overrides.imageModel ?? process.env.OPENROUTER_IMAGE_MODEL ?? "openai/gpt-image-1",
+    // openai/gpt-image-1 is OpenAI's own Images API model, not an OpenRouter chat-completions
+    // image-output model — requesting it here 404s ("No endpoints found that support the
+    // requested output modalities"), verified live. google/gemini-2.5-flash-image is a real
+    // OpenRouter chat-completions image-output model, verified live to return a usable image.
+    imageModel: overrides.imageModel ?? process.env.OPENROUTER_IMAGE_MODEL ?? "google/gemini-2.5-flash-image",
   };
 }
 

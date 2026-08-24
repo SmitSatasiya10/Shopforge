@@ -97,6 +97,18 @@ describe("the image toggle", () => {
     expect(tpl.sections.hero.blocks!["img-1"].settings.image).toBe("https://cdn.example.com/a.jpg");
   });
 
+  it("applies a data: URI at most once, leaving slots that would repeat it empty", () => {
+    const tpl = template();
+    const dataUrl = "data:image/png;base64,AAAA";
+    const filled = applyProductImages(
+      collectImageTargets(tpl, sections, blocks),
+      { ...product, images: [{ url: dataUrl, altText: null }] },
+    );
+    expect(filled).toBe(1);
+    expect(tpl.sections.hero.settings.image).toBe(dataUrl);
+    expect(tpl.sections.hero.blocks!["img-1"].settings.image).toBe("");
+  });
+
   it("leaves image settings empty when the product has no photos at all", () => {
     const tpl = template();
     const filled = applyProductImages(

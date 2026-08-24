@@ -89,12 +89,30 @@ export function collectImageTargets(
   return targets;
 }
 
-/** Toggle OFF: fill from the product's own images, cycling if there are more slots than photos. */
+/**
+ * Toggle OFF: fill from the product's own images, cycling if there are more slots than
+ * photos. A `data:` URI embeds the whole image inline — cycling one across many slots (as
+ * happens whenever there are fewer photos than image-valued settings) would multiply its
+ * size by the slot count. Harmless for a short CDN URL, but an AI-generated photo (the
+ * wizard's Product Images step can select one; a real product photo never is one) can be
+ * several hundred KB to a few MB, so each `data:` URI is applied at most once — a slot that
+ * would have repeated one is left empty rather than ballooning the stored configuration.
+ */
 export function applyProductImages(targets: ImageTarget[], product: NormalizedProduct | null): number {
   const urls = product?.images.map((i) => i.url).filter(Boolean) ?? [];
   if (urls.length === 0) return 0;
-  targets.forEach((target, i) => target.apply(urls[i % urls.length]));
-  return targets.length;
+  const usedDataUrls = new Set<string>();
+  let filled = 0;
+  targets.forEach((target, i) => {
+    const url = urls[i % urls.length];
+    if (url.startsWith("data:")) {
+      if (usedDataUrls.has(url)) return;
+      usedDataUrls.add(url);
+    }
+    target.apply(url);
+    filled++;
+  });
+  return filled;
 }
 
 export interface GeneratedImage {
@@ -150,7 +168,8 @@ function buildImagePrompt(target: ImageTarget, product: NormalizedProduct | null
   );
 }
 
-async function requestImage(
+/** Exported so other product-specific image generators (lib/ai/product-image-generator.ts) reuse the same OpenRouter call. */
+export async function requestImage(
   prompt: string,
   config: AiConfig,
   signal?: AbortSignal,

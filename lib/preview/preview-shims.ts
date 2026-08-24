@@ -71,7 +71,31 @@ function injectPreviewStyles(html: string): string {
     : `${style}${html}`;
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#34;": '"',
+  "&#39;": "'",
+  "&amp;": "&",
+};
+
+/**
+ * The product gallery's thumbnail list (snippets/product-media-gallery.liquid) pipes its
+ * `<img>` markup through an extra `| escape` on top of `image_tag`'s own escaping — real Dawn
+ * source, not a Shopforge edit. On a live storefront the theme's own JavaScript reads that
+ * escaped text back out and injects it as the real thumbnail image on load; with no
+ * JavaScript running, the escaped markup is left showing as literal `&lt;img ...&gt;` text
+ * instead of an image. This reproduces exactly that JS step: decode the escaped tag back into
+ * real markup so the thumbnail renders like it does on a live storefront.
+ */
+function unescapeThumbnailImages(html: string): string {
+  return html.replace(/&lt;img\b[\s\S]*?&gt;/g, (escaped) =>
+    escaped.replace(/&lt;|&gt;|&quot;|&#34;|&#39;|&amp;/g, (entity) => HTML_ENTITIES[entity]),
+  );
+}
+
 /** Applies every preview shim to a fully rendered page. */
 export function applyPreviewShims(html: string): string {
-  return injectPreviewStyles(applyJsClass(html));
+  return injectPreviewStyles(applyJsClass(unescapeThumbnailImages(html)));
 }
