@@ -158,6 +158,10 @@ export async function generateAngleOptions(
   const raw = await chat({
     config,
     json: true,
+    // Four short cards (a title + one sentence each) — nowhere near chat()'s 16000 default,
+    // which exists for generateTemplate()'s full-page output. A right-sized ceiling costs
+    // less and is less likely to be rejected outright by an account's remaining budget.
+    maxTokens: 2000,
     signal: options.signal,
     messages: buildAngleMessages(options.product, options.persona, options.language),
   });

@@ -84,6 +84,11 @@ export default function EditorPage() {
   // separate from `notice` (a persistent banner for load/save errors), since this is a brief,
   // self-dismissing hint rather than something the user needs to act on or acknowledge.
   const [sizeLimitNotice, setSizeLimitNotice] = useState<string | null>(null);
+  const [shopifyShopDomain, setShopifyShopDomain] = useState<string | null>(null);
+  const [shopInput, setShopInput] = useState("");
+  const [publishing, setPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState<{ storeUrl: string } | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   const readTemplate = useMemo(() => createFetchTemplateReader(), []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -111,6 +116,7 @@ export default function EditorPage() {
         if (data.error) return setLoadError(data.error);
         productRef.current = data.product;
         setProduct(data.product);
+        setShopifyShopDomain(data.project.shopifyShopDomain ?? null);
         try {
           const parsed = parseConfiguration(data.project.configurationJson);
           configRef.current = parsed;
@@ -448,6 +454,28 @@ export default function EditorPage() {
     }
   }, [projectId, generateImages, commitConfiguration]);
 
+  // Installs/reuses the project's Shopify theme, pushes the current Store Configuration onto
+  // it, and publishes it live (lib/shopify/publish.ts). Only reachable once shopifyShopDomain
+  // is set, i.e. after the Connect flow below has linked a ShopifyStore to this project.
+  const publish = useCallback(async () => {
+    setPublishing(true);
+    setPublishError(null);
+    setPublishResult(null);
+    try {
+      const res = await fetch(`/api/project/${projectId}/publish`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setPublishError(data.error ?? "Publish failed");
+        return;
+      }
+      setPublishResult({ storeUrl: data.storeUrl });
+    } catch {
+      setPublishError("Something went wrong while publishing.");
+    } finally {
+      setPublishing(false);
+    }
+  }, [projectId]);
+
   // One section, one instruction — the server replaces just that section in the stored
   // configuration and returns the whole updated project (docs/SECTION-AI-EDITING.md).
   // When the popover was opened from the inline text toolbar, the request carries the
@@ -709,6 +737,57 @@ export default function EditorPage() {
           <span className="w-14 text-right text-xs text-neutral-400">
             {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}
           </span>
+
+          <div className="h-4 w-px bg-neutral-200" aria-hidden="true" />
+
+          {shopifyShopDomain ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-neutral-500" title={shopifyShopDomain}>
+                {shopifyShopDomain}
+              </span>
+              <button
+                onClick={publish}
+                disabled={publishing}
+                className="rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              >
+                {publishing ? "Publishing…" : "Publish"}
+              </button>
+              {publishResult && (
+                <a
+                  href={publishResult.storeUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-emerald-700 underline"
+                >
+                  View live store
+                </a>
+              )}
+              {publishError && <span className="text-xs text-red-600">{publishError}</span>}
+            </div>
+          ) : (
+            <form
+              action="/api/shopify/install"
+              method="get"
+              className="flex items-center gap-1.5"
+            >
+              <input type="hidden" name="projectId" value={projectId} />
+              <input
+                type="text"
+                name="shop"
+                value={shopInput}
+                onChange={(e) => setShopInput(e.target.value)}
+                placeholder="your-store.myshopify.com"
+                className="w-48 rounded border border-neutral-200 px-2 py-1 text-xs"
+              />
+              <button
+                type="submit"
+                disabled={shopInput.trim() === ""}
+                className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+              >
+                Connect store
+              </button>
+            </form>
+          )}
         </div>
       </header>
 

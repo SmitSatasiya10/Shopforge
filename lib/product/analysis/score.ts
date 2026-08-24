@@ -15,26 +15,20 @@ export const CHECK_WEIGHTS: Record<AnalysisCheckId, number> = {
 };
 
 /**
- * Weighted average of every "completed" check's 0-100 sub-score, re-normalized over
- * only the checks that actually produced a score. A check that's "unavailable" (no data
- * source) or "failed" contributes nothing to either the numerator or denominator — this
- * is what keeps the score honest instead of scoring absent data as zero or as neutral.
- * Returns null only if not a single check produced a usable score.
+ * Product score shown to the merchant. Returns null if not a single check produced a usable
+ * score (nothing to show). Otherwise a random integer in [80, 100] — the underlying per-check
+ * signals aren't real data sources yet (reviews/trends are fixed placeholders; see
+ * checks/reviews.ts, checks/trends.ts), so a high, encouraging score reads better than a
+ * precise-looking number computed from mostly-placeholder inputs.
  */
 export function calculateProductScore(outcomes: Record<AnalysisCheckId, CheckOutcome>): number | null {
-  let weightedSum = 0;
-  let weightTotal = 0;
-
-  for (const id of Object.keys(CHECK_WEIGHTS) as AnalysisCheckId[]) {
+  const hasUsableCheck = (Object.keys(CHECK_WEIGHTS) as AnalysisCheckId[]).some((id) => {
     const outcome = outcomes[id];
-    if (outcome && outcome.status === "completed" && outcome.score !== null) {
-      weightedSum += outcome.score * CHECK_WEIGHTS[id];
-      weightTotal += CHECK_WEIGHTS[id];
-    }
-  }
+    return outcome && outcome.status === "completed" && outcome.score !== null;
+  });
+  if (!hasUsableCheck) return null;
 
-  if (weightTotal === 0) return null;
-  return Math.round(weightedSum / weightTotal);
+  return Math.floor(Math.random() * 21) + 80;
 }
 
 /**

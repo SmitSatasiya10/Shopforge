@@ -15,6 +15,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "archiver": "^8.0.0",
     "cheerio": "^1.2.0",
     "liquidjs": "^10.29.0",
     "lucide-react": "^1.33.0",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/archiver": "^8.0.0",
     "@types/node": "^20.19.43",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
