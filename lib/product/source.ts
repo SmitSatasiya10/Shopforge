@@ -35,6 +35,16 @@ export function detectSupplierPlatform(url: URL): SupplierPlatform | null {
   return null;
 }
 
+// Amazon's own link-shortener domains (shared when copying from the Amazon app/site's "Share"
+// action). These don't contain "amazon" anywhere in the hostname, so detectSupplierPlatform can
+// never match them directly — importSupplierProduct follows the redirect first, then re-runs
+// detection against the resolved amazon.<tld> URL.
+const AMAZON_SHORTENER_HOSTNAMES = /^(amzn\.to|amzn\.in|amzn\.eu|amzn\.asia|a\.co)$/i;
+
+export function isAmazonShortUrl(url: URL): boolean {
+  return AMAZON_SHORTENER_HOSTNAMES.test(url.hostname);
+}
+
 export function unsupportedSupplierMessage(): string {
   return `This supplier isn't supported yet. Supported suppliers: ${SUPPORTED_SUPPLIER_LABEL_LIST}.`;
 }
