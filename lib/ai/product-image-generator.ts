@@ -69,11 +69,17 @@ export function buildProductImagePrompts(
  * declined generation is simply omitted rather than blocking the others or throwing, so a
  * partial AI outage still returns whatever succeeded (shopforge-personalization-image-
  * selection-plan.md §28: never block on a single generation failure).
+ *
+ * Respects the generateImages toggle (lib/ai/config.ts) the same way the theme-generation
+ * pipeline does: off is the default, and returns no images rather than calling the model, so
+ * buildImageCandidates() falls back to the product's own imported photos as "primary" — no
+ * image model is called and nothing is billed.
  */
 export async function generateProductImages(
   options: GenerateProductImagesOptions,
 ): Promise<GeneratedProductImage[]> {
   const config = loadAiConfig(options.config);
+  if (!config.generateImages) return [];
   requireApiKey(config);
 
   const prompts = buildProductImagePrompts(options.product, options.persona, options.marketingAngle);
