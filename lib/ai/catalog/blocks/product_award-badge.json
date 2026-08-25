@@ -1,43 +1,16 @@
 {
     "id": "product_award-badge",
     "label": "Award Badge",
-    "purpose": "Display trust badges, awards, certifications above the fold",
+    "purpose": "Display a trust-building award or bestseller badge above the fold",
     "category": "trust-badges",
     "tags": [
-        "awards",
-        "certifications"
+        "award",
+        "badge"
     ],
     "settings": {
-        "badge_text": {
-            "type": "text",
-            "default": "Best Seller"
-        },
-        "badge_style": [
-            "ribbon",
-            "circle",
-            "shield",
-            "banner"
-        ],
-        "badge_color": [
-            "gold",
-            "silver",
-            "bronze",
-            "accent-1",
-            "accent-2"
-        ],
-        "position": [
-            "top-left",
-            "top-right",
-            "top-center"
-        ],
-        "show_icon": {
-            "type": "checkbox",
-            "default": true
-        },
-        "icon": {
-            "type": "text",
-            "default": "verified"
-        }
+        "award_number": "text",
+        "award_title": "text",
+        "award_subtitle": "text"
     },
-    "_notes": "Builds trust and credibility. Shows awards like 'Best Seller', 'Editor's Choice', '#1 Rated', certifications. Placed prominently at top of product page. Great for premium/luxury products."
+    "_notes": "award_number is a short rank/label like '#1'; award_title is the main claim (e.g. 'BESTSELLER OF 2025'); award_subtitle is a short supporting line. All three are plain text, not richtext. All color settings (accent, text, background, border) are pure visual styling and intentionally excluded."
 }

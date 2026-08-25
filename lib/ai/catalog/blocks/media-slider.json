@@ -1,0 +1,29 @@
+{
+    "id": "media-slider",
+    "label": "Media Slider",
+    "purpose": "Slideshow of product images or videos with optional captions",
+    "category": "media",
+    "tags": [
+        "slider",
+        "gallery"
+    ],
+    "settings": {
+        "display_images": [
+            true,
+            false
+        ],
+        "image_1": "image_picker",
+        "image_desc_1": "richtext",
+        "image_2": "image_picker",
+        "image_desc_2": "richtext",
+        "image_3": "image_picker",
+        "image_desc_3": "richtext",
+        "display_videos": [
+            true,
+            false
+        ],
+        "video_1": "video",
+        "video_desc_1": "richtext"
+    },
+    "_notes": "The real schema repeats this same id pattern up to 10 times (image_1..image_10/image_desc_1..image_desc_10, and video_1..video_10/video_thumb_1..video_thumb_10/video_desc_1..video_desc_10) — only the first few slots are listed here since most products need a handful of slides, not ten; additional numbered slots may be used the same way if more are genuinely needed. display_images/display_videos gate whether their respective slides render at all. image_desc_N/video_desc_N are richtext and MUST be wrapped in <p> tags. Leave every image/video field as an empty string — images and videos are filled in separately. All slider mechanics (autoplay, arrows, dots, spacing, corner radius, video player controls) are pure layout and intentionally excluded."
+}

@@ -1,15 +1,22 @@
 {
-    "id": "text-with-icon",
-    "label": "Text with Icon",
-    "purpose": "Text line with icon prefix",
-    "category": "content",
-    "tags": [
-        "icons"
-    ],
+    "id": "text_with_icon",
+    "label": "Text With Icon",
+    "purpose": "Up to 3 short icon + text pairs in one item, inside a horizontal ticker",
+    "category": "trust-badges",
+    "tags": [],
     "settings": {
-        "icon": "text",
-        "text": "text",
-        "icon_color": "color"
+        "icon_1": "text",
+        "filled_icon_1": [true, false],
+        "custom_icon_1": "image_picker",
+        "text_1": "inline_richtext",
+        "icon_2": "text",
+        "filled_icon_2": [true, false],
+        "custom_icon_2": "image_picker",
+        "text_2": "inline_richtext",
+        "icon_3": "text",
+        "filled_icon_3": [true, false],
+        "custom_icon_3": "image_picker",
+        "text_3": "inline_richtext"
     },
-    "_notes": "Text with icon block shows icon followed by text inline. Use Material Symbols icon names. Good for feature lists or bullet points."
+    "_notes": "icon_N names a material-icon (e.g. 'local_shipping', 'verified_user'). text_N is inline_richtext (no <p> tags) — a short phrase, not a sentence. At minimum fill icon_1/text_1; use 2 and 3 for a multi-item badge row. Leave custom_icon_N empty '' unless you specifically want an image instead of the named icon. Distinct from text-with-icon (hyphenated) used elsewhere — this one is horizontal-ticker's own version."
 }

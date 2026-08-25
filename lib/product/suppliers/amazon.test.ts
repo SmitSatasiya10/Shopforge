@@ -59,9 +59,38 @@ describe("extractAmazonHtmlFallback", () => {
     expect(extractAmazonHtmlFallback(html).image).toBe("https://m.media-amazon.com/images/I/hires.jpg");
   });
 
+  it("reads the full gallery from data-a-dynamic-image, landing image first", () => {
+    const dynamicImage = JSON.stringify({
+      "https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg": [1200, 1200],
+      "https://m.media-amazon.com/images/I/71ABCDEF-L._SL1200_.jpg": [1200, 1200],
+      "https://m.media-amazon.com/images/I/81GHIJKL-L._SL1200_.jpg": [1200, 1200],
+    }).replace(/"/g, "&quot;");
+    const html = `<img id="landingImage" src="https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg" data-a-dynamic-image="${dynamicImage}" />`;
+    const result = extractAmazonHtmlFallback(html);
+    expect(result.image).toBe("https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg");
+    expect(result.images).toEqual([
+      "https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg",
+      "https://m.media-amazon.com/images/I/71ABCDEF-L._SL1200_.jpg",
+      "https://m.media-amazon.com/images/I/81GHIJKL-L._SL1200_.jpg",
+    ]);
+  });
+
+  it("degrades to the single landing image when data-a-dynamic-image is malformed", () => {
+    const html = `<img id="landingImage" src="https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg" data-a-dynamic-image="{&quot;truncated" />`;
+    const result = extractAmazonHtmlFallback(html);
+    expect(result.image).toBe("https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg");
+    expect(result.images).toEqual(["https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg"]);
+  });
+
+  it("images matches the single landing image when data-a-dynamic-image is absent", () => {
+    const html = `<img id="landingImage" src="https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg" />`;
+    const result = extractAmazonHtmlFallback(html);
+    expect(result.images).toEqual(["https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg"]);
+  });
+
   it("returns nulls when neither element is present", () => {
     const result = extractAmazonHtmlFallback("<html><body>no product here</body></html>");
-    expect(result).toEqual({ title: null, brand: null, image: null, price: null, currency: null });
+    expect(result).toEqual({ title: null, brand: null, image: null, images: [], price: null, currency: null });
   });
 
   it("reads #productTitle rather than the marketplace <title>", () => {

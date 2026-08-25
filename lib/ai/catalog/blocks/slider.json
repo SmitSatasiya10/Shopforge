@@ -1,0 +1,12 @@
+{
+    "id": "slider",
+    "label": "Slider",
+    "purpose": "Generic carousel wrapper that displays a sequence of nested 'slide' blocks",
+    "category": "media",
+    "tags": [
+        "slider",
+        "carousel"
+    ],
+    "settings": {},
+    "_notes": "This block has no content settings of its own — all real settings (transition type, autoplay, arrows/dots color and position, slides-per-page, spacing, border radius, adaptive height, desktop/mobile variants, margins) are pure visual/behavioral carousel styling. Its actual content lives entirely in nested blocks of type 'slide' (see slide.json — image, heading, subheading, text, button). Nested block-in-block containment isn't represented by this catalog's schema format, so this schema only covers the slider wrapper's own (empty) settings, not what can be nested inside it."
+}

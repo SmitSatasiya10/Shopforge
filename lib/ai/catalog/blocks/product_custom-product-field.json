@@ -1,40 +1,32 @@
 {
     "id": "product_custom-product-field",
     "label": "Custom Product Field",
-    "purpose": "Add custom text input for personalization (engraving, gift message, etc.)",
-    "category": "product-detail",
+    "purpose": "Add a custom input field for order personalization (engraving, gift message, etc.)",
+    "category": "form-input",
     "tags": [
         "personalization"
     ],
     "settings": {
-        "field_type": [
+        "type": [
             "text",
+            "number",
             "textarea",
-            "checkbox",
-            "dropdown"
+            "pills",
+            "swatches",
+            "select"
         ],
-        "label": {
-            "type": "text",
-            "default": "Personalization (optional)"
-        },
-        "placeholder": {
-            "type": "text",
-            "default": "Enter your text here"
-        },
-        "required": {
-            "type": "checkbox",
-            "default": false
-        },
-        "max_length": {
-            "type": "range",
-            "min": 10,
-            "max": 500,
-            "default": 100
-        },
-        "help_text": {
-            "type": "text",
-            "default": ""
-        }
+        "field_label": "text",
+        "required": [
+            true,
+            false
+        ],
+        "atc_error_message": "text",
+        "field_error_message": "text",
+        "text_placeholder": "text",
+        "number_placeholder": "text",
+        "textarea_placeholder": "text",
+        "select_options": "text",
+        "swatch_options": "text"
     },
-    "_notes": "For customizable products. Allows customers to add personalization text (names, messages). Data saved with order line items. Great for gifts, engraving, custom prints."
+    "_notes": "type picks the input widget; only the placeholder matching that type is relevant (text_placeholder for 'text', number_placeholder for 'number', textarea_placeholder for 'textarea'). select_options/swatch_options are comma-separated lists of choices and only apply when type is 'select'/'swatches' or 'pills'/'swatches' respectively. required disables Add to Cart until the field is filled; atc_error_message shows inside the Add to Cart button and field_error_message shows next to the field when a required value is missing. field_name (the internal order line-item property key) is intentionally excluded — it's a technical identifier, not shopper-facing text. Sizing, swatch color values and layout settings are excluded."
 }

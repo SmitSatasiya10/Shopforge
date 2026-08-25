@@ -44,7 +44,19 @@
         "heading",
         "text",
         "button",
+        "atc-button",
         "caption",
-        "image"
+        "image",
+        "video",
+        "collapsible-row",
+        "icon-with-content",
+        "icon-with-text",
+        "text-with-icon",
+        "payment-badges",
+        "rating-stars",
+        "review-avatars",
+        "reviews",
+        "trustpilot-stars",
+        "slider"
     ]
 }

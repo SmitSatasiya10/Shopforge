@@ -1,0 +1,31 @@
+{
+    "id": "slideshow-hero",
+    "label": "Slideshow Hero",
+    "purpose": "Full-width hero image/video slideshow with heading, text and up to two buttons per slide",
+    "category": "hero",
+    "tags": [],
+    "allowed_on": [
+        "index",
+        "product",
+        "page"
+    ],
+    "settings": {
+        "visibility": [
+            "desktop-hidden",
+            "mobile-hidden",
+            "always-display"
+        ],
+        "autoplay": [
+            true,
+            false
+        ],
+        "enable_dots": [
+            true,
+            false
+        ]
+    },
+    "allowed_blocks": [
+        "slide"
+    ],
+    "_notes": "At least 2 slides. Each slide's 'heading' is inline_richtext (no <p> tags); 'text' is richtext and MUST be wrapped in <p> tags. This section's 'slide' block is distinct from the older slideshow section's slide — it is rendered inline by slideshow-hero.liquid itself, not via a shared blocks/slide.liquid file, so use exactly the fields listed on the slide block below."
+}

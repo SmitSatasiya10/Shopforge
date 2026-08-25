@@ -27,10 +27,6 @@
             "medium",
             "large"
         ],
-        "mobile_thumbnails": [
-            "show",
-            "hide"
-        ],
         "hide_variants": {
             "type": "checkbox",
             "default": false
@@ -38,7 +34,14 @@
         "enable_video_looping": {
             "type": "checkbox",
             "default": false
-        }
+        },
+        "trust_badge": "image_picker",
+        "trust_badge_position": [
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right"
+        ]
     },
     "allowed_blocks": [
         "text",
@@ -80,11 +83,12 @@
         "product_complementary",
         "product_emoji-benefits",
         "product_popup",
-        "product_scroll-buttons",
         "product_sku",
         "product_upsell-block--product-info",
-        "product_view-details",
-        "custom-liquid"
+        "custom-liquid",
+        "icon-with-content",
+        "slider",
+        "trustpilot-stars"
     ],
     "_notes": "This is the main product section that appears on all product pages. Essential blocks: product_title, product_price, product_product-variant-picker-block, product_buy-buttons, product_description. Blocks are displayed in the order specified in block_order array. Typical order: award_badge → review-avatars → title → price → rating-stars OR product-rating → description → variant_picker → quantity_selector → buy_buttons → shipping_checkpoints → payment-badges → product_tabs OR collapsible-row → share. Use EXACT block names as listed in allowed_blocks above, copied verbatim (hyphens vs underscores matter): 'rating-stars' NOT 'rating_stars', 'payment-badges' NOT 'payment_badges', 'icon-with-text' NOT 'icon_with_text', 'text-with-icon' NOT 'text_with_icon', 'atc-button' NOT 'atc_button', 'media-slider' NOT 'media_slider', 'countdown-timer' NOT 'countdown_timer', 'custom-liquid' NOT 'custom_liquid', 'product_tabs' NOT 'tab', 'collapsible-row' NOT 'accordion', 'product-rating' for product ratings."
 }

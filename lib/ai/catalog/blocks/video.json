@@ -1,15 +1,12 @@
 {
     "id": "video",
     "label": "Video",
-    "purpose": "Embed video content with cover image",
-    "category": "media",
+    "purpose": "A single standalone video block with a thumbnail",
+    "category": "content",
     "tags": [],
     "settings": {
-        "cover_image": "image_picker",
-        "video_url": "video_url",
         "video": "video",
-        "description": "text",
-        "loop": "checkbox"
+        "thumbnail": "image_picker"
     },
-    "_notes": "Video block can use either video_url (YouTube/Vimeo) or video (uploaded video file). Cover image shows before play. Description is for accessibility."
+    "_notes": "Leave 'video' and 'thumbnail' empty '' — media is filled in outside of you."
 }

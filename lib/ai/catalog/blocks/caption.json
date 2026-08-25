@@ -1,15 +1,12 @@
 {
     "id": "caption",
     "label": "Caption",
-    "purpose": "Small caption text block",
+    "purpose": "A short eyebrow/caption line above an image-with-text section's heading",
     "category": "content",
     "tags": [],
     "settings": {
-        "text": "text",
-        "text_style": [
-            "subtitle",
-            "caption-with-letter-spacing",
-            "uppercase"
-        ]
-    }
+        "caption": "text",
+        "text_style": ["subtitle", "caption-with-letter-spacing"]
+    },
+    "_notes": "Keep 'caption' short — a one-line eyebrow, not a sentence."
 }

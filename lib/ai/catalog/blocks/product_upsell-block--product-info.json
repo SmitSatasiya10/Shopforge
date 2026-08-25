@@ -1,0 +1,60 @@
+{
+    "id": "product_upsell-block--product-info",
+    "label": "Upsell (Product Info)",
+    "purpose": "Show a 'frequently bought together' style cross-sell of up to 3 extra products inside the product info column",
+    "category": "conversion",
+    "tags": [
+        "upsell",
+        "cross-sell"
+    ],
+    "settings": {
+        "style": [
+            "toggle_switch",
+            "checkbox_1",
+            "checkbox_2",
+            "plus_button",
+            "add_button"
+        ],
+        "add_btn_label": "inline_richtext",
+        "product_list": "product_list",
+        "enable_dynamic_recommendations": [
+            true,
+            false
+        ],
+        "collection": "collection",
+        "container_title": "text",
+        "show_variant_picker": [
+            true,
+            false
+        ],
+        "skip_unavailable": [
+            true,
+            false
+        ],
+        "prdouct_1_preselected": [
+            true,
+            false
+        ],
+        "product_1_image": "image_picker",
+        "product_1_desc": "inline_richtext",
+        "product_1_percentage_discount": "text",
+        "product_1_fixed_amount_discount": "text",
+        "prdouct_2_preselected": [
+            true,
+            false
+        ],
+        "product_2_image": "image_picker",
+        "product_2_desc": "inline_richtext",
+        "product_2_percentage_discount": "text",
+        "product_2_fixed_amount_discount": "text",
+        "prdouct_3_preselected": [
+            true,
+            false
+        ],
+        "product_3_image": "image_picker",
+        "product_3_desc": "inline_richtext",
+        "product_3_percentage_discount": "text",
+        "product_3_fixed_amount_discount": "text"
+    },
+    "_notes": "Leave 'product_list' and 'collection' empty — you have no real product/collection handles to reference; the merchant assigns them later. product_list is the manual list of up to 3 cross-sell products; collection is only used when enable_dynamic_recommendations is true, which pulls products from that collection instead of the manual list. Note the real field names have a typo preserved from the live schema: 'prdouct_N_preselected' (not 'product_N_preselected') — do not 'correct' the spelling. product_N_desc is inline_richtext (no <p> wrapping). product_N_percentage_discount / product_N_fixed_amount_discount are plain text fields holding the discount shown for that specific upsell product (e.g. '10' or '5'). style's option values (toggle_switch/checkbox_1/checkbox_2/plus_button/add_button) change how the shopper actually adds each upsell item, not just its look. container_title is an optional heading above the whole upsell list (e.g. 'Frequently bought together'). show_variant_picker/skip_unavailable control whether shoppers can pick a variant for each upsell product and whether sold-out ones are hidden. Excluded as pure visual/layout: btn_position, toggle_element, stacking, accent_color, color_scheme, show_images, images_size, images_corner_radius, title_size, title_link, desc_size, price_position, price_size, hide_compare_price, update_prices, container_title_position, container_title_mobile/desktop_text_size, corner_radius, show_box_shadow, show_border, regular/selected_border_color, border_width, show_custom_bg, regular/selected_bg_color, slider_type, arrows_position/color_scheme, transparent_arrows, display_dots, margins."
+}

@@ -44,6 +44,13 @@ interface PreviewFrameProps {
    */
   onUndo: () => void;
   onRedo: () => void;
+  /**
+   * Changing this value (e.g. the Homepage/Product Page tab) means the next `html` is a
+   * different logical page, not a re-render of the same one — the viewport should land at the
+   * top instead of carrying over the outgoing page's raw scroll offset, which otherwise can
+   * land below the fold (even off the end) of a shorter page and hide its header.
+   */
+  resetScrollKey?: string | number;
 }
 
 /**
@@ -170,6 +177,7 @@ export function PreviewFrame({
   onRectChange,
   onUndo,
   onRedo,
+  resetScrollKey,
 }: PreviewFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const trackedRef = useRef<Tracked | null>(null);
@@ -178,6 +186,7 @@ export function PreviewFrame({
   const [mount, setMount] = useState<{ key: number; html: string }>({ key: 0, html: "" });
   const loadedKeyRef = useRef(-1);
   const pendingScrollRef = useRef(0);
+  const resetScrollKeyRef = useRef(resetScrollKey);
   /** The html currently reflected in the live document (srcDoc is not re-read for swaps). */
   const appliedHtmlRef = useRef("");
 
@@ -227,10 +236,12 @@ export function PreviewFrame({
       reanchor(doc);
       return;
     }
-    pendingScrollRef.current = iframeRef.current?.contentWindow?.scrollY ?? 0;
+    const pageChanged = resetScrollKeyRef.current !== resetScrollKey;
+    resetScrollKeyRef.current = resetScrollKey;
+    pendingScrollRef.current = pageChanged ? 0 : (iframeRef.current?.contentWindow?.scrollY ?? 0);
     setMount((prev) => ({ key: prev.key + 1, html }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html]);
+  }, [html, resetScrollKey]);
 
   const handleLoad = useCallback(() => {
     const iframe = iframeRef.current;
@@ -319,6 +330,15 @@ export function PreviewFrame({
       item.querySelector("button")?.setAttribute("aria-current", "true");
     };
 
+    // The preview is a same-origin srcDoc iframe with no <base> tag, so the theme's own
+    // root-relative hrefs ("/", "/collections/all", ...) resolve against the *app's* URL, not a
+    // real storefront. Left alone, clicking "Home" navigates the iframe to the app's own "/"
+    // route. Block it in the capture phase, before section/text-selection handling runs, so
+    // link clicks still select their section but never leave the preview.
+    const handleLinkNavigation = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("a")) e.preventDefault();
+    };
+
     const handleClick = (e: MouseEvent) => {
       let node = e.target as HTMLElement | null;
       while (node && node !== doc.body) {
@@ -396,6 +416,7 @@ export function PreviewFrame({
       else onUndoRef.current();
     };
 
+    doc.addEventListener("click", handleLinkNavigation, true);
     doc.addEventListener("click", handleGalleryThumbnailClick);
     doc.addEventListener("click", handleClick);
     doc.addEventListener("mouseover", handleOver);

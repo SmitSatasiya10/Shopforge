@@ -1,26 +1,34 @@
 {
     "id": "column",
     "label": "Column",
-    "purpose": "Testimonial, icon bar, or grid column block",
-    "category": "social-proof",
-    "tags": [
-        "testimonial",
-        "benefits"
-    ],
-    "_notes": "IMPORTANT: The 'text' field is richtext and MUST be wrapped with <p> tags. Example: '<p>Your text here</p>'. Also used in icon-bar section with icon, title, and text fields.",
+    "purpose": "A single content card — meaning depends on which section it's in: a testimonial (testimonials), an icon/feature column (icon-bar), or a social-post-style testimonial with comments (facebook-testimonials)",
+    "category": "content",
+    "tags": [],
     "settings": {
+        "icon": "text",
+        "filled_icon": [true, false],
+        "image": "image_picker",
         "title": "text",
         "text": "richtext",
-        "author": "text",
-        "image": "image_picker",
-        "icon": "text",
-        "filled_icon": "checkbox",
-        "star_rating": {
-            "type": "range",
-            "min": 1,
-            "max": 5,
-            "step": 1,
-            "default": 5
-        }
-    }
+        "video": "video",
+        "video_thumbnail": "image_picker",
+        "star_rating": {"type": "range", "min": 1, "max": 5, "default": 5},
+        "author_avatar": "image_picker",
+        "author": "inline_richtext",
+        "post_author": "text",
+        "post_author_avatar": "image_picker",
+        "post_time": "inline_richtext",
+        "post_text": "richtext",
+        "post_image": "image_picker",
+        "post_reactions": "text",
+        "post_reactions_text": "inline_richtext",
+        "post_comments_text": "inline_richtext",
+        "comment_1_author": "text",
+        "comment_1_time": "inline_richtext",
+        "comment_1_text": "richtext",
+        "comment_2_author": "text",
+        "comment_2_time": "inline_richtext",
+        "comment_2_text": "richtext"
+    },
+    "_notes": "One block type shared by 3 different real components — only use the fields for the section this block is actually in, never mix them: (1) In testimonials: title, text, star_rating, author, author_avatar, image/video. (2) In icon-bar: icon, filled_icon, title, text, image. (3) In facebook-testimonials: post_author, post_author_avatar, post_time, post_text, post_image, post_reactions, post_reactions_text, post_comments_text, plus comment_1_*/comment_2_* for the two reply comments. 'text'/'post_text'/comment '_text' fields are richtext and MUST be wrapped in <p> tags; 'author'/'post_time'/comment '_time' are inline_richtext (no <p> tags). Leave every image/video/avatar field empty '' — media is filled in outside of you. In custom-columns-new, 'column' is a plain layout container instead — leave all these settings out for that section."
 }

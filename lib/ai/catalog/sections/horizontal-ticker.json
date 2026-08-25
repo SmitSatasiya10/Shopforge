@@ -23,7 +23,7 @@
             "normal",
             "reverse"
         ],
-        "pause_on_hover": [
+        "stop_on_hover": [
             true,
             false
         ]
@@ -31,7 +31,10 @@
     "allowed_blocks": [
         "text",
         "image",
-        "video"
+        "video",
+        "reviews",
+        "text_with_icon",
+        "icon_with_content"
     ],
-    "_notes": "Horizontal ticker scrolls content horizontally. Can include text, images, or videos. Great for marquee-style announcements or featured content. CRITICAL: Add 8-10 blocks minimum for smooth scrolling. EACH text block MUST have UNIQUE, DIFFERENT content - DO NOT repeat the same text multiple times. Examples: 'Free Shipping', 'Money-Back Guarantee', 'Trusted by 10,000+ customers', 'Secure Checkout', '24/7 Support', 'Made with Premium Materials', 'Eco-Friendly Packaging', 'Fast Delivery'."
+    "_notes": "Horizontal ticker scrolls content horizontally. Can include short text messages, images, videos, review cards, icon+text pairs, or icon+heading+text items. Great for marquee-style announcements or featured content. CRITICAL: Add 8-10 blocks minimum for smooth scrolling. EACH text block MUST have UNIQUE, DIFFERENT content - DO NOT repeat the same text multiple times. Examples: 'Free Shipping', 'Money-Back Guarantee', 'Trusted by 10,000+ customers', 'Secure Checkout', '24/7 Support', 'Made with Premium Materials', 'Eco-Friendly Packaging', 'Fast Delivery'."
 }

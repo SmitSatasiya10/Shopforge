@@ -1,34 +1,21 @@
 {
     "id": "product_sizing-chart",
     "label": "Size Chart",
-    "purpose": "Display size chart popup for apparel and sizing information",
+    "purpose": "Display a size chart popup for apparel and sizing information",
     "category": "product-detail",
     "tags": [
         "sizing"
     ],
     "settings": {
-        "button_label": {
-            "type": "richtext",
-            "default": "Sizing chart"
-        },
-        "button_icon": {
-            "type": "text",
-            "default": "straighten"
-        },
-        "button_alignment": [
-            "start",
-            "center",
-            "end"
-        ],
-        "headline": {
-            "type": "text",
-            "default": "Sizing Chart"
-        },
-        "content_type": [
-            "table",
-            "text",
-            "image"
-        ]
+        "button_label": "inline_richtext",
+        "button_icon": "text",
+        "button_custom_icon": "image_picker",
+        "headline": "text",
+        "table_header_content": "inline_richtext",
+        "table_content": "richtext",
+        "caption_text": "richtext",
+        "top_image": "image_picker",
+        "bottom_image": "image_picker"
     },
-    "_notes": "For apparel/fashion stores. Can be nested inside variant picker block. Opens as popup with sizing information table or image."
+    "_notes": "button_label and table_header_content are inline_richtext (no <p> wrapping, inline tags like <strong> are fine); table_content and caption_text are richtext and MUST be wrapped in <p> tags. table_header_content is a COMMA-SEPARATED list of column headers (default 'Size, Chest, Length, Shoulder'). table_content should be one <p> per row, each row a comma-separated list matching the column count/order of table_header_content (default: '<p>S, 95cm, 61cm, 44cm</p><p>M, 102cm, 66cm, 46cm</p>...'). button_icon is a Material Symbols icon name; button_custom_icon overrides it with an image. top_image/bottom_image are optional supporting images shown above/below the table. Can be nested inside the Variant Picker block. Excluded as pure visual/technical: test_mode, button_filled_icon, text_size, button_alignment, button_underline, heading_size, close_button_style, color_scheme, table_header_color_scheme, caption_size/color/alignment, margins."
 }

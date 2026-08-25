@@ -188,6 +188,35 @@ describe("importSupplierProduct", () => {
     expect(outcome.result.normalized?.images).toEqual([]); // honest "No image", never a substitute
   });
 
+  it("fills in every gallery image from Amazon's data-a-dynamic-image, not just the landing image", async () => {
+    tryFetchShopifyProductJson.mockResolvedValueOnce(null);
+    const dynamicImage = JSON.stringify({
+      "https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg": [1200, 1200],
+      "https://m.media-amazon.com/images/I/71ABCDEF-L._SL1200_.jpg": [1200, 1200],
+      "https://m.media-amazon.com/images/I/81GHIJKL-L._SL1200_.jpg": [1200, 1200],
+    }).replace(/"/g, "&quot;");
+    fetchProductHtml.mockResolvedValueOnce(`
+      <html><head>
+        <meta property="og:title" content="Cherry Blossom Tree Lamp" />
+      </head><body>
+        <img id="landingImage" src="https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg" data-a-dynamic-image="${dynamicImage}" />
+      </body></html>
+    `);
+
+    const outcome = await importSupplierProduct("https://www.amazon.in/Cherry-Blossom-Tree-Lamp/dp/B0ABCDE123");
+    expect(outcome.mode).toBe("product");
+    if (outcome.mode !== "product") throw new Error("unreachable");
+    // "partial" (no price/variants in this fixture), but images are present, so it's still
+    // "sufficient" — the search fallback below must not fire (isDirectResultSufficient).
+    expect(outcome.result.status).toBe("partial");
+    expect(outcome.result.normalized?.images).toEqual([
+      { url: "https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg", altText: "Cherry Blossom Tree Lamp" },
+      { url: "https://m.media-amazon.com/images/I/71ABCDEF-L._SL1200_.jpg", altText: "Cherry Blossom Tree Lamp" },
+      { url: "https://m.media-amazon.com/images/I/81GHIJKL-L._SL1200_.jpg", altText: "Cherry Blossom Tree Lamp" },
+    ]);
+    expect(searchProductFallback).not.toHaveBeenCalled();
+  });
+
   it("falls back to web search for Etsy when direct retrieval fails, with the parsed listing ID and slug title hint", async () => {
     tryFetchShopifyProductJson.mockResolvedValueOnce(null);
     fetchProductHtml.mockRejectedValueOnce(new MockProductFetchError("Server responded 403 for x", "http_error"));

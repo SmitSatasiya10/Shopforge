@@ -1,0 +1,33 @@
+{
+    "id": "featured-blog",
+    "label": "Featured Blog",
+    "purpose": "Showcase recent blog posts from a blog",
+    "category": "content",
+    "tags": ["blog"],
+    "allowed_on": [
+        "index",
+        "page"
+    ],
+    "settings": {
+        "title": "inline_richtext",
+        "blog": "blog",
+        "post_limit": {
+            "type": "range",
+            "min": 1,
+            "max": 12,
+            "default": 3
+        },
+        "columns_desktop": {
+            "type": "range",
+            "min": 1,
+            "max": 4,
+            "default": 3
+        },
+        "show_image": [true, false],
+        "show_date": [true, false],
+        "show_author": [true, false],
+        "show_view_all": [true, false]
+    },
+    "allowed_blocks": [],
+    "_notes": "No blocks — this section pulls its posts from a real blog automatically. Leave 'blog' empty '' — you have no real blog handle to reference; the merchant assigns it later. Just write a fitting title and choose sensible post_limit/columns_desktop for the store."
+}

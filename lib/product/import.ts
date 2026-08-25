@@ -179,8 +179,8 @@ function applyHtmlFallback(result: ImportResult, platform: SupplierPlatform, htm
     normalized.vendor = extra.brand;
     changed = true;
   }
-  if (normalized.images.length === 0 && extra.image) {
-    normalized.images = [{ url: extra.image, altText: normalized.title }];
+  if (normalized.images.length === 0 && extra.images.length > 0) {
+    normalized.images = extra.images.map((url) => ({ url, altText: normalized.title }));
     changed = true;
   }
   if (normalized.price === null && extra.price !== null) {

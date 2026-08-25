@@ -1,7 +1,7 @@
 {
     "id": "rating-stars",
     "label": "Rating Stars",
-    "purpose": "Display star rating with optional count",
+    "purpose": "Display a star rating with optional review-count text",
     "category": "trust-badges",
     "tags": [
         "rating",
@@ -10,13 +10,14 @@
     "settings": {
         "rating": {
             "type": "range",
-            "min": 0,
+            "min": 1,
             "max": 5,
-            "step": 0.5,
-            "default": 5
+            "default": 4.8
         },
-        "rating_count": "text",
-        "show_count": "checkbox"
+        "label": {
+            "type": "inline_richtext",
+            "default": "(xxxx Reviews)"
+        }
     },
-    "_notes": "Rating stars block shows star rating. Use rating for numeric value (0-5), rating_count for text like '(1,234 reviews)'."
+    "_notes": "'rating' is the numeric star value (1-5, decimals like 4.8 allowed). 'label' is inline_richtext text shown next to the stars, e.g. '(1,234 Reviews)' — must NOT be wrapped in <p> tags. Real schema does NOT have separate 'rating_count'/'show_count' settings — put the full review-count text (including parentheses/wording) directly in 'label'. All remaining real settings (star colors, background star style, text size, alignment, an anchor-link scroll_id, margins) are pure visual styling or technical anchors, omitted."
 }

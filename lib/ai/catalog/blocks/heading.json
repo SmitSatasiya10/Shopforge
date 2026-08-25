@@ -6,11 +6,7 @@
     "tags": [],
     "settings": {
         "title": "inline_richtext",
-        "heading_size": [
-            "h0",
-            "h1",
-            "h2",
-            "h3"
-        ]
-    }
+        "heading_size": ["h0", "h1", "h2", "h3"]
+    },
+    "_notes": "'title' is inline_richtext and must NOT be wrapped in <p> tags. heading_size: h0 = largest, h3 = smallest. Real schema also has a 'custom' heading_size value backed by separate custom_desktop_size/custom_mobile_size number fields — omitted here since those size fields aren't exposed, so never emit 'custom'. All remaining real settings (alignment, custom text color, the two 'highlight' word-styling systems, and an extensive scroll/typing/shiny text-animation system) are pure visual styling/animation, omitted."
 }

@@ -1,0 +1,38 @@
+{
+    "id": "icon-with-text",
+    "label": "Icon with Text",
+    "purpose": "Grid of up to 6 icon+heading pairs (e.g. feature or benefit highlights)",
+    "category": "content",
+    "tags": [
+        "benefits",
+        "icons"
+    ],
+    "settings": {
+        "layout": ["horizontal", "vertical", "inline"],
+        "icon_1": {"type": "text", "default": "favorite"},
+        "icon_1_fill": [true, false],
+        "image_1": "image_picker",
+        "heading_1": "text",
+        "icon_2": {"type": "text", "default": "undo"},
+        "icon_2_fill": [true, false],
+        "image_2": "image_picker",
+        "heading_2": "text",
+        "icon_3": {"type": "text", "default": "local_shipping"},
+        "icon_3_fill": [true, false],
+        "image_3": "image_picker",
+        "heading_3": "text",
+        "icon_4": {"type": "text", "default": "verified"},
+        "icon_4_fill": [true, false],
+        "image_4": "image_picker",
+        "heading_4": "text",
+        "icon_5": {"type": "text", "default": "verified"},
+        "icon_5_fill": [true, false],
+        "image_5": "image_picker",
+        "heading_5": "text",
+        "icon_6": {"type": "text", "default": "verified"},
+        "icon_6_fill": [true, false],
+        "image_6": "image_picker",
+        "heading_6": "text"
+    },
+    "_notes": "One block instance renders up to 6 icon+heading pairs, numbered 1-6. Each pair only renders if its heading_N is non-empty, so use as many pairs as you want (2-4 is typical) and set every unused heading_N (and its icon_N) to an empty string \"\" — otherwise it silently renders with the placeholder text 'Heading'. icon_N must be a Material Symbols icon name (e.g. local_shipping, verified, favorite, autorenew, star, shield). icon_N_fill toggles solid vs outline icon style for that pair. image_N optionally replaces icon_N with an uploaded custom image (left empty by the AI per system prompt). There is no separate description/body text field — heading_N is the only visible copy per item. layout controls whether pairs stack icon-above-text (vertical), icon-beside-text (horizontal), or run icon+text inline in one line. All remaining real settings (grid columns, icon color/size, spacing, text size/alignment, desktop/mobile size overrides, margins) are pure visual styling, omitted."
+}

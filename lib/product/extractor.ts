@@ -13,7 +13,10 @@ export interface OpenGraphExtraction {
   data: {
     title: string | null;
     description: string | null;
+    /** The first og:image tag — kept for callers that only need one. */
     image: string | null;
+    /** Every distinct og:image tag on the page, in document order — a page can carry more than one. */
+    images: string[];
     priceAmount: string | null;
     priceCurrency: string | null;
   };
@@ -65,7 +68,15 @@ export function extractOpenGraph(html: string): OpenGraphExtraction | null {
   const bareTitle = $("title").first().text().trim() || null;
   const title = ogTitle ?? bareTitle;
   const description = meta("og:description") ?? metaName("description");
-  const image = meta("og:image");
+  const images = [
+    ...new Set(
+      $('meta[property="og:image"]')
+        .map((_, el) => $(el).attr("content"))
+        .get()
+        .filter((url): url is string => !!url),
+    ),
+  ];
+  const image = images[0] ?? null;
   const priceAmount = meta("product:price:amount") ?? meta("og:price:amount");
   const priceCurrency = meta("product:price:currency") ?? meta("og:price:currency");
 
@@ -90,7 +101,7 @@ export function extractOpenGraph(html: string): OpenGraphExtraction | null {
 
   return {
     source: "opengraph",
-    data: { title, description, image, priceAmount, priceCurrency },
+    data: { title, description, image, images, priceAmount, priceCurrency },
   };
 }
 

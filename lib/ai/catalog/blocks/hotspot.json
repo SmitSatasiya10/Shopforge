@@ -1,34 +1,13 @@
 {
     "id": "hotspot",
-    "label": "Product Hotspot",
-    "purpose": "A clickable product marker positioned on a Shoppable Image section",
-    "category": "product-showcase",
-    "tags": [
-        "shoppable",
-        "hotspot"
-    ],
+    "label": "Shoppable Hotspot",
+    "purpose": "A clickable pin on a shoppable image, linking to a product with a short caption",
+    "category": "content",
+    "tags": [],
     "settings": {
-        "product": "product_picker",
+        "product": "product",
         "text": "richtext",
-        "alignment": [
-            "left",
-            "center",
-            "right"
-        ],
-        "offset_x": {
-            "type": "range",
-            "min": 0,
-            "max": 100,
-            "unit": "%",
-            "default": 30
-        },
-        "offset_y": {
-            "type": "range",
-            "min": 0,
-            "max": 100,
-            "unit": "%",
-            "default": 30
-        }
+        "alignment": ["left", "center", "right"]
     },
-    "_notes": "offset_x/offset_y position the hotspot marker as a percentage of the parent image's width/height. Real schema also has separate mobile-specific offset overrides, omitted here — the desktop offsets are used for both by default."
+    "_notes": "'text' is richtext and MUST be wrapped in <p> tags — a short caption or price callout for this hotspot's product. Leave 'product' empty '' — you have no real product handle to reference other than the one this page is about; the merchant assigns this later."
 }

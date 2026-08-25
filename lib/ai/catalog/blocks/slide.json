@@ -1,33 +1,29 @@
 {
     "id": "slide",
-    "label": "Slide",
-    "purpose": "Individual slide in a slideshow with image and text",
+    "label": "Slideshow Hero Slide",
+    "purpose": "One slide of the slideshow-hero section, with background image and heading/text/button content",
     "category": "hero",
     "tags": [],
-    "_notes": "The 'heading' field is plain text and should NOT be wrapped with tags. The 'text' field is richtext and MUST be wrapped with <p> tags.",
     "settings": {
-        "image": "image_picker",
-        "heading": "text",
-        "subheading": "text",
+        "desktop_bg_image": "image_picker",
+        "mobile_bg_image": "image_picker",
+        "heading_prefix": "text",
+        "heading": "inline_richtext",
+        "heading_suffix": "text",
+        "heading_size": ["h2", "h1", "h0", "hxl"],
         "text": "richtext",
-        "button_label": "text",
-        "button_link": "url",
-        "text_color": "color",
-        "content_position": [
-            "top-left",
-            "top-center",
-            "top-right",
-            "center-left",
-            "center",
-            "center-right",
-            "bottom-left",
-            "bottom-center",
-            "bottom-right"
-        ]
+        "button_label_1": "text",
+        "button_link_1": "url",
+        "button_label_2": "text",
+        "button_link_2": "url",
+        "content_vertical_position": ["flex-start", "center", "flex-end"],
+        "content_horizontal_position": ["flex-start", "center", "flex-end"],
+        "content_text_alignment": ["left", "center", "right"]
     },
+    "_notes": "Used exclusively by the slideshow-hero section, rendered inline (not via a shared blocks/slide.liquid file) — these exact field names only. 'heading' is inline_richtext (no <p> tags). 'text' is richtext and MUST be wrapped in <p> tags. At least 2 slides. Leave desktop_bg_image/mobile_bg_image empty '' — images are filled in outside of you. button_label_2/button_link_2 are optional, a second CTA.",
     "_image_generation": {
         "enabled": true,
-        "field_name": "image",
-        "prompt_template": "Hero slide image for {heading}"
+        "field_name": "desktop_bg_image",
+        "prompt_template": "Hero slide background image for {heading}"
     }
 }

@@ -1,11 +1,12 @@
 {
     "id": "text",
     "label": "Text",
-    "purpose": "Rich text content block",
+    "purpose": "A block of rich text content, or (inside horizontal-ticker) a single ticker message",
     "category": "content",
     "tags": [],
-    "_notes": "The 'text' field MUST be wrapped with <p> tags. Example: '<p>Your text content</p>'. When used in sections with multiple text blocks (like horizontal-ticker, testimonials), EACH block MUST have UNIQUE content - never repeat the same text.",
     "settings": {
-        "text": "richtext"
-    }
+        "text": "richtext",
+        "title": "text"
+    },
+    "_notes": "Two different real components share this block type name. In image-with-text/main-product, only 'text' (richtext, MUST be wrapped in <p> tags) applies — leave 'title' out. Inside horizontal-ticker, only 'title' (plain text, one short ticker message) applies — leave 'text' out. Never fill both. In horizontal-ticker, add 8-10 blocks minimum for smooth scrolling and give EACH block unique, different content — never repeat the same message."
 }

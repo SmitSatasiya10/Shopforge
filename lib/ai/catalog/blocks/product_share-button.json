@@ -1,34 +1,13 @@
 {
     "id": "product_share-button",
     "label": "Share Buttons",
-    "purpose": "Social sharing buttons for product page",
+    "purpose": "Let shoppers share the product page link",
     "category": "product-detail",
     "tags": [
         "social"
     ],
     "settings": {
-        "share_label": {
-            "type": "text",
-            "default": "Share"
-        },
-        "platforms": {
-            "type": "text",
-            "default": "facebook,twitter,pinterest,email"
-        },
-        "button_style": [
-            "icon-only",
-            "icon-text",
-            "text-only"
-        ],
-        "button_size": [
-            "small",
-            "medium",
-            "large"
-        ],
-        "layout": [
-            "horizontal",
-            "vertical"
-        ]
+        "share_label": "text"
     },
-    "_notes": "Social sharing buttons for Facebook, Twitter, Pinterest, Email. Helps increase product reach through social media. Available platforms: facebook, twitter, pinterest, linkedin, email, whatsapp, copy-link."
+    "_notes": "The live block's real schema is now just share_label plus margins — the platforms/button_style/button_size/layout fields from the previous catalog version do not exist as block settings anymore and have zero effect if set. The actual share platforms/icons shown are hardcoded in the block's Liquid, not configurable via settings."
 }

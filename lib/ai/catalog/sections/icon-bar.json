@@ -27,11 +27,6 @@
             "medium",
             "large"
         ],
-        "alignment": [
-            "left",
-            "center",
-            "right"
-        ],
         "icon_layout": [
             "horizontal",
             "vertical"

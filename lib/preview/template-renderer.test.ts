@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderTemplate } from "./template-renderer";
-import { createFsTemplateReader } from "./fs-template-reader";
+import { createFsTemplateReader, createFsBinaryReader } from "./fs-template-reader";
 import { ShopifyTemplate, ShopifyTemplateSchema, orderedSections } from "./shopify-template";
 import { NormalizedProduct } from "@/lib/product/types";
 
@@ -181,10 +181,12 @@ describe("rendering the real Base Theme", () => {
       readTemplate,
       templateName: "index",
     });
-    // snippets/header-logo.liquid renders `<span class="h2">{{ shop.name }}</span>`. LiquidJS
-    // hides the caller's *scope* from {% render %} but propagates globals — passing the
-    // Shopify context as scope left all 639 render sites without shop/section/settings.
-    expect(html).toContain(">Northwake</span>");
+    // sections/header.liquid's JSON-LD block renders `"name": {{ shop.name | json }}`, which
+    // (unlike header-logo.liquid's text-logo fallback, only used when no logo image is
+    // configured) always renders regardless of theme settings. LiquidJS hides the caller's
+    // *scope* from {% render %} but propagates globals — passing the Shopify context as scope
+    // left all 639 render sites without shop/section/settings.
+    expect(html).toContain('"name": "Northwake"');
   }, 60_000);
 
   it("resolves link_list settings so the header renders its menu", async () => {
@@ -200,6 +202,29 @@ describe("rendering the real Base Theme", () => {
     // renders empty while still claiming the `header--has-menu` class.
     expect(html).toContain("Catalog");
     expect(html).toContain("/collections/all");
+  }, 60_000);
+
+  it("computes a realistic --header-height from the logo's real aspect ratio, not a wrong 1:1 guess", async () => {
+    // slideshow-hero's transparent-header design (snippets/transparent-header-css.liquid)
+    // pulls the hero up by `calc(var(--header-height) * -1)` so the header can float on top of
+    // it. header.liquid derives that height from `settings.logo_width / settings.logo.aspect_ratio`
+    // — with the Image drop's un-corrected 1:1 default, a real theme's wide logo (~4.8:1)
+    // computed a wildly tall "logo height" (~240px instead of ~50px), inflating the header to
+    // ~264px and pulling the hero up far enough to cover the header entirely. Passing a real
+    // readBinary must keep this small and sane.
+    const html = await renderTemplate({
+      template: await readThemeTemplate("index"),
+      product,
+      storeName: "Northwake",
+      readTemplate,
+      readBinary: createFsBinaryReader(),
+      templateName: "index",
+    });
+    const match = html.match(/--header-height:\s*(\d+)px/);
+    expect(match).not.toBeNull();
+    const headerHeight = Number(match![1]);
+    expect(headerHeight).toBeGreaterThan(40);
+    expect(headerHeight).toBeLessThan(150);
   }, 60_000);
 
   it("resolves color settings into rgb components the theme's CSS variables need", async () => {

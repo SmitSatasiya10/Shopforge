@@ -1,0 +1,40 @@
+{
+    "id": "countdown-timer",
+    "label": "Countdown Timer",
+    "purpose": "Display a countdown timer to a sale deadline or event to create urgency",
+    "category": "conversion",
+    "tags": [
+        "urgency",
+        "countdown"
+    ],
+    "settings": {
+        "end_time": "text",
+        "heading": "inline_richtext",
+        "end_behavior": [
+            "hide",
+            "restart",
+            "next_day"
+        ],
+        "show_days": [
+            true,
+            false
+        ],
+        "label_days": "text",
+        "show_hours": [
+            true,
+            false
+        ],
+        "label_hours": "text",
+        "show_minutes": [
+            true,
+            false
+        ],
+        "label_minutes": "text",
+        "show_seconds": [
+            true,
+            false
+        ],
+        "label_seconds": "text"
+    },
+    "_notes": "end_time MUST be in this exact format: YYYY-MM-DDTHH:MM:SS (e.g. 2026-03-26T00:00:00). heading is inline_richtext and must NOT be wrapped in <p> tags (inline tags like <strong>/<em> only). end_behavior controls what happens once end_time passes: 'hide' removes the block, 'restart' adds repeat_hours and loops, 'next_day' repeats at the same time the next day. show_days/show_hours/show_minutes/show_seconds toggle which time units are displayed; label_days/label_hours/label_minutes/label_seconds are the short unit labels (e.g. 'Days', 'Hrs', 'Mins', 'Secs') shown only when the matching show_* is true. Many other settings in the real schema (colors, borders, spacing, box styling, timezone) are pure layout/visual and intentionally excluded."
+}

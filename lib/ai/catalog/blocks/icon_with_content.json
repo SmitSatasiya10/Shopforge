@@ -1,0 +1,16 @@
+{
+    "id": "icon_with_content",
+    "label": "Icon With Content",
+    "purpose": "One icon + heading + text item inside a horizontal ticker",
+    "category": "trust-badges",
+    "tags": [],
+    "settings": {
+        "icon": "text",
+        "filled_icon": [true, false],
+        "image": "image_picker",
+        "icon_position": ["above", "next-to-title", "next-to-text"],
+        "title": "text",
+        "text": "richtext"
+    },
+    "_notes": "'icon' names a material-icon (e.g. 'local_shipping', 'verified_user'). 'text' is richtext and MUST be wrapped in <p> tags. Leave 'image' empty '' — only use it if you want a custom image instead of the icon; images are filled in outside of you. Distinct from icon-with-content (hyphenated) used elsewhere — this one is horizontal-ticker's own version. Add 8-10 blocks minimum with unique content for smooth scrolling."
+}

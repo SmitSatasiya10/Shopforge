@@ -1,26 +1,18 @@
 {
     "id": "row",
     "label": "Row",
-    "purpose": "Generic row block used in multiple sections with different field requirements",
-    "category": "social-proof",
-    "tags": [
-        "stats",
-        "comparison"
-    ],
-    "_notes": "IMPORTANT: The 'row' block has DIFFERENT relevant settings depending on the section. For 'results' section: use only percentage (number), row_heading (text), row_text (richtext - MUST wrap with <p> tags). For 'comparison-table' section: use only benefit (inline_richtext), us, others, others_2, others_3 (all checkboxes). Check which section you're adding blocks to, and only set the keys relevant to that section on each block instance!",
+    "purpose": "A single row — meaning depends on which section it's in: a comparison-table feature row, or a results-section stat row",
+    "category": "content",
+    "tags": [],
     "settings": {
-        "percentage": {
-            "type": "number",
-            "min": 0,
-            "max": 100,
-            "default": 90
-        },
-        "row_heading": "text",
-        "row_text": "richtext",
         "benefit": "inline_richtext",
-        "us": "checkbox",
-        "others": "checkbox",
-        "others_2": "checkbox",
-        "others_3": "checkbox"
-    }
+        "us": [true, false],
+        "others": [true, false],
+        "others_2": [true, false],
+        "others_3": [true, false],
+        "percentage": {"type": "range", "min": 0, "max": 100, "default": 90},
+        "row_heading": "text",
+        "row_text": "richtext"
+    },
+    "_notes": "One block type shared by 2 different real components — only use the fields for the section this block is actually in: (1) In comparison-table: 'benefit' (the feature being compared, inline_richtext, no <p> tags) plus 'us'/'others'/'others_2'/'others_3' checkboxes (does our product have it vs. up to 3 competitor columns). (2) In results: 'percentage' (a stat number), 'row_heading', and 'row_text' (richtext, MUST be wrapped in <p> tags)."
 }

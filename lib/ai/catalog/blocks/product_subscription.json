@@ -1,36 +1,47 @@
 {
     "id": "product_subscription",
     "label": "Subscription Widget",
-    "purpose": "Offer subscription/recurring purchase option with discount",
+    "purpose": "Offer a subscription/recurring purchase option alongside one-time purchase, with discount messaging",
     "category": "conversion",
     "tags": [
         "subscription"
     ],
     "settings": {
-        "show_subscription_option": {
-            "type": "checkbox",
-            "default": true
-        },
-        "subscription_discount": {
-            "type": "range",
-            "min": 0,
-            "max": 50,
-            "default": 15
-        },
-        "frequency_options": {
-            "type": "text",
-            "default": "7,14,30"
-        },
-        "default_frequency": {
-            "type": "range",
-            "min": 7,
-            "max": 90,
-            "default": 30
-        },
-        "preselect_subscription": {
-            "type": "checkbox",
-            "default": false
-        }
+        "first_displayed_option": [
+            "one_time",
+            "subscription"
+        ],
+        "preselected_option": [
+            "one_time",
+            "subscription"
+        ],
+        "dispalyed_prices": [
+            "unit",
+            "unit_with_discount",
+            "total"
+        ],
+        "style": [
+            "horizontal",
+            "vertical",
+            "checkbox"
+        ],
+        "hide_frequency": [
+            true,
+            false
+        ],
+        "frequency_label": "inline_richtext",
+        "one_time_label": "inline_richtext",
+        "one_time_caption": "inline_richtext",
+        "one_time_price_text": "inline_richtext",
+        "one_time_compare_price_text": "inline_richtext",
+        "subscription_label": "inline_richtext",
+        "subscription_caption": "inline_richtext",
+        "subscription_price_text": "inline_richtext",
+        "subscription_compare_price_text": "inline_richtext",
+        "subscription_badge_text": "inline_richtext",
+        "subscription_description_text": "richtext",
+        "benefits_icon": "text",
+        "benefits_custom_icon": "image_picker"
     },
-    "_notes": "For subscription products (recurring orders). Offers 'Subscribe & Save' option with discount. Shows frequency selector (weekly, monthly). Requires Shopify subscription apps like Recharge or Appstle."
+    "_notes": "'dispalyed_prices' is spelled exactly that way in the real schema (typo preserved) — do not 'correct' it to displayed_prices. first_displayed_option/preselected_option control which purchase mode (one_time vs subscription) is listed first / selected by default. style's 'checkbox' value renders a single checkbox toggle instead of two selectable option cards — a real interaction-model change, not just a visual variant. hide_frequency controls whether the delivery-frequency selector shows at all. All *_label/_caption/_price_text/_compare_price_text/_badge_text fields are inline_richtext (no <p> wrapping, inline tags like <strong>/<em> are fine) and support placeholders like [price], [compare_price], [percentage_saved]. subscription_description_text is richtext, MUST be wrapped in <p> tags, and defaults to a bullet-style benefits list using an [icon] placeholder per line (e.g. '<p>[icon] Cancel anytime</p>'). benefits_icon is the Material Symbols icon name substituted for [icon]; benefits_custom_icon overrides it with an image. Excluded: the entire non_selected_*/selected_* two-tone color/border palette (~20 settings), colors, color_scheme, accent_color, badge_color_scheme, checkbox_size, border_width, corner_radius, spacing_between_options, show_selected_indicators, price_layout, sub_compare_based_on, frequency_selector_type, frequency_names, frequency_dropdown_width, hide_pickers_overlay, benefits_filled_icon, subscription_badge_style, badge_radius, subscription_separator_opacity, subscription_description_font_size, subscription_benefits_spacing/icon_size/icon_color, update_prices, margins."
 }

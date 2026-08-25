@@ -1,40 +1,29 @@
 {
     "id": "product_sticky-atc",
     "label": "Sticky Add to Cart",
-    "purpose": "Floating add to cart bar that appears when scrolling past buy buttons",
+    "purpose": "Floating add-to-cart bar that appears when scrolling past the main buy buttons",
     "category": "conversion",
     "tags": [
         "cta"
     ],
     "settings": {
-        "show_on_mobile": {
-            "type": "checkbox",
-            "default": true
-        },
-        "show_on_desktop": {
-            "type": "checkbox",
-            "default": false
-        },
-        "show_product_image": {
-            "type": "checkbox",
-            "default": true
-        },
-        "show_price": {
-            "type": "checkbox",
-            "default": true
-        },
-        "show_variant_selector": {
-            "type": "checkbox",
-            "default": true
-        },
-        "position": [
-            "bottom",
-            "top"
+        "function": [
+            "add_to_cart",
+            "scroll_#ProductInfo-id",
+            "scroll_#variant-selects-id",
+            "scroll_#quantity-breaks-id",
+            "scroll_.pricing-table"
         ],
-        "button_label": {
-            "type": "text",
-            "default": "Add to cart"
-        }
+        "display_when": [
+            "always",
+            "after_scroll"
+        ],
+        "button_label": "text",
+        "picker_type": [
+            "combined",
+            "separate"
+        ],
+        "stars_label": "inline_richtext"
     },
-    "_notes": "Sticky bar that follows user scroll. Keeps buy button visible at all times. Improves conversion on mobile. Shows mini version of product info and buy button. Appears after scrolling past main buy buttons."
+    "_notes": "None of show_on_mobile/show_on_desktop/show_product_image/show_price/show_variant_selector/position/button_label from the previous catalog version exist in the live schema anymore except button_label. function controls what clicking the bar's button actually does: add straight to cart, or scroll the page to a specific section (variant picker, quantity breaks table, or pricing table) instead of adding to cart. display_when controls whether the bar is always visible or only appears after scrolling past the main buy buttons. picker_type only affects whether the variant picker inside the bar is combined into one row or shown as separate pickers. stars_label is the inline_richtext caption next to the rating stars (default '(xxxx Reviews)' — write real review-count copy in the same shape, e.g. '(128 Reviews)'). Excluded as pure visual/composition: desktop_layout, desktop_show_image/title/rating_stars/price/sale_badge/variant_picker/full_button_width/show_price_in_button/transparent_bg and the matching mobile_* toggles, enable_custom_btn_color, custom_btn_color, color_scheme, star_color."
 }

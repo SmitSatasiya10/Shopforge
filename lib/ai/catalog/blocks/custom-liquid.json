@@ -1,0 +1,11 @@
+{
+    "id": "custom-liquid",
+    "label": "Custom Liquid",
+    "purpose": "Embed raw Liquid/HTML code for advanced custom functionality",
+    "category": "misc",
+    "tags": [
+        "custom-code"
+    ],
+    "settings": {},
+    "_notes": "The block's only real setting ('custom_liquid') accepts raw Liquid/HTML code, not shopper-facing copy — the system prompt forbids the AI from ever writing Liquid, HTML, CSS or JavaScript, so this block has no AI-writable settings and is intentionally left empty. It should never be selected as a section block by the generator."
+}

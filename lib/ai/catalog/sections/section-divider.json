@@ -10,26 +10,16 @@
         "product"
     ],
     "settings": {
-        "divider_style": [
-            "solid",
-            "dashed",
-            "dotted",
-            "double",
-            "wave",
-            "zigzag"
+        "shape": [
+            "diagonal_1", "diagonal_2", "curved_1", "curved_2", "curved_3", "curved_4", "curved_5", "curved_6",
+            "sharp_1", "sharp_2", "sharp_3", "sharp_4", "sharp_5", "waves_1", "waves_2", "waves_3", "random_1",
+            "style_1", "style_2", "style_3", "style_4", "style_5", "style_6", "style_7", "style_8", "style_9", "style_10"
         ],
-        "divider_height": {
-            "type": "range",
-            "min": 1,
-            "max": 10,
-            "default": 2
-        },
-        "divider_color": "color",
-        "show_divider": [
-            "true",
-            "false"
-        ]
+        "flip_horizontal": [true, false],
+        "flip_vertical": [true, false],
+        "shape_color": ["accent-1", "accent-2", "background-1", "background-2", "inverse", "custom"],
+        "background_color": ["accent-1", "accent-2", "background-1", "background-2", "inverse", "custom"]
     },
     "allowed_blocks": [],
-    "_notes": "Section divider adds visual separation between sections. No blocks needed. Keep it simple."
+    "_notes": "Section divider adds a decorative shaped transition between sections. No blocks needed. Pick a 'shape' that suits the surrounding sections' tone; keep it simple."
 }

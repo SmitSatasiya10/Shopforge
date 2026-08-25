@@ -1,12 +1,12 @@
 {
     "id": "product",
-    "label": "Product",
-    "purpose": "Feature a product with optional secondary image on hover",
-    "category": "product-showcase",
+    "label": "Product Tile",
+    "purpose": "A single product tile in a collage grid",
+    "category": "content",
     "tags": [],
     "settings": {
-        "product": "product_picker",
-        "second_image": "checkbox"
+        "product": "product",
+        "second_image": [true, false]
     },
-    "_notes": "Product block for collage section. Select a product to feature. Enable second_image to show alternate image on hover."
+    "_notes": "Leave 'product' empty '' — you have no real product handle to reference other than the one this page is about; the merchant assigns this later."
 }

@@ -1,22 +1,15 @@
 {
     "id": "image",
     "label": "Image",
-    "purpose": "Image block for content sections",
-    "category": "media",
+    "purpose": "A single standalone image block",
+    "category": "content",
     "tags": [],
     "settings": {
-        "image": "image_picker",
-        "width": {
-            "type": "range",
-            "min": 0,
-            "max": 100,
-            "step": 10,
-            "default": 100
-        },
-        "alignment": [
-            "flex-start",
-            "center",
-            "flex-end"
-        ]
+        "image": "image_picker"
+    },
+    "_notes": "Leave 'image' empty '' — images are filled in outside of you.",
+    "_image_generation": {
+        "enabled": true,
+        "field_name": "image"
     }
 }

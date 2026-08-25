@@ -1,40 +1,27 @@
 {
     "id": "product_buy-buttons",
     "label": "Buy Buttons",
-    "purpose": "Add to cart and buy now buttons with optional quantity selector",
-    "category": "product-detail",
+    "purpose": "Add to cart button, with an optional secondary skip-cart buy-now button",
+    "category": "conversion",
     "tags": [
         "cta",
         "add-to-cart"
     ],
     "settings": {
-        "show_add_to_cart": {
-            "type": "checkbox",
-            "default": true
-        },
-        "add_to_cart_label": {
-            "type": "text",
-            "default": "Add to cart"
-        },
-        "show_dynamic_checkout": {
-            "type": "checkbox",
-            "default": true
-        },
-        "show_quantity_selector": {
-            "type": "checkbox",
-            "default": false
-        },
-        "button_style": [
-            "solid",
-            "outline"
+        "atc_custom_label": "text",
+        "display_price": [
+            true,
+            false
         ],
-        "full_width": {
-            "type": "checkbox",
-            "default": true
-        }
+        "prefix_icon": "image_picker",
+        "suffix_icon": "image_picker",
+        "enable_secondary_btn": [
+            true,
+            false
+        ],
+        "secondary_btn_label": "text",
+        "secondary_btn_prefix_icon": "image_picker",
+        "secondary_btn_suffix_icon": "image_picker"
     },
-    "allowed_blocks": [
-        "product_quantity_selector"
-    ],
-    "_notes": "Essential block. Shows Add to Cart button and optionally Buy Now/Express Checkout buttons (Apple Pay, Google Pay, PayPal). Can include inline quantity selector."
+    "_notes": "atc_custom_label overrides the default 'Add to cart' label; if left empty the theme's default language string is used. display_price toggles showing the price inside the button. enable_secondary_btn adds a second, separate button (secondary_btn_label) that skips the cart and goes straight to checkout. Icon fields must be left as empty strings — images are filled in separately. show_dynamic_checkout, skip_cart, quantity-selector position, colors, sizes and spacing are all layout/integration settings and intentionally excluded."
 }

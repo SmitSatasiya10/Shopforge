@@ -1,34 +1,9 @@
 {
     "id": "product_description",
     "label": "Product Description",
-    "purpose": "Display full product description with formatting options",
+    "purpose": "Display the product's full description",
     "category": "product-detail",
     "tags": [],
-    "settings": {
-        "show_full_description": {
-            "type": "checkbox",
-            "default": true
-        },
-        "show_read_more": {
-            "type": "checkbox",
-            "default": false
-        },
-        "truncate_length": {
-            "type": "range",
-            "min": 100,
-            "max": 500,
-            "default": 200
-        },
-        "text_alignment": [
-            "left",
-            "center",
-            "right"
-        ],
-        "style": [
-            "body",
-            "subtitle",
-            "caption"
-        ]
-    },
-    "_notes": "Shows product description from Shopify admin. Can truncate with 'Read more' button. Supports HTML formatting. Essential for SEO and explaining product features/benefits."
+    "settings": {},
+    "_notes": "This block has no author-facing content settings in the current schema — it renders the product's own description field directly from Shopify, which is not part of this block's settings. The only real settings (margin_top/margin_bottom) are pure layout and are excluded."
 }

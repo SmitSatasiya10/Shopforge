@@ -52,23 +52,34 @@ export class ColorDrop extends Drop {
   }
 }
 
-/** `{{ image }}` prints its URL; the theme reads `.src`, `.width`, `.aspect_ratio`, `.alt`. */
+/**
+ * `{{ image }}` prints its URL; the theme reads `.src`, `.width`, `.aspect_ratio`, `.alt`. A
+ * merchant's uploaded image is an arbitrary remote URL the preview can't cheaply inspect, so
+ * 1600x1600 (aspect_ratio 1) remains the default there. `dimensions` lets a caller that DOES
+ * know the real size — resolve-settings.ts, for the Base Theme's own locally-vendored images —
+ * override it; a wrong 1:1 guess is usually harmless but can visibly break a layout that
+ * derives real geometry from aspect_ratio, e.g. a wide logo's width divided by its (wrongly
+ * assumed square) aspect_ratio inflating a computed --header-height enough to hide the header.
+ */
 export class ImageDrop extends Drop {
   readonly src: string;
   readonly url: string;
-  readonly width = 1600;
-  readonly height = 1600;
-  readonly aspect_ratio = 1;
+  readonly width: number;
+  readonly height: number;
+  readonly aspect_ratio: number;
   readonly alt: string;
   readonly media_type = "image";
   readonly id: string;
 
-  constructor(url: string, alt = "") {
+  constructor(url: string, alt = "", dimensions?: { width: number; height: number } | null) {
     super();
     this.src = url;
     this.url = url;
     this.alt = alt;
     this.id = url;
+    this.width = dimensions?.width ?? 1600;
+    this.height = dimensions?.height ?? 1600;
+    this.aspect_ratio = dimensions && dimensions.height > 0 ? dimensions.width / dimensions.height : 1;
   }
 
   get preview_image() {
