@@ -1,39 +1,13 @@
 {
     "id": "product_urgency",
     "label": "Urgency Text",
-    "purpose": "Display time-sensitive messages to create urgency and drive conversions",
+    "purpose": "Display a short, time-sensitive text message to create urgency and drive conversions",
     "category": "conversion",
     "tags": [
         "urgency"
     ],
     "settings": {
-        "urgency_type": [
-            "visitors",
-            "recent-sales",
-            "custom-text"
-        ],
-        "custom_text": {
-            "type": "richtext",
-            "default": "<p>🔥 12 people are viewing this right now!</p>"
-        },
-        "show_icon": {
-            "type": "checkbox",
-            "default": true
-        },
-        "icon": {
-            "type": "text",
-            "default": "local_fire_department"
-        },
-        "style": [
-            "banner",
-            "pill",
-            "text-only"
-        ],
-        "color_scheme": [
-            "accent-1",
-            "accent-2",
-            "warning"
-        ]
+        "urgency": "text"
     },
-    "_notes": "Creates FOMO and urgency. Shows messages like '12 people viewing', 'Only 3 left', '5 sold in last hour'. Can use dynamic counters or custom text. Richtext MUST be wrapped in <p> tags."
+    "_notes": "The real schema was completely redesigned since this catalog entry was last written — urgency_type, custom_text, show_icon, icon, style, and color_scheme no longer exist on this block. It is now a single free-text field, 'urgency' (default 'HOT PRODUCT | LOW STOCK'), plus pure layout/visibility settings (visibility, desktop_alignment, mobile_alignment, color_scheme, margins) which are excluded as non-content. Write the entire urgency message as plain text into 'urgency' (e.g. 'Only 3 left in stock!', '12 people are viewing this right now') — it is plain text, NOT richtext, so do not include HTML tags."
 }

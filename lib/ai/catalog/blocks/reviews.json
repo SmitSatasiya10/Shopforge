@@ -1,0 +1,19 @@
+{
+    "id": "reviews",
+    "label": "Reviews Carousel",
+    "purpose": "Up to 3 customer review cards with author, photo and quote",
+    "category": "social-proof",
+    "tags": ["reviews", "testimonials"],
+    "settings": {
+        "author_1": "inline_richtext",
+        "image_1": "image_picker",
+        "text_1": "richtext",
+        "author_2": "inline_richtext",
+        "image_2": "image_picker",
+        "text_2": "richtext",
+        "author_3": "inline_richtext",
+        "image_3": "image_picker",
+        "text_3": "richtext"
+    },
+    "_notes": "text_N fields are richtext and MUST be wrapped in <p> tags; author_N are inline_richtext (no <p> tags). Write at least author_1/text_1; fill 2 and 3 too when the section calls for multiple reviews. Leave every image_N empty '' — images are filled in outside of you. Give each review distinct, specific wording — never repeat the same quote."
+}

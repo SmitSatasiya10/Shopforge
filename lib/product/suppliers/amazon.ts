@@ -56,10 +56,19 @@ export function canonicalAmazonProductUrl(url: string): string | null {
 // field it deliberately overrides is the title, because with no og:title on the page the
 // generic path can only fall back to the <title> tag, which on Amazon is the marketplace
 // listing title ("<product> : Amazon.in: Home & Kitchen") rather than the product's name.
+//
+// The main image element also carries data-a-dynamic-image — a JSON-encoded map of every
+// gallery image's full-size URL to its [width, height] — in plain server-rendered HTML, the
+// same "stable, no JS needed" category as the rest of this fallback. Parsed defensively: a
+// missing or malformed attribute (Amazon changes markup without notice) degrades to the single
+// landing image rather than throwing.
 export interface AmazonHtmlFallback {
   title: string | null;
   brand: string | null;
+  /** The main product image — kept for callers that only need one. */
   image: string | null;
+  /** Every gallery image, main image first — from data-a-dynamic-image when present. */
+  images: string[];
   price: number | null;
   currency: string | null;
 }
@@ -99,6 +108,20 @@ export function extractAmazonHtmlFallback(html: string): AmazonHtmlFallback {
   const landingImage = $("#landingImage");
   const image = landingImage.attr("src") ?? landingImage.attr("data-old-hires") ?? null;
 
+  const dynamicAttr = $("#landingImage, #imgTagWrapperId img").first().attr("data-a-dynamic-image");
+  let gallery: string[] = [];
+  if (dynamicAttr) {
+    try {
+      const parsed: unknown = JSON.parse(dynamicAttr);
+      if (parsed && typeof parsed === "object") {
+        gallery = Object.keys(parsed).filter((url) => !!url);
+      }
+    } catch {
+      // malformed/truncated attribute — fall through to the single landing image below
+    }
+  }
+  const images = gallery.length > 0 ? [...new Set([...(image ? [image] : []), ...gallery])] : image ? [image] : [];
+
   const priceText = $(".a-price .a-offscreen").first().text().trim();
   let price: number | null = null;
   let currency: string | null = null;
@@ -109,5 +132,5 @@ export function extractAmazonHtmlFallback(html: string): AmazonHtmlFallback {
     price = Number.isFinite(numeric) ? numeric : null;
   }
 
-  return { title, brand, image, price, currency };
+  return { title, brand, image, images, price, currency };
 }

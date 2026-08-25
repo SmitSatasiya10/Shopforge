@@ -1,41 +1,26 @@
 {
     "id": "product_bundle-offer",
     "label": "Bundle Offer",
-    "purpose": "Frequently bought together / bundle products section",
+    "purpose": "Offer a discounted multi-unit or multi-product bundle to increase order value",
     "category": "conversion",
     "tags": [
         "bundle",
         "upsell"
     ],
     "settings": {
-        "heading": {
-            "type": "text",
-            "default": "Frequently Bought Together"
-        },
-        "bundle_discount": {
-            "type": "range",
-            "min": 0,
-            "max": 50,
-            "default": 10
-        },
-        "max_products": {
-            "type": "range",
-            "min": 2,
-            "max": 5,
-            "default": 3
-        },
-        "show_checkboxes": {
-            "type": "checkbox",
-            "default": true
-        },
-        "button_label": {
-            "type": "text",
-            "default": "Add bundle to cart"
-        },
-        "product_selection": [
-            "automatic",
-            "manual"
-        ]
+        "type": [
+            "main",
+            "separate"
+        ],
+        "title_text": "text",
+        "show_footer": [
+            true,
+            false
+        ],
+        "total_price_text": "inline_richtext",
+        "total_price_benefit": "inline_richtext",
+        "button_label": "text",
+        "displayed_free_price_text": "text"
     },
-    "_notes": "Shows related products as a bundle with discount. 'Buy this + that = Save 10%'. Increases average order value. Can auto-select related products or manually choose. All products add to cart together."
+    "_notes": "type='main' ties the bundle to the page's main Add to Cart button; type='separate' gives it its own Add to Cart button. button_label only applies when type='separate'. title_text is the block heading (e.g. 'BUY X & GET Y'). total_price_text/total_price_benefit are short inline_richtext labels shown in the price footer (only relevant when show_footer is true) — inline_richtext must NOT be wrapped in <p> tags. displayed_free_price_text is shown instead of a price when an item in the bundle is free (e.g. 'FREE'). The block also has up to 3 product slots (product_1/2/3) with their own descriptions and per-item discounts — these reference specific products the merchant picks in the theme editor and are intentionally excluded since the AI has no way to know real product handles; the total bundle's percentage_discount/fixed_amount_discount are pricing configuration, not copy, and are excluded for the same reason a discount code would be. All sizing, color, border and image-display settings are pure visual layout and excluded."
 }

@@ -1,0 +1,16 @@
+{
+    "id": "atc-button",
+    "label": "Add to Cart Button",
+    "purpose": "Product add-to-cart button, optionally with prefix/suffix label icons",
+    "category": "conversion",
+    "tags": [
+        "cta",
+        "add-to-cart"
+    ],
+    "settings": {
+        "button_label": "text",
+        "prefix_icon": "image_picker",
+        "suffix_icon": "image_picker"
+    },
+    "_notes": "Real schema also has an 'atc_product'/'atc_skip_cart' pair to make this button add a DIFFERENT product to cart instead of the current product page's — omitted here since it needs a real product reference the AI can't supply; leaving it blank (the default) correctly adds the current product with its selected variant, quantity and upsells. prefix_icon/suffix_icon are small custom icon images shown before/after the button label (left empty by the AI per system prompt, filled by the image-generation step). All remaining real settings (button_style_secondary, large_font_size, custom colors, full_width, alignment, icon_scale/spacing, margins) are pure visual styling, omitted."
+}

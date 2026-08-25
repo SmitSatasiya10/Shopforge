@@ -1,38 +1,48 @@
 {
     "id": "product_quantity-gifts",
     "label": "Gifts on Quantity",
-    "purpose": "Show free gift products unlocked at certain quantity thresholds",
+    "purpose": "Show free gift products that unlock at certain cart-quantity thresholds of the main product",
     "category": "conversion",
     "tags": [
         "upsell"
     ],
     "settings": {
-        "border_thickness": {
-            "type": "range",
-            "min": 0,
-            "max": 5,
+        "gift_1": "product",
+        "gift_1_quantity": {
+            "type": "number",
+            "default": 1
+        },
+        "gift_1_image": "image_picker",
+        "gift_1_badge_text": "inline_richtext",
+        "gift_1_top_text": "inline_richtext",
+        "gift_1_bottom_text": "inline_richtext",
+        "gift_2": "product",
+        "gift_2_quantity": {
+            "type": "number",
             "default": 2
         },
-        "border_style": [
-            "solid",
-            "dashed"
-        ],
-        "corner_radius": {
-            "type": "range",
-            "min": 0,
-            "max": 30,
-            "default": 10
+        "gift_2_image": "image_picker",
+        "gift_2_badge_text": "inline_richtext",
+        "gift_2_top_text": "inline_richtext",
+        "gift_2_bottom_text": "inline_richtext",
+        "gift_3": "product",
+        "gift_3_quantity": {
+            "type": "number",
+            "default": 3
         },
-        "locked_background": [
-            "solid",
-            "stripes"
-        ],
-        "locked_image_opacity": {
-            "type": "range",
-            "min": 0,
-            "max": 30,
-            "default": 0
-        }
+        "gift_3_image": "image_picker",
+        "gift_3_badge_text": "inline_richtext",
+        "gift_3_top_text": "inline_richtext",
+        "gift_3_bottom_text": "inline_richtext",
+        "gift_4": "product",
+        "gift_4_quantity": {
+            "type": "number",
+            "default": 4
+        },
+        "gift_4_image": "image_picker",
+        "gift_4_badge_text": "inline_richtext",
+        "gift_4_top_text": "inline_richtext",
+        "gift_4_bottom_text": "inline_richtext"
     },
-    "_notes": "Shows gift products that unlock at quantity thresholds (e.g., Buy 2 get free sample, Buy 3 get free product). Gifts auto-add to cart. Gift products must have 'collection-hidden' and 'search-hidden' tags."
+    "_notes": "Up to 4 gift slots (gift_1..gift_4). Leave gift_N (product picker) empty — you have no real product handle to reference; the merchant assigns the actual gift product later (it must be a unique product, not used elsewhere, tagged 'collection-hidden' and 'search-hidden'). gift_N_quantity is the minimum quantity of the MAIN product required to unlock that gift (defaults 1/2/3/4 — keep ascending). gift_N_badge_text is inline_richtext and supports the [compare_price] placeholder. gift_N_top_text / gift_N_bottom_text are short inline_richtext labels shown on the LOCKED gift tile (defaults are like '<strong>2 PACK</strong>' / '<strong>Exclusive</strong>'). inline_richtext fields must NOT be wrapped in <p> tags, but inline tags like <strong> are fine. Excluded as pure visual: border_thickness/style, corner_radius, locked_background, locked_image_opacity/blur, unlocked_bg_color/border_color, gift_box_animation/color/tie_color, badge_style/width/radius/bg_color/text_color, locked_badge_colors/bg_color/text_color, gift_N_cross_out_compare, gift_N_compare_price_based_on, margins."
 }

@@ -1,0 +1,23 @@
+{
+    "id": "trustpilot-stars",
+    "label": "Trustpilot Stars",
+    "purpose": "Display a Trustpilot-style star rating with optional review-count text",
+    "category": "trust-badges",
+    "tags": [
+        "rating",
+        "reviews"
+    ],
+    "settings": {
+        "rating": {
+            "type": "range",
+            "min": 1,
+            "max": 5,
+            "default": 5
+        },
+        "label": {
+            "type": "inline_richtext",
+            "default": "(xxxx Reviews)"
+        }
+    },
+    "_notes": "'rating' is the numeric star value (1-5). 'label' is inline_richtext text shown next to the stars, e.g. '(1,234 Reviews)' — must NOT be wrapped in <p> tags. Real schema does NOT have a 'trustpilot_url' or 'show_rating_text' setting (this is a purely visual Trustpilot-styled star widget, not a live Trustpilot integration) — put the full review-count text directly in 'label'. All remaining real settings (active/background/symbol star colors, text size, alignment, an anchor-link scroll_id, margins) are pure visual styling or technical anchors, omitted."
+}

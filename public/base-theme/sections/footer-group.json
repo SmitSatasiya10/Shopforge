@@ -17,26 +17,49 @@
             "width_mobile": "2"
           }
         },
-        "footer-links-1": {
+        "link_list_KgeNtU": {
           "type": "link_list",
           "settings": {
-            "heading": "Quick Links",
-            "menu": "main-menu"
+            "heading": "Pet Care Hub",
+            "block_headings_font_size": 1,
+            "menu": "main-menu",
+            "font_size": 14,
+            "menu_items_font": "body",
+            "width_desktop": 3,
+            "width_mobile": "2"
           }
         },
-        "footer-newsletter-1": {
+        "1c647602-cc00-4009-a058-976435c8ee9e": {
+          "type": "link_list",
+          "settings": {
+            "heading": "FAQs & Policies",
+            "block_headings_font_size": 1,
+            "menu": "footer",
+            "font_size": 14,
+            "menu_items_font": "body",
+            "width_desktop": 3,
+            "width_mobile": "2"
+          }
+        },
+        "24f208fd-0898-43eb-af23-d74f8420ab37": {
           "type": "email_signup",
           "settings": {
-            "heading": "Join Our Pack",
-            "subtext": "<p>Sign up for exclusive deals on pet supplies, new arrivals, and tail-wagging tips for your furry friends.</p>",
-            "button_label": "Subscribe"
+            "heading": "Subscribe to our emails",
+            "block_headings_font_size": 1,
+            "subtext": "<p>Join our email list for exclusive offers and the latest news.</p>",
+            "button_type": "solid",
+            "button_label": "Sign up",
+            "button_style_secondary": false,
+            "width_desktop": 6,
+            "width_mobile": "2"
           }
         }
       },
       "block_order": [
         "fc645871-d789-4cfa-8584-4f8a29b6ce92",
-        "footer-links-1",
-        "footer-newsletter-1"
+        "link_list_KgeNtU",
+        "1c647602-cc00-4009-a058-976435c8ee9e",
+        "24f208fd-0898-43eb-af23-d74f8420ab37"
       ],
       "custom_css": [],
       "settings": {

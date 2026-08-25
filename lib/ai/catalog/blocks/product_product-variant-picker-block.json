@@ -1,33 +1,33 @@
 {
     "id": "product_product-variant-picker-block",
     "label": "Variant Picker",
-    "purpose": "Allow customers to select product variants (size, color, style, etc.)",
+    "purpose": "Allow customers to select product variants (size, color, style, etc.) and optionally show quantity-break pricing tiers",
     "category": "product-detail",
     "tags": [
         "variants"
     ],
     "settings": {
-        "picker_types": {
-            "type": "text",
-            "default": "pills, pills, pills"
-        },
-        "custom_labels": {
-            "type": "text",
-            "default": ""
-        },
-        "skip_unavailable": {
-            "type": "checkbox",
-            "default": false
-        },
-        "swatches_size": [
-            "small",
-            "medium",
-            "large",
-            "extra-large"
-        ]
+        "picker_types": "text",
+        "custom_labels": "text",
+        "skip_unavailable": [
+            true,
+            false
+        ],
+        "breaks_headline": "text",
+        "breaks_displayed_images": [
+            "none",
+            "variant_images",
+            "custom"
+        ],
+        "breaks_labels": "text",
+        "breaks_benefits": "text",
+        "breaks_badges": "text",
+        "breaks_captions": "text",
+        "breaks_price_texts": "text",
+        "breaks_compare_price_texts": "text"
     },
     "allowed_blocks": [
         "product_sizing-chart"
     ],
-    "_notes": "Critical block for products with variants. Can include pills, dropdown, or swatches. Can contain size chart block. Picker types: 'pills', 'dropdown', 'swatches', 'quantity breaks', 'hidden'."
+    "_notes": "picker_types is a COMMA-SEPARATED list, one entry per product option, choosing its widget: 'pills', 'dropdown', 'swatches', 'quantity breaks', or 'hidden' (e.g. 'swatches, dropdown, quantity breaks'). custom_labels is a comma-separated override of each option's displayed label; supports [count], [name], [name_lowercase], [name_uppercase], [selected] placeholders; leave empty to use the real option name. All breaks_* fields ONLY apply when one option's picker_types entry is 'quantity breaks', and are each a COMMA-SEPARATED list with one entry per quantity-break tier — use '[empty]' to skip a tier. Supported placeholders across these fields: [name], [price], [compare_price], [amount_saved], [amount_saved_rounded]. skip_unavailable hides and auto-skips sold-out variants. Excluded as pure visual/technical: append (sizing-chart position), swatches_size, swatches_custom_colors(_list), full_width_dropdowns, breaks_style, breaks_prices_layout, breaks_display_selected_indicator, breaks_border_radius/width, breaks_color_scheme, breaks_vertical_items_align, breaks_badge_style/color, breaks_custom_images (a raw URL list the AI should not hallucinate), breaks_image_width, breaks_space_images, breaks_vertical_images_position, breaks_benefit_position/style/color, margins."
 }

@@ -1,47 +1,23 @@
 {
     "id": "collapsible-row",
     "label": "Collapsible Row",
-    "purpose": "Accordion/collapsible content section with expandable rows",
+    "purpose": "Accordion/collapsible content row with heading, icon, and expandable body text",
     "category": "content",
     "tags": [
         "expandable",
         "faq"
     ],
     "settings": {
+        "open": [true, false],
         "heading": "text",
-        "content": "richtext",
-        "icon": [
-            "none",
-            "package",
-            "info",
-            "star",
-            "checkmark",
-            "return",
-            "truck",
-            "question"
-        ],
-        "open": {
-            "type": "checkbox",
-            "default": false
+        "heading_size": ["small", "medium", "large"],
+        "icon": {
+            "type": "text",
+            "default": "check_box"
         },
-        "heading_size": {
-            "type": "range",
-            "min": 12,
-            "max": 24,
-            "default": 16
-        },
-        "margin_top": {
-            "type": "range",
-            "min": 0,
-            "max": 60,
-            "default": 15
-        },
-        "margin_bottom": {
-            "type": "range",
-            "min": 0,
-            "max": 60,
-            "default": 15
-        }
+        "filled_icon": [true, false],
+        "custom_icon": "image_picker",
+        "content": "richtext"
     },
-    "_notes": "Creates expandable/collapsible accordion rows. Great for FAQs, product details, shipping info. Each row has heading (text), content (richtext with <p> tags), icon, and open state. Block name is 'collapsible-row' NOT 'accordion'. Does NOT use nested blocks - content goes directly in settings."
+    "_notes": "Block name is 'collapsible-row' NOT 'accordion'. 'content' is richtext and MUST be wrapped in <p> tags. 'icon' is free text — a Material Symbols icon name (e.g. check_box, local_shipping, verified, star) — NOT a limited enum. custom_icon optionally replaces it with an uploaded image (left empty by the AI per system prompt). filled_icon toggles solid vs outline icon style. open controls whether this row starts expanded — useful for surfacing the most important FAQ/info row by default. Real schema also lets content come from a linked Shopify page ('page' setting) instead of the richtext field — omitted since the AI has no real page to reference. Does NOT support nested content blocks for AI-authored copy — use the 'content' setting directly. All remaining real settings (collapse icon style, borders, corner radius, extensive open/closed state color overrides, padding, animation speed, margins) are pure visual styling, omitted."
 }

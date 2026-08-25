@@ -11,7 +11,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { InlineTextToolbar } from "@/components/InlineTextToolbar";
 import { renderTemplate } from "@/lib/preview/template-renderer";
-import { createFetchTemplateReader } from "@/lib/preview/template-loader";
+import { createFetchTemplateReader, createFetchBinaryReader } from "@/lib/preview/template-loader";
 import {
   loadBlockSchema,
   loadSectionSchema,
@@ -73,7 +73,16 @@ export default function EditorPage() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [showRewrite, setShowRewrite] = useState(false);
   const [generateImages, setGenerateImages] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The import wizard's generation call is best-effort and never blocks navigation — if it
+  // failed, it flags this via a query param rather than leaving the merchant looking at the
+  // un-generated default store with no explanation. Read once, at mount, via the lazy
+  // initializer rather than an effect (avoids a same-mount cascading re-render for a value
+  // available synchronously on first render).
+  const [notice, setNotice] = useState<string | null>(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("generationFailed") === "1"
+      ? "AI generation didn't run for this store yet — click Generate to try again."
+      : null,
+  );
   // Which delete is awaiting confirmation in the ConfirmDialog (replaces window.confirm).
   const [confirmDelete, setConfirmDelete] = useState<"section" | "block" | null>(null);
   const [previewHeight, setPreviewHeight] = useState(600);
@@ -91,6 +100,7 @@ export default function EditorPage() {
   const [publishError, setPublishError] = useState<string | null>(null);
 
   const readTemplate = useMemo(() => createFetchTemplateReader(), []);
+  const readBinary = useMemo(() => createFetchBinaryReader(), []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The initial load's setProduct isn't a user edit — skip the debounced save it would
@@ -126,6 +136,13 @@ export default function EditorPage() {
         }
       })
       .catch(() => setLoadError("Could not load this project"));
+  }, [projectId]);
+
+  // Strip the query param read by the `notice` initializer above so a refresh doesn't re-show it.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("generationFailed") === "1") {
+      window.history.replaceState(null, "", `/editor/${projectId}`);
+    }
   }, [projectId]);
 
   // The image toggle starts from the server's SHOPFORGE_GENERATE_IMAGES env default; the
@@ -171,6 +188,7 @@ export default function EditorPage() {
       product: product ? toNormalizedProduct(product) : null,
       storeName: deriveStoreName(product),
       readTemplate,
+      readBinary,
       templateName: page,
     })
       .then((rendered) => !cancelled && setHtml(rendered))
@@ -178,7 +196,7 @@ export default function EditorPage() {
     return () => {
       cancelled = true;
     };
-  }, [configuration, page, product, readTemplate]);
+  }, [configuration, page, product, readTemplate, readBinary]);
 
   // Debounced persistence — configuration is never lost on reload.
   useEffect(() => {
@@ -805,6 +823,7 @@ export default function EditorPage() {
           <div className={viewport === "mobile" ? "h-full w-97.5 shrink-0 border-x border-neutral-300 bg-white" : "h-full w-full"}>
             <PreviewFrame
               html={html}
+              resetScrollKey={page}
               selectedSectionId={selection?.sectionId ?? null}
               onSelect={handleSelect}
               onTextCommit={handleTextCommit}

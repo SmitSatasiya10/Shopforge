@@ -1,0 +1,44 @@
+{
+    "id": "text-with-icon",
+    "label": "Text with Icon",
+    "purpose": "Up to 4 inline text+icon pairs (e.g. trust badges, short claims), stacked horizontally or vertically",
+    "category": "content",
+    "tags": [
+        "icons"
+    ],
+    "settings": {
+        "direction": ["horizontal", "vertical"],
+        "text_1": {
+            "type": "inline_richtext",
+            "default": "Text with icon"
+        },
+        "icon_1": {
+            "type": "text",
+            "default": "check_circle"
+        },
+        "filled_icon_1": [true, false],
+        "custom_icon_1": "image_picker",
+        "text_2": "inline_richtext",
+        "icon_2": {
+            "type": "text",
+            "default": "check_circle"
+        },
+        "filled_icon_2": [true, false],
+        "custom_icon_2": "image_picker",
+        "text_3": "inline_richtext",
+        "icon_3": {
+            "type": "text",
+            "default": "check_circle"
+        },
+        "filled_icon_3": [true, false],
+        "custom_icon_3": "image_picker",
+        "text_4": "inline_richtext",
+        "icon_4": {
+            "type": "text",
+            "default": "check_circle"
+        },
+        "filled_icon_4": [true, false],
+        "custom_icon_4": "image_picker"
+    },
+    "_notes": "One block instance renders up to 4 text+icon pairs, numbered 1-4. Each pair only renders if its text_N is non-empty, so use as many pairs as you want and leave every unused text_N (and its icon_N) as an empty string \"\". text_N is inline_richtext — do NOT wrap in <p> tags. icon_N must be a Material Symbols icon name (e.g. check_circle, local_shipping, verified, star). filled_icon_N toggles solid vs outline icon style for that pair. custom_icon_N optionally replaces icon_N with an uploaded image (left empty by the AI per system prompt). direction controls whether the pairs stack horizontally or vertically. All remaining real settings (text/icon size, alignment, font, colors/gradients, width, spacing, background, border, shadow, padding, margins) are pure visual styling, omitted."
+}

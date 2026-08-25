@@ -8,6 +8,7 @@
         "hotspot"
     ],
     "allowed_on": [
+        "index",
         "product"
     ],
     "settings": {

@@ -1,0 +1,9 @@
+{
+    "id": "product_sku",
+    "label": "Product SKU",
+    "purpose": "Display the selected variant's SKU on the product page",
+    "category": "product-detail",
+    "tags": [],
+    "settings": {},
+    "_notes": "The SKU value itself comes from the real product/variant data in Shopify, not from AI-generated content — there is no text field to fill. The block's only real setting, text_style (body/subtitle/uppercase), is pure typography, as are margin_top/margin_bottom. This block needs no content input from the AI; leave its settings object empty."
+}

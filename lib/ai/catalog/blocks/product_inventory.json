@@ -1,40 +1,34 @@
 {
     "id": "product_inventory",
-    "label": "Inventory/Stock Status",
-    "purpose": "Display stock level and create urgency with low stock messages",
+    "label": "Inventory Status",
+    "purpose": "Display stock level and create urgency with a low-stock message",
     "category": "conversion",
     "tags": [
         "urgency",
         "stock"
     ],
     "settings": {
-        "style": [
-            "progress-bar",
-            "text-only",
-            "icon-text"
+        "show_low_stock_when": [
+            "under_threshold",
+            "all_the_time"
         ],
-        "show_stock_count": {
-            "type": "checkbox",
-            "default": true
-        },
-        "low_stock_threshold": {
+        "inventory_threshold": {
             "type": "range",
-            "min": 1,
-            "max": 50,
+            "min": 0,
+            "max": 100,
             "default": 10
         },
-        "text_in_stock": {
-            "type": "text",
-            "default": "In stock, ready to ship"
-        },
-        "text_low_stock": {
-            "type": "text",
-            "default": "Only [count] left in stock!"
-        },
-        "text_out_of_stock": {
-            "type": "text",
-            "default": "Out of stock"
+        "show_inventory_quantity": [
+            true,
+            false
+        ],
+        "in_custom_text": "inline_richtext",
+        "in_delivery_days": {
+            "type": "range",
+            "min": 1,
+            "max": 30,
+            "default": 5
         }
     },
-    "_notes": "Creates urgency and FOMO (fear of missing out). Shows real-time inventory levels. Use low stock threshold to trigger urgency messages. Dynamic variable [count] shows actual stock number."
+    "_notes": "in_custom_text is the in-stock message and is inline_richtext (must NOT be wrapped in <p> tags); it supports the literal placeholders [quantity] (current stock count) and [date] (computed from in_delivery_days), e.g. 'Ships by [date] — [quantity] left'. show_low_stock_when controls whether the low-stock message only appears once stock drops to inventory_threshold or always shows. There is no separate custom-text setting for the low-stock or out-of-stock states in the current schema — only the in-stock message is author-editable, the rest is layout/color/animation and is intentionally excluded."
 }

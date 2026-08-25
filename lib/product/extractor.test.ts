@@ -12,6 +12,24 @@ describe("extractOpenGraph", () => {
     expect(extractOpenGraph(html)?.data.image).toBe("https://example.com/a.jpg");
   });
 
+  it("collects every og:image tag, in document order, deduped — image stays the first", () => {
+    const html = `
+      <html><head>
+        <meta property="og:image" content="https://example.com/a.jpg" />
+        <meta property="og:image" content="https://example.com/b.jpg" />
+        <meta property="og:image" content="https://example.com/a.jpg" />
+        <meta property="og:image" content="https://example.com/c.jpg" />
+      </head></html>
+    `;
+    const result = extractOpenGraph(html);
+    expect(result?.data.images).toEqual([
+      "https://example.com/a.jpg",
+      "https://example.com/b.jpg",
+      "https://example.com/c.jpg",
+    ]);
+    expect(result?.data.image).toBe(result?.data.images[0]);
+  });
+
   it("accepts a multi-word bare <title> with no OG tags, when the page has a real <img> (e.g. Amazon: no OG/JSON-LD at all, but a real per-page <title> plus a static #landingImage)", () => {
     const html = `
       <html><head>

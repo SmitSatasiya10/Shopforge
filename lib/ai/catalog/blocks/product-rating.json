@@ -1,29 +1,12 @@
 {
     "id": "product-rating",
     "label": "Product Rating",
-    "purpose": "Display product rating and review count",
+    "purpose": "Display product star rating and review count",
     "category": "trust-badges",
     "tags": [
         "rating",
         "reviews"
     ],
-    "settings": {
-        "margin_top": {
-            "type": "range",
-            "min": 0,
-            "max": 45,
-            "step": 3,
-            "unit": "px",
-            "default": 15
-        },
-        "margin_bottom": {
-            "type": "range",
-            "min": 0,
-            "max": 45,
-            "step": 3,
-            "unit": "px",
-            "default": 15
-        }
-    },
-    "_notes": "Shows product star rating and review count. Automatically pulls data from Shopify Product Reviews app. Use for product pages. Different from 'rating-stars' which is for generic rating displays."
+    "settings": {},
+    "_notes": "This block has no author-facing content settings in the current schema — it automatically pulls the star rating and review count from the Shopify Product Reviews app. The only real settings (margin_top/margin_bottom) are pure layout and are excluded. Different from 'rating-stars', which is a generic standalone rating display."
 }

@@ -33,7 +33,13 @@ export type NormalizedProduct = z.infer<typeof NormalizedProductSchema>;
 
 export type ImportStatus = "pending" | "importing" | "succeeded" | "partial" | "failed";
 
-export type ImportErrorReason = "invalid_url" | "unreachable" | "http_error" | "blocked_host" | null;
+export type ImportErrorReason =
+  | "invalid_url"
+  | "unreachable"
+  | "http_error"
+  | "blocked_host"
+  | "too_large"
+  | null;
 
 export interface ImportResult {
   status: ImportStatus;

@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { generateTemplate } from "./content-generator";
 import { renderTemplate } from "@/lib/preview/template-renderer";
 import { createFsTemplateReader } from "@/lib/preview/fs-template-reader";
+import { ShopifyTemplateSchema } from "@/lib/preview/shopify-template";
 import { NormalizedProduct } from "@/lib/product/types";
 
 const product: NormalizedProduct = {
@@ -37,16 +38,20 @@ const hasKey = Boolean(process.env.OPENROUTER_API_KEY) && process.env.RUN_AI_TES
 describe.skipIf(!hasKey)("AI generation against the real theme", () => {
   for (const name of ["product", "index"] as const) {
     it(`generates and renders ${name}.json`, async () => {
+      const readTemplate = createFsTemplateReader();
+      const seed = ShopifyTemplateSchema.parse(JSON.parse(await readTemplate(`templates/${name}.json`)));
+      const expectedSectionCount = (seed.order ?? Object.keys(seed.sections)).length;
+
       const result = await generateTemplate({ product, templateName: name });
       console.log(
         `[${name}] model=${result.model} sections=${result.template.order?.length} ` +
           `images: ${result.images.fromProduct}/${result.images.targets} from product, ` +
-          `${result.images.generated} generated; dropped=[${result.droppedSections.join(", ")}]`,
+          `${result.images.generated} generated; dropped=[${result.droppedSections.join(", ")}]; ` +
+          `fallback=[${result.fallbackSections.join(", ")}]`,
       );
       console.log(`[${name}] order: ${result.template.order?.join(" -> ")}`);
       // artefacts are inspected by hand when debugging a prompt change
 
-      const readTemplate = createFsTemplateReader();
       const html = await renderTemplate({
         template: result.template,
         product,
@@ -57,9 +62,10 @@ describe.skipIf(!hasKey)("AI generation against the real theme", () => {
       const failures = [...html.matchAll(/shopforge: [^\n]*?-->/g)].map((m) => m[0]);
       console.log(`[${name}] rendered ${html.length} chars, ${failures.length} section failures`);
       for (const f of failures.slice(0, 5)) console.log(`   ${f.slice(0, 140)}`);
-      
 
-      expect(result.template.order?.length ?? 0).toBeGreaterThan(2);
+      // The page structure is fixed to the base theme's own template — generation must never
+      // produce more or fewer sections than that, regardless of what the model returned.
+      expect(result.template.order?.length ?? 0).toBe(expectedSectionCount);
       expect(failures.length).toBe(0);
     }, 180000);
   }

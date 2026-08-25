@@ -1,43 +1,23 @@
 {
     "id": "product_estimated-shipping",
     "label": "Estimated Shipping",
-    "purpose": "Show estimated delivery date and shipping calculator",
-    "category": "product-detail",
+    "purpose": "Show an estimated delivery date range to build purchase confidence",
+    "category": "trust-badges",
     "tags": [
-        "shipping",
-        "trust"
+        "shipping"
     ],
     "settings": {
-        "show_date_estimate": {
-            "type": "checkbox",
-            "default": true
-        },
-        "processing_days": {
-            "type": "range",
-            "min": 0,
-            "max": 10,
-            "default": 2
-        },
-        "shipping_days_min": {
-            "type": "range",
-            "min": 1,
-            "max": 30,
-            "default": 3
-        },
-        "shipping_days_max": {
-            "type": "range",
-            "min": 1,
-            "max": 30,
+        "icon": "text",
+        "custom_icon": "image_picker",
+        "message": "richtext",
+        "min_shipping_days": {
+            "type": "number",
             "default": 7
         },
-        "show_zip_calculator": {
-            "type": "checkbox",
-            "default": false
-        },
-        "icon": {
-            "type": "text",
-            "default": "local_shipping"
+        "max_shipping_days": {
+            "type": "number",
+            "default": 15
         }
     },
-    "_notes": "Displays expected delivery date range (e.g., 'Arrives by Dec 25-28'). Can include ZIP code calculator for more accurate estimates. Helps set customer expectations and reduce support queries."
+    "_notes": "message is richtext and MUST be wrapped in <p> tags; use the literal placeholders [start_date] and [end_date] where the earliest/latest arrival dates should appear, e.g. '<p>Estimated delivery: [start_date] – [end_date]</p>'. min_shipping_days/max_shipping_days define that date window. icon is a Material Symbols icon font name (e.g. 'local_shipping'); custom_icon must be left empty. Icon size/alignment, date formatting, and which weekdays/dates to skip are layout/scheduling settings and intentionally excluded."
 }

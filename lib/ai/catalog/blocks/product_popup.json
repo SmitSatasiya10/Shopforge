@@ -1,0 +1,13 @@
+{
+    "id": "product_popup",
+    "label": "Pop-up",
+    "purpose": "A link that opens an existing store page (e.g. size guide, shipping info) in a popup",
+    "category": "product-detail",
+    "tags": [
+        "popup"
+    ],
+    "settings": {
+        "text": "text"
+    },
+    "_notes": "text is the clickable link label (e.g. 'Size Guide', 'Shipping & Returns'). The 'page' setting (which Shopify page's content is shown in the popup) is intentionally excluded — it references a specific page the merchant has already created and the AI has no way to know its handle, so it should be left to the merchant/theme editor. close_button_style is purely visual and excluded."
+}

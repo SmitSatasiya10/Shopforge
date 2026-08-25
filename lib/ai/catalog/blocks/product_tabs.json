@@ -1,81 +1,24 @@
 {
     "id": "product_tabs",
     "label": "Product Tabs",
-    "purpose": "Tabbed content sections for product information (descriptions, specs, reviews, etc)",
+    "purpose": "Tabbed content sections for product information (description, shipping, materials, etc.)",
     "category": "product-detail",
     "tags": [
         "tabs"
     ],
     "settings": {
-        "visibility": [
-            "desktop-hidden",
-            "mobile-hidden",
-            "always-display"
-        ],
-        "tab_text_size": {
-            "type": "range",
-            "min": 8,
-            "max": 24,
-            "default": 16
-        },
-        "tab_text_size_mobile": {
-            "type": "range",
-            "min": 8,
-            "max": 20,
-            "default": 14
-        },
-        "button_alignment": [
-            "left",
-            "center"
-        ],
-        "divider_thickness": {
-            "type": "range",
-            "min": 1,
-            "max": 3,
-            "default": 2
-        },
-        "active_indicator_thickness": {
-            "type": "range",
-            "min": 1,
-            "max": 5,
-            "default": 2
-        },
-        "content_size": {
-            "type": "range",
-            "min": 12,
-            "max": 20,
-            "default": 16
-        },
-        "margin_top": {
-            "type": "range",
-            "min": 0,
-            "max": 60,
-            "default": 30
-        },
-        "margin_bottom": {
-            "type": "range",
-            "min": 0,
-            "max": 60,
-            "default": 30
-        }
+        "tab_1_title": "text",
+        "tab_1_icon": "text",
+        "tab_1_custom_icon": "image_picker",
+        "tab_1_content": "richtext",
+        "tab_2_title": "text",
+        "tab_2_icon": "text",
+        "tab_2_custom_icon": "image_picker",
+        "tab_2_content": "richtext",
+        "tab_3_title": "text",
+        "tab_3_icon": "text",
+        "tab_3_custom_icon": "image_picker",
+        "tab_3_content": "richtext"
     },
-    "blocks": {
-        "tab_content": {
-            "name": "Tab",
-            "settings": {
-                "title": "text",
-                "icon": [
-                    "none",
-                    "package",
-                    "info",
-                    "star",
-                    "checkmark",
-                    "return",
-                    "truck"
-                ],
-                "content": "richtext"
-            }
-        }
-    },
-    "_notes": "Creates tabbed interface for organizing product information. Use for ingredients, specs, shipping info, reviews, FAQs. Each tab needs title, optional icon, and richtext content. Block name is 'product_tabs' NOT 'tab'."
+    "_notes": "IMPORTANT: this block does NOT use child blocks — it has exactly 3 FIXED tab slots (tab_1/tab_2/tab_3) built into its own settings, each with its own title/icon/content. There is no way to add a 4th tab, and there is no separate 'tab' block type to nest inside it (a previous catalog version incorrectly modeled this with child blocks named 'tab_content' — that does not exist in the real schema). tab_N_content is richtext and MUST be wrapped in <p> tags. tab_N_icon is a Material Symbols icon name; tab_N_custom_icon overrides it with an image. Each tab also has a tab_N_page (Shopify page reference) setting that can substitute a full page's content for tab_N_content — omitted here since there is no real page handle to reference. Excluded as pure visual: visibility, tab_text_size(_mobile), tab_text_icon_scale, button_alignment, divider_thickness, active_indicator_thickness, content_size, tab_text_color, active_tab_color, divider_color, active_indicator_color, content_text_color, margins."
 }

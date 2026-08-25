@@ -2,7 +2,7 @@ import type { Liquid } from "liquidjs";
 import { NormalizedProduct } from "@/lib/product/types";
 import { createShopifyLiquid } from "@/lib/shopify-compat/engine";
 import { BlockInstance, buildGlobalContext, buildProductDrop, buildSectionDrop } from "@/lib/shopify-compat/drops";
-import { TemplateReader } from "./template-loader";
+import { BinaryReader, TemplateReader } from "./template-loader";
 import { ShopifyTemplate, orderedSections } from "./shopify-template";
 import { applyPreviewShims } from "./preview-shims";
 import { loadThemeSettings } from "./theme-settings";
@@ -17,6 +17,8 @@ export interface RenderTemplateOptions {
   product: NormalizedProduct | null;
   storeName: string;
   readTemplate: TemplateReader;
+  /** Reads a Base Theme asset's bytes — used to compute real aspect_ratio for its own images. */
+  readBinary?: BinaryReader;
   /** Which Shopify template this is, so `request.page_type` and `template.name` are right. */
   templateName?: string;
 }
@@ -80,7 +82,7 @@ async function resolveBlockSettings(
       }
       return {
         ...block,
-        settings: resolveSettings(block.settings, schema, ctx),
+        settings: await resolveSettings(block.settings, schema, ctx),
         blocks: await resolveBlockSettings(block.blocks ?? [], sectionBlockSchemas, readTemplate, ctx),
       };
     }),
@@ -118,7 +120,7 @@ async function renderSection(
   const section = buildSectionDrop(
     id,
     instance.type,
-    resolveSettings(instance.settings, schema?.settings, ctx),
+    await resolveSettings(instance.settings, schema?.settings, ctx),
     await resolveBlockSettings(
       collectBlocks(instance.blocks, instance.block_order),
       blockSchemas,
@@ -143,8 +145,12 @@ async function renderSection(
     inner = `<!-- shopforge: "${instance.type}" failed to render: ${message.replace(/-->/g, "")} -->`;
   }
 
+  // Real Shopify puts the section's schema `class` (e.g. header.liquid's "section-header") on
+  // the shopify-section wrapper — theme CSS/JS (sticky positioning, scroll-to-hide) targets that
+  // class directly, so dropping it here silently breaks any section that assumes it's present.
+  const wrapperClass = ["shopify-section", schema?.class].filter(Boolean).join(" ");
   return (
-    `<div data-sf-section-id="${id}" data-sf-section-type="${instance.type}">${inner}</div>`
+    `<div class="${wrapperClass}" data-sf-section-id="${id}" data-sf-section-type="${instance.type}">${inner}</div>`
   );
 }
 
@@ -190,7 +196,7 @@ export async function renderTemplate(opts: RenderTemplateOptions): Promise<strin
 
   const engine = createShopifyLiquid({ readTemplate, locale, currency: product?.currency });
 
-  const ctx = defaultResolveContext();
+  const ctx = defaultResolveContext(opts.readBinary);
   // Theme settings are typed by config/settings_schema.json the same way section settings are
   // typed by their own {% schema %} — `settings.logo` is an image, the colour settings are
   // Color objects, `type_body_font` is a font.
@@ -199,7 +205,7 @@ export async function renderTemplate(opts: RenderTemplateOptions): Promise<strin
     "config/settings_schema.json",
     [],
   );
-  const themeSettings = resolveSettings(
+  const themeSettings = await resolveSettings(
     settings,
     schemaGroups.flatMap((group) => group.settings ?? []),
     ctx,

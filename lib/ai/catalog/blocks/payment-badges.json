@@ -7,12 +7,7 @@
         "payment"
     ],
     "settings": {
-        "show_payment_icons": "checkbox",
-        "payment_icon_style": [
-            "color",
-            "grayscale",
-            "outline"
-        ]
+        "enabled_payment_types": "text"
     },
-    "_notes": "Payment badges block shows accepted payment method icons (Visa, Mastercard, PayPal, etc.). Auto-populated from store settings."
+    "_notes": "enabled_payment_types is free text listing which payment icons to show (e.g. a comma-separated list of payment method keys like visa, mastercard, paypal, apple-pay, google-pay, shop-pay). If left empty it falls back to the icons enabled in the store's own payment settings, which is a safe default — leave blank unless the product calls for spotlighting specific payment methods. All remaining real settings (icon size on desktop/mobile, margins) are pure visual styling, omitted."
 }

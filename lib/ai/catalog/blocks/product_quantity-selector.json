@@ -1,34 +1,142 @@
 {
     "id": "product_quantity-selector",
     "label": "Quantity Selector",
-    "purpose": "Allow customers to select quantity with optional quantity breaks/discounts",
+    "purpose": "Let shoppers choose an order quantity, unlock volume-discount tiers (quantity breaks), and optionally add cross-sell upsell products",
     "category": "product-detail",
-    "tags": [],
+    "tags": [
+        "quantity-breaks",
+        "upsell"
+    ],
     "settings": {
-        "full_width_classic": {
-            "type": "checkbox",
-            "default": false
-        },
-        "enable_quantity_discounts": {
-            "type": "checkbox",
-            "default": false
-        },
-        "headline": {
-            "type": "text",
-            "default": "BUNDLE & SAVE"
-        },
-        "style": [
-            "normal",
-            "compact",
-            "vertical"
+        "enable_quantity_discounts": [
+            true,
+            false
         ],
+        "headline": "text",
         "preselected": [
             "none",
             "option_1",
             "option_2",
             "option_3",
             "option_4"
-        ]
+        ],
+        "pickers_label": "inline_richtext",
+        "enable_variant_selectors": [
+            true,
+            false
+        ],
+        "skip_unavailable": [
+            true,
+            false
+        ],
+        "upsell_1_product": "product",
+        "upsell_1_min_offer": [
+            "1",
+            "2",
+            "3",
+            "4"
+        ],
+        "upsell_1_type": [
+            "gift",
+            "checkbox",
+            "checkbox_preselected"
+        ],
+        "upsell_1_image": "image_picker",
+        "upsell_1_text_left": "inline_richtext",
+        "upsell_1_text_right": "inline_richtext",
+        "upsell_1_badge_text": "inline_richtext",
+        "upsell_2_product": "product",
+        "upsell_2_min_offer": [
+            "1",
+            "2",
+            "3",
+            "4"
+        ],
+        "upsell_2_type": [
+            "gift",
+            "checkbox",
+            "checkbox_preselected"
+        ],
+        "upsell_2_image": "image_picker",
+        "upsell_2_text_left": "inline_richtext",
+        "upsell_2_text_right": "inline_richtext",
+        "upsell_2_badge_text": "inline_richtext",
+        "upsell_3_product": "product",
+        "upsell_3_min_offer": [
+            "1",
+            "2",
+            "3",
+            "4"
+        ],
+        "upsell_3_type": [
+            "gift",
+            "checkbox",
+            "checkbox_preselected"
+        ],
+        "upsell_3_image": "image_picker",
+        "upsell_3_text_left": "inline_richtext",
+        "upsell_3_text_right": "inline_richtext",
+        "upsell_3_badge_text": "inline_richtext",
+        "option_1_quantity": {
+            "type": "range",
+            "min": 0,
+            "max": 20,
+            "default": 1
+        },
+        "option_1_percentage_off_text": "text",
+        "option_1_fixed_amount_off": "text",
+        "option_1_image": "image_picker",
+        "option_1_badge": "inline_richtext",
+        "option_1_label": "inline_richtext",
+        "option_1_benefit": "inline_richtext",
+        "option_1_caption": "inline_richtext",
+        "option_1_price_text": "inline_richtext",
+        "option_1_compare_price_text": "inline_richtext",
+        "option_2_quantity": {
+            "type": "range",
+            "min": 0,
+            "max": 20,
+            "default": 2
+        },
+        "option_2_percentage_off_text": "text",
+        "option_2_fixed_amount_off": "text",
+        "option_2_image": "image_picker",
+        "option_2_badge": "inline_richtext",
+        "option_2_label": "inline_richtext",
+        "option_2_benefit": "inline_richtext",
+        "option_2_caption": "inline_richtext",
+        "option_2_price_text": "inline_richtext",
+        "option_2_compare_price_text": "inline_richtext",
+        "option_3_quantity": {
+            "type": "range",
+            "min": 0,
+            "max": 20,
+            "default": 3
+        },
+        "option_3_percentage_off_text": "text",
+        "option_3_fixed_amount_off": "text",
+        "option_3_image": "image_picker",
+        "option_3_badge": "inline_richtext",
+        "option_3_label": "inline_richtext",
+        "option_3_benefit": "inline_richtext",
+        "option_3_caption": "inline_richtext",
+        "option_3_price_text": "inline_richtext",
+        "option_3_compare_price_text": "inline_richtext",
+        "option_4_quantity": {
+            "type": "range",
+            "min": 0,
+            "max": 20,
+            "default": 4
+        },
+        "option_4_percentage_off_text": "text",
+        "option_4_fixed_amount_off": "text",
+        "option_4_image": "image_picker",
+        "option_4_badge": "inline_richtext",
+        "option_4_label": "inline_richtext",
+        "option_4_benefit": "inline_richtext",
+        "option_4_caption": "inline_richtext",
+        "option_4_price_text": "inline_richtext",
+        "option_4_compare_price_text": "inline_richtext"
     },
-    "_notes": "Shows quantity input field. Can enable quantity breaks for bulk discounts (Buy 2 Save 10%, Buy 3 Save 15%). Requires Shopify automatic discounts setup."
+    "_notes": "This single block merges three real features, hence the large field count: (1) a classic quantity input, (2) up to 4 'quantity break' discount tiers (option_1..option_4), and (3) up to 3 cross-sell upsell slots (upsell_1..upsell_3). enable_quantity_discounts must be true for any of the option_N / upsell_N fields to matter. preselected picks which tier starts selected. pickers_label is the inline_richtext heading shown above per-tier variant pickers (only relevant if enable_variant_selectors is true). Upsells: leave upsell_N_product empty — no real product handle to reference, merchant assigns it later; upsell_N_min_offer is the tier at which that upsell becomes available; upsell_N_type is 'gift' (free), 'checkbox' (opt-in), or 'checkbox_preselected' (opt-in, pre-checked) — a real behavioral difference, not styling; upsell_N_text_left/text_right are inline_richtext (e.g. 'Add [title]' / '<strong>[price]</strong>'). Quantity tiers: option_N_quantity is the unit count for that tier (0 disables it); option_N_percentage_off_text / option_N_fixed_amount_off are the discount amounts as plain text (e.g. '10' or '5'); option_N_label/badge/benefit/caption/price_text/compare_price_text are all inline_richtext copy for that tier and support placeholders like [quantity], [price], [compare_price], [amount_saved]. All inline_richtext fields must NOT be wrapped in <p> tags. Excluded: the entire non_selected_*/selected_*/upsells_*_style_* two-tone color palette (~35 settings), style, update_pdp_prices, prices_layout, display_selected_indicator, border_radius/width, colors, color_scheme, accent_color, enable_variant_selectors_on_quantity_of_1, update_prices, show_selected_variant_images, variant_images_position, full_width_pickers, hide_pickers_overlay, indicator_top, scroll_media_gallery, image_width, vertical_items_align, space_images, vertical_images_position, hide_upsells_on_non_selected, upsells_image_size/text_size/badge_radius, option_N_compare_price (data-source, not copy), option_N_badge_style/color, option_N_benefit_position/style/radius/color, margins."
 }

@@ -1,11 +1,11 @@
 {
     "id": "collection",
-    "label": "Collection",
-    "purpose": "Feature a collection",
-    "category": "product-showcase",
+    "label": "Collection Tile",
+    "purpose": "A single collection tile in a collage grid",
+    "category": "content",
     "tags": [],
     "settings": {
-        "collection": "collection_picker"
+        "collection": "collection"
     },
-    "_notes": "Collection block for collage section. Select a collection to feature."
+    "_notes": "Leave 'collection' empty '' — you have no real collection handle to reference; the merchant assigns this later."
 }

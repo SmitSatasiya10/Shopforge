@@ -1,0 +1,13 @@
+{
+    "id": "product_emoji-benefits",
+    "label": "Emoji Benefits",
+    "purpose": "List key product benefits, each paired with an emoji, in a quick-scan list",
+    "category": "content",
+    "tags": [
+        "benefits"
+    ],
+    "settings": {
+        "benefits": "richtext"
+    },
+    "_notes": "benefits is richtext and MUST be wrapped in <p> tags — write one short benefit per <p>, each starting with a relevant emoji, e.g. '<p>✅ Free shipping on all orders</p><p>🔥 Handmade in small batches</p>'. This is the block's only real setting; everything else in the schema is layout margins."
+}

@@ -1,0 +1,17 @@
+{
+    "id": "product_complementary",
+    "label": "Complementary Products",
+    "purpose": "Show related or complementary products the shopper might also want",
+    "category": "conversion",
+    "tags": [
+        "cross-sell"
+    ],
+    "settings": {
+        "block_heading": "text",
+        "enable_quick_add": [
+            true,
+            false
+        ]
+    },
+    "_notes": "The recommended products themselves are pulled automatically from Shopify's product recommendations, not authored — block_heading (e.g. 'You may also like', 'Complete the look') is the only real copy. enable_quick_add toggles a quick add-to-cart button on each recommended product card. Icon choice, pagination style, image ratio, card sizing and product-count limits are layout/behavioral settings and intentionally excluded."
+}

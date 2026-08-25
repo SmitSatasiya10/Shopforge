@@ -1,79 +1,32 @@
 {
     "id": "review-avatars",
     "label": "Review Avatars",
-    "purpose": "Display customer avatars with review stats and text for social proof",
+    "purpose": "Display customer avatars with verified badges and review stat text for social proof",
     "category": "social-proof",
     "tags": [
         "reviews"
     ],
     "settings": {
-        "visibility": [
-            "desktop-hidden",
-            "mobile-hidden",
-            "always-display"
-        ],
-        "enable_layout": {
-            "type": "checkbox",
-            "default": false
+        "avatar_1": "image_picker",
+        "avatar_1_verified": [true, false],
+        "avatar_2": "image_picker",
+        "avatar_2_verified": [true, false],
+        "avatar_3": "image_picker",
+        "avatar_3_verified": [true, false],
+        "avatar_4": "image_picker",
+        "avatar_4_verified": [true, false],
+        "avatar_5": "image_picker",
+        "avatar_5_verified": [true, false],
+        "text_1_line_1": {
+            "type": "inline_richtext",
+            "default": "<strong>100+ orders</strong>"
         },
-        "alignment": [
-            "start",
-            "center",
-            "end"
-        ],
-        "corner_radius": {
-            "type": "range",
-            "min": 0,
-            "max": 40,
-            "default": 30
+        "text_1_line_2": {
+            "type": "inline_richtext",
+            "default": "in the last 24h"
         },
-        "avatars_position": [
-            "left",
-            "right"
-        ],
-        "avatar_size": {
-            "type": "range",
-            "min": 20,
-            "max": 80,
-            "default": 40
-        },
-        "avatar_offset": {
-            "type": "range",
-            "min": -30,
-            "max": 30,
-            "default": -10
-        },
-        "avatar_1": "image",
-        "avatar_1_verified": {
-            "type": "checkbox",
-            "default": false
-        },
-        "avatar_2": "image",
-        "avatar_2_verified": {
-            "type": "checkbox",
-            "default": false
-        },
-        "avatar_3": "image",
-        "avatar_3_verified": {
-            "type": "checkbox",
-            "default": false
-        },
-        "avatar_4": "image",
-        "avatar_4_verified": {
-            "type": "checkbox",
-            "default": false
-        },
-        "avatar_5": "image",
-        "avatar_5_verified": {
-            "type": "checkbox",
-            "default": false
-        },
-        "text_1_line_1": "inline_richtext",
-        "text_1_line_2": "inline_richtext",
         "text_2_line_1": "inline_richtext",
-        "text_2_line_2": "inline_richtext",
-        "star_color": "color",
-        "checkmark_color": "color"
+        "text_2_line_2": "inline_richtext"
     },
-    "_notes": "Shows customer avatars with review stats. Use inline_richtext fields for text (NO <p> tags, use <strong> for bold). Use [stars] placeholder in text to display rating stars. Upload avatar images via avatar_1 through avatar_5. Set enable_layout=true to customize size/position. avatar_size is a NUMBER (20-80), not a string. text_1_line_1 example: '<strong>2,847 reviews</strong>', text_1_line_2 example: '[stars] Trusted by pet parents'."
+    "_notes": "Shows up to 5 customer avatar images with an optional verified checkmark badge each (avatar_N_verified), plus two independent two-line text groups (text_1_line_1/text_1_line_2 and text_2_line_1/text_2_line_2) — e.g. '<strong>2,847 reviews</strong>' / 'Trusted by pet parents'. All text fields are inline_richtext: do NOT wrap in <p> tags, use <strong>/<em> for emphasis. Leave text_2_line_1/text_2_line_2 empty to show only the first text group. Avatar images are left empty by the AI per system prompt and filled by the image-generation step. All remaining real settings (enable custom layout, alignment, corner radius, avatar size/offset/position, checkmark and star colors/sizes, an anchor-link scroll id, per-text background/border/padding/offset/mobile-size overrides, margins) are pure visual styling, omitted."
 }

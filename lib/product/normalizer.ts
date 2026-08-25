@@ -107,7 +107,7 @@ export function normalizeFromOpenGraph(
     price: toNumber(data.priceAmount),
     compareAtPrice: null,
     currency: toStringOrNull(data.priceCurrency),
-    images: data.image ? [{ url: data.image, altText: null }] : [],
+    images: data.images.map((url) => ({ url, altText: null })),
     variants: [],
     options: [],
     vendor: null,

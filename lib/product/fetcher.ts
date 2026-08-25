@@ -19,7 +19,7 @@ const USER_AGENT = "Shopforge-ProductImport/0.1 (+prototype)";
 export class ProductFetchError extends Error {
   constructor(
     message: string,
-    public readonly reason: "invalid_url" | "unreachable" | "http_error" | "blocked_host",
+    public readonly reason: "invalid_url" | "unreachable" | "http_error" | "blocked_host" | "too_large",
   ) {
     super(message);
     this.name = "ProductFetchError";
@@ -176,10 +176,22 @@ export async function fetchProductHtml(url: string): Promise<string> {
   if (!res.ok) {
     throw new ProductFetchError(`Server responded ${res.status} for "${url}"`, "http_error");
   }
-  return res.text();
+  try {
+    return await readTextWithLimit(res, MAX_RESPONSE_BYTES);
+  } catch {
+    throw new ProductFetchError(
+      `Response for "${url}" exceeded the ${MAX_RESPONSE_BYTES.toLocaleString()}-byte size limit`,
+      "too_large",
+    );
+  }
 }
 
-const MAX_DISCOVERY_RESPONSE_BYTES = 5_000_000; // bounds products.json/sitemap/homepage fetches during store discovery
+// Bounds every single-page fetch (product HTML, product.json, products.json/sitemap/homepage
+// during discovery). A real product page is at most a few hundred KB; a much larger response
+// is a broken or unusually content-heavy page, and an unbounded read of one — verbatim into an
+// AI prompt via lib/ai/content-generator.ts's describeProduct() — can silently balloon a
+// generation request past the model's context limit and its token cost.
+const MAX_RESPONSE_BYTES = 5_000_000;
 
 async function readTextWithLimit(res: Response, maxBytes: number): Promise<string> {
   const reader = res.body?.getReader();
@@ -218,7 +230,7 @@ export async function fetchTextWithLimits(url: string): Promise<string | null> {
       Accept: "text/html,application/xml,text/xml,application/json",
     });
     if (!res.ok) return null;
-    return await readTextWithLimit(res, MAX_DISCOVERY_RESPONSE_BYTES);
+    return await readTextWithLimit(res, MAX_RESPONSE_BYTES);
   } catch {
     return null;
   }
@@ -289,7 +301,8 @@ export async function tryFetchShopifyProductJson(url: string): Promise<unknown |
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("application/json")) return null;
-    const body = await res.json();
+    const text = await readTextWithLimit(res, MAX_RESPONSE_BYTES);
+    const body = JSON.parse(text);
     if (!body || typeof body !== "object" || !("product" in body)) return null;
     return (body as { product: unknown }).product;
   } catch {

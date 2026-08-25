@@ -70,8 +70,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // catalog guard rejected, rather than having to diff the template to find out.
       generation: {
         model: generated.index.model,
-        index: { sections: generated.index.template.order?.length ?? 0, images: generated.index.images, dropped: generated.index.droppedSections },
-        product: { sections: generated.product.template.order?.length ?? 0, images: generated.product.images, dropped: generated.product.droppedSections },
+        index: {
+          sections: generated.index.template.order?.length ?? 0,
+          images: generated.index.images,
+          dropped: generated.index.droppedSections,
+          fallback: generated.index.fallbackSections,
+        },
+        product: {
+          sections: generated.product.template.order?.length ?? 0,
+          images: generated.product.images,
+          dropped: generated.product.droppedSections,
+          fallback: generated.product.fallbackSections,
+        },
       },
     });
   } catch (error) {

@@ -1,7 +1,7 @@
 import type { NormalizedProduct } from "../types";
-import type { AiConfig } from "@/lib/ai/config";
+import { loadAiConfig, type AiConfig } from "@/lib/ai/config";
 import { generateProductImages } from "@/lib/ai/product-image-generator";
-import { findWebProductImages } from "./web-search";
+import { findWebProductImages, type WebImageCandidate } from "./web-search";
 import type { CustomerPersona } from "@/lib/store-config/persona";
 import type { MarketingAngle } from "@/lib/store-config/marketing-angle";
 import { type ImageCandidate, type ImageCandidatesCache } from "@/lib/store-config/product-images";
@@ -37,6 +37,10 @@ export async function buildImageCandidates(
 ): Promise<ImageCandidatesCache> {
   const original = toCandidates(product.images, "original", "original");
 
+  // Web search is a second AI/LLM cost source alongside generation — gated behind the same
+  // toggle so "generateImages: false" means zero AI calls, not just zero generation calls.
+  const generateImages = loadAiConfig(options.config).generateImages;
+
   const [aiResult, webResult] = await Promise.allSettled([
     generateProductImages({
       product,
@@ -45,7 +49,7 @@ export async function buildImageCandidates(
       config: options.config,
       signal: options.signal,
     }),
-    findWebProductImages(product),
+    generateImages ? findWebProductImages(product) : Promise.resolve<WebImageCandidate[]>([]),
   ]);
 
   const ai =

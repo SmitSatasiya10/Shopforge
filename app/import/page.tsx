@@ -1712,6 +1712,7 @@ function ImagesScreen({
   const current = result?.key === requestKey ? result : null;
   const candidates = current?.candidates ?? null;
   const error = current?.error ?? null;
+  const aiGenerated = candidates?.primary[0]?.source === "ai-generated";
 
   function toggle(id: string) {
     setSelectedIds((ids) => {
@@ -1750,13 +1751,18 @@ function ImagesScreen({
     }
     const projectId = data.project.id as string;
     // Best-effort: a slow/failed generation call must not strand the merchant on this screen —
-    // the editor's own "Generate content" button can always retry once they're there.
-    await fetch(`/api/project/${projectId}/generate`, {
+    // the editor's own "Generate content" button can always retry once they're there. But a
+    // failure here must not be entirely invisible either, or the merchant lands in the editor
+    // looking at the un-generated default store with no idea generation never ran — flag it
+    // via a query param so the editor can surface it once loaded.
+    const generateOk = await fetch(`/api/project/${projectId}/generate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ generateImages: false }),
-    }).catch(() => {});
-    router.push(`/editor/${projectId}`);
+    })
+      .then((res) => res.ok)
+      .catch(() => false);
+    router.push(`/editor/${projectId}${generateOk ? "" : "?generationFailed=1"}`);
   }
 
   function goBack() {
@@ -1802,8 +1808,14 @@ function ImagesScreen({
       <ProgressSteps step={7} onBack={goBack} />
       <div className={`mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-8 ${hasCandidates || error ? "pb-28" : ""}`}>
         <div className="text-center">
-          <h1 className="text-3xl font-semibold tracking-tight">Your free AI-generated images</h1>
-          <p className="mt-3 text-base text-neutral-400">Select the AI images you want to use in your store</p>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {aiGenerated ? "Your free AI-generated images" : "Images from your product"}
+          </h1>
+          <p className="mt-3 text-base text-neutral-400">
+            {aiGenerated
+              ? "Select the AI images you want to use in your store"
+              : "Select the images you want to use in your store"}
+          </p>
         </div>
 
         {error && (
