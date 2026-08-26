@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildAngleMessages, parseAngleOptions, AngleGenerationError } from "./marketing-angle-generator";
+import { buildAngleMessages, buildAnglePromptParts, parseAngleOptions, AngleGenerationError } from "./marketing-angle-generator";
+import { joinParts } from "./prompt-breakdown";
 import { NormalizedProductSchema } from "@/lib/product/types";
 import type { CustomerPersona } from "@/lib/store-config/persona";
 
@@ -63,6 +64,22 @@ describe("buildAngleMessages", () => {
     const user = buildAngleMessages(product, persona, "en").find((m) => m.role === "user")!.content;
     expect(user).toContain("exactly four distinct marketing angles");
     expect(user).toContain("recommendedId");
+  });
+});
+
+describe("buildAnglePromptParts", () => {
+  it("joins back to exactly the same content buildAngleMessages produces", () => {
+    const messages = buildAngleMessages(product, persona, "de");
+    const parts = buildAnglePromptParts(product, persona, "de");
+    expect(joinParts(parts)).toBe(messages.find((m) => m.role === "user")!.content);
+  });
+
+  it("categorizes the persona as 'persona' (the local describePersona helper, not personaInstruction)", () => {
+    const parts = buildAnglePromptParts(product, persona, "en");
+    expect(parts.find((p) => p.key === "persona")?.text).toContain("Frequent Business Traveler");
+    expect(parts.find((p) => p.key === "product_data")?.text).toContain("Premium Leather Travel Bag");
+    expect(parts.find((p) => p.key === "language_instruction")?.text).toContain("ANGLE LANGUAGE");
+    expect(parts.find((p) => p.key === "user_instruction")?.text).toContain("exactly four distinct");
   });
 });
 

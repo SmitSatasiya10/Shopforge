@@ -5,12 +5,14 @@ import { TemplateReader } from "@/lib/preview/template-loader";
 import { createFsTemplateReader } from "@/lib/preview/fs-template-reader";
 import { AiConfig, loadAiConfig } from "./config";
 import { chat, parseJsonResponse } from "./openrouter";
+import { withAIContext } from "./debug-logger";
 import { loadCatalog, BlockSchema } from "./catalog";
 import { loadFixedSections, describeFixedSections, FixedSection, FixedTemplate } from "./fixed-sections";
 import { resolveImages } from "./images";
 import { languageInstruction } from "@/lib/store-config/language";
 import { personaInstruction, type CustomerPersona } from "@/lib/store-config/persona";
 import { marketingAngleInstruction, type MarketingAngle } from "@/lib/store-config/marketing-angle";
+import { part, joinParts, type PromptPart, type GenerationMeta } from "./prompt-breakdown";
 
 // Product -> Shopify template JSON. The page's section list and order are fixed — always the
 // base theme's own templates/{name}.json (lib/ai/fixed-sections.ts) — the model only writes
@@ -79,18 +81,19 @@ Hard rules:
   block "type" you use must be one this section allows. When a section or block lists a
   "note", that note is curated guidance (typical block order, which blocks are essential vs.
   optional) — follow it rather than defaulting to the sparsest possible set.
-- For the main product section in particular, go beyond the bare essentials (title, price,
-  variant picker, buy button, description): also include several of its trust/urgency/
-  conversion blocks where they suit this product — e.g. rating/reviews, shipping or delivery
-  info, payment or award badges, urgency, bundle or quantity offers, a share button. A sparse
-  main product section with only the bare minimum reads as unfinished; follow its "note"'s
-  typical block order as the default shape unless the product genuinely doesn't support one
-  of those blocks (e.g. no bundle offer for a one-off service).
+- Some sections list their blocks as "blocks (fixed — ...)" instead of a menu to choose from
+  (e.g. the main product section) — those blocks are structural, not content items: write
+  settings for EXACTLY the block ids given, in the order given, no more, no fewer. Write the
+  best genuine content you can for every one of them for this product — even a block that
+  doesn't perfectly fit (e.g. a bundle offer for a one-off service) still needs real,
+  concrete settings, since it cannot be removed.
 - Never write Liquid, HTML structure, CSS or JavaScript. Rich-text settings may contain only
   simple <p>, <strong> and <em> tags.
 - Leave every image setting as an empty string "". Images are filled in outside of you.
 - Write specific, concrete copy about the actual product given. No lorem ipsum, no
-  placeholders like "Your headline here", no square-bracket blanks.
+  placeholders like "Your headline here", no square-bracket blanks, and no merge-field-style
+  tokens like "{quantity}" or "{count}" — there is no templating step that fills these in, so
+  a number must be a real number you chose, not a token for one.
 
 Return a single JSON object of this exact shape and nothing else:
 {
@@ -163,18 +166,25 @@ export type GeneratedSection = z.infer<typeof GeneratedSectionSchema>;
  * shouldn't have invented), this is additive-safe: it iterates the fixed section list, never
  * the model's own keys, so a section the model omits or a block type it invents can never
  * change which sections end up in the final template — omissions fall back to the base
- * theme's own seeded content instead of vanishing.
+ * theme's own seeded content instead of vanishing. A `fixed_blocks` section (main product)
+ * gets the same treatment one level deeper: its blocks always come from the seed's own ids/
+ * order too, never the model's.
  */
 export function applyToFixedStructure(
   fixedTemplate: FixedTemplate,
   modelSections: Record<string, GeneratedSection>,
+  blockCatalog: BlockSchema[],
 ): { template: ShopifyTemplate; dropped: string[]; fallbackSections: string[] } {
   const dropped: string[] = [];
   const fallbackSections: string[] = [];
   const sections: ShopifyTemplate["sections"] = {};
+  const blockSchemaByType = new Map(blockCatalog.map((b) => [b.id, b]));
 
   for (const { id, type, schema, seed } of fixedTemplate.fixed) {
-    const model = modelSections[id];
+    // Locked sections (e.g. a trust-badges strip) always keep the base theme's own seeded
+    // content verbatim, regardless of what the model returns for this id — describeFixedSections
+    // never tells the model about them, but this guards against a hallucinated entry too.
+    const model = schema.locked ? undefined : modelSections[id];
     if (!model) {
       fallbackSections.push(id);
       sections[id] = seed;
@@ -189,7 +199,26 @@ export function applyToFixedStructure(
 
     let blocks = seed.blocks;
     let blockOrder = seed.block_order;
-    if (model.blocks && Object.keys(model.blocks).length > 0) {
+    if (schema.fixed_blocks) {
+      // Structural blocks (e.g. main product's bundle offer, sticky ATC, tabs): always the
+      // seed's own block ids, types, and order — only their settings are content the model
+      // may overwrite, the same additive-safe treatment applyToFixedStructure gives sections.
+      const order = seed.block_order ?? Object.keys(seed.blocks ?? {});
+      const kept: NonNullable<ShopifySection["blocks"]> = {};
+      for (const blockId of order) {
+        const seedBlock = seed.blocks?.[blockId];
+        if (!seedBlock) continue;
+        const modelBlock = model.blocks?.[blockId];
+        const blockSettingKeys = new Set(Object.keys(blockSchemaByType.get(seedBlock.type)?.settings ?? {}));
+        const blockSettings: Record<string, unknown> = { ...seedBlock.settings };
+        for (const [key, value] of Object.entries(modelBlock?.settings ?? {})) {
+          if (blockSettingKeys.has(key)) blockSettings[key] = value;
+        }
+        kept[blockId] = { ...seedBlock, settings: blockSettings };
+      }
+      blocks = kept;
+      blockOrder = order;
+    } else if (model.blocks && Object.keys(model.blocks).length > 0) {
       const allowedBlocks = new Set(schema.allowed_blocks ?? []);
       const kept: NonNullable<ShopifySection["blocks"]> = {};
       for (const [blockId, block] of Object.entries(model.blocks)) {
@@ -221,34 +250,67 @@ export function applyToFixedStructure(
  * selected customer language actually reaches the generation layer — the language must be a
  * prompt constraint, never just a UI selection.
  */
+/** The same message content as `buildGenerationMessages`, decomposed into labeled parts for audit-log breakdown. Exported for tests and for the caller's `promptBreakdown`. */
+export function buildGenerationPromptParts(
+  options: GenerateOptions,
+  fixed: FixedSection[],
+  blocks: BlockSchema[],
+): PromptPart[] {
+  const persona = personaInstruction(options.customerPersona);
+  const angle = marketingAngleInstruction(options.marketingAngle);
+  return [
+    part(
+      "schema_definitions",
+      "Page structure",
+      `PAGE STRUCTURE (fixed — write settings/blocks for exactly these ids, in this order; do not add, remove, or reorder):`,
+      describeFixedSections(fixed, blocks),
+    ),
+    part("product_data", "Product data", `PRODUCT:`, describeProduct(options.product)),
+    part("language_instruction", "Target language", `TARGET LANGUAGE:`, languageInstruction(options.language)),
+    ...(persona ? [part("persona", "Target customer persona", `TARGET CUSTOMER PERSONA:`, persona)] : []),
+    ...(angle ? [part("marketing_angle", "Marketing angle", `MARKETING ANGLE:`, angle)] : []),
+    part("user_instruction", "Task brief", `TASK:`, pageBrief(options.templateName, options.product)),
+  ];
+}
+
 export function buildGenerationMessages(
   options: GenerateOptions,
   fixed: FixedSection[],
   blocks: BlockSchema[],
 ): { role: "system" | "user"; content: string }[] {
-  const persona = personaInstruction(options.customerPersona);
-  const angle = marketingAngleInstruction(options.marketingAngle);
   return [
     { role: "system", content: SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: [
-        `PAGE STRUCTURE (fixed — write settings/blocks for exactly these ids, in this order; do not add, remove, or reorder):`,
-        describeFixedSections(fixed, blocks),
-        ``,
-        `PRODUCT:`,
-        describeProduct(options.product),
-        ``,
-        `TARGET LANGUAGE:`,
-        languageInstruction(options.language),
-        ...(persona ? [``, `TARGET CUSTOMER PERSONA:`, persona] : []),
-        ...(angle ? [``, `MARKETING ANGLE:`, angle] : []),
-        ``,
-        `TASK:`,
-        pageBrief(options.templateName, options.product),
-      ].join("\n"),
-    },
+    { role: "user", content: joinParts(buildGenerationPromptParts(options, fixed, blocks)) },
   ];
+}
+
+/**
+ * Structural metadata for the audit log's "Generation structure" table — computed from the
+ * same `fixed`/`blocks` inputs and the already-built prompt parts (never a second independent
+ * call to `describeFixedSections`), so it can never drift from what was actually sent.
+ */
+export function buildGenerationMeta(
+  options: GenerateOptions,
+  fixed: FixedSection[],
+  parts: PromptPart[],
+): GenerationMeta {
+  const eligible = fixed.filter((f) => !f.schema.locked);
+  const schemaChars = parts.find((p) => p.key === "schema_definitions")?.text.length ?? 0;
+  const userChars = joinParts(parts).length;
+
+  return {
+    pageType: options.templateName,
+    sectionCount: eligible.length,
+    sections: eligible.map((f) => ({ id: f.id, type: f.type })),
+    fixedBlockCount: eligible
+      .filter((f) => f.schema.fixed_blocks)
+      .reduce((n, f) => n + (f.seed.block_order ?? Object.keys(f.seed.blocks ?? {})).length, 0),
+    allowedBlockTypeMenuSize: eligible
+      .filter((f) => !f.schema.fixed_blocks)
+      .reduce((n, f) => n + (f.schema.allowed_blocks?.length ?? 0), 0),
+    schemaChars,
+    contentChars: userChars - schemaChars,
+  };
 }
 
 /**
@@ -286,23 +348,27 @@ export async function generateTemplate(options: GenerateOptions): Promise<Genera
   const readTemplate = options.readTemplate ?? createFsTemplateReader();
   const fixedTemplate = await loadFixedSections(readTemplate, options.templateName, sections);
 
-  const raw = await chat({
-    config,
-    json: true,
-    signal: options.signal,
-    messages: buildGenerationMessages(options, fixedTemplate.fixed, blocks),
-  });
+  const operation = options.templateName === "index" ? "generate-homepage" : "generate-product-page";
+  const promptParts = buildGenerationPromptParts(options, fixedTemplate.fixed, blocks);
+  const raw = await withAIContext({ operation, template: options.templateName }, () =>
+    chat({
+      config,
+      json: true,
+      signal: options.signal,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: joinParts(promptParts) },
+      ],
+      promptBreakdown: promptParts,
+      generationMeta: buildGenerationMeta(options, fixedTemplate.fixed, promptParts),
+    }),
+  );
 
   const parsed = GeneratedTemplateSchema.parse(parseJsonResponse(raw));
-  const { template, dropped, fallbackSections } = applyToFixedStructure(fixedTemplate, parsed.sections);
+  const { template, dropped, fallbackSections } = applyToFixedStructure(fixedTemplate, parsed.sections, blocks);
   assertFixedTemplateStructure(template, fixedTemplate);
-  const images = await resolveImages(
-    template,
-    sections,
-    blocks,
-    options.product,
-    config,
-    options.signal,
+  const images = await withAIContext({ operation: "generate-theme-images", template: options.templateName }, () =>
+    resolveImages(template, sections, blocks, options.product, config, options.signal),
   );
 
   return {

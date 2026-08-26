@@ -69,8 +69,15 @@ match returns a binding `{ blockPath, settingId }`.
 - **Unique match** → the element becomes `contenteditable` (existing inline-edit mechanics)
   and the floating toolbar appears above it. Blur commits the new text into that exact
   setting via `setSettingAtPath`.
-- **No match / ambiguous** (two blocks with identical text) → plain section selection, no
-  false edits.
+- **No match / ambiguous** (two blocks with identical text, or a click on a non-text area
+  like an image or icon) → PreviewFrame instead walks up from the click to the nearest
+  `data-shopify-editor-block` marker (the Shopify theme editor's own block attribute, emitted
+  inertly by most theme blocks via `block.shopify_attributes`) and collects every such id up
+  to the section root as `blockScope`. A "Re-write" from here scopes to that one block —
+  `rewrite-section`'s `blockPath` with no `settingId` — instead of the whole section; see
+  `RewriteScope` in [lib/ai/section-rewriter.ts](../lib/ai/section-rewriter.ts). Only a click
+  that resolves to neither a text setting nor any block marker falls back to plain section
+  selection.
 
 ### Editing the product name
 
@@ -85,6 +92,21 @@ only the text itself goes to the Product record. AI rewrite works on it too, via
 `rewrite-product-title` endpoint ([lib/ai/title-rewriter.ts](../lib/ai/title-rewriter.ts))
 instead of `rewrite-section`'s catalog-scoped machinery — the result is written back to the
 Product record the same way a manual edit is.
+
+### Editing the product description
+
+Same story as the product name: text equal to `product.description` (the description block)
+is product data, not a template setting, so the resolver checks it right after the title and
+returns the pseudo-binding `PRODUCT_DESCRIPTION_SETTING`. This one matters beyond consistency
+— before it existed, clicking the description text resolved to nothing narrower than the whole
+section, so "Rewrite" ran `rewrite-section`'s catalog-scoped machinery against JSON that never
+contained the description in the first place. That request couldn't have changed it no matter
+how it was scoped or how long it ran; at best the instruction went unfulfilled, at worst the
+model spent the request "fulfilling" it by editing unrelated copy elsewhere in the section
+instead. AI rewrite for it goes through its own `rewrite-product-description` endpoint
+([lib/ai/description-rewriter.ts](../lib/ai/description-rewriter.ts)), and both it and manual
+edits persist via the same `PATCH /api/project/:id/product` route the title uses (now extended
+to accept `description` alongside `title`).
 
 ### The floating toolbar
 

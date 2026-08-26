@@ -1,6 +1,6 @@
 import { TemplateReader } from "@/lib/preview/template-loader";
 import { ShopifySection, ShopifyTemplate, ShopifyTemplateSchema } from "@/lib/preview/shopify-template";
-import { SectionSchema, describeSectionBody, sectionsForTemplate, BlockSchema } from "./catalog";
+import { SectionSchema, describeSectionBody, describeSettings, sectionsForTemplate, BlockSchema } from "./catalog";
 
 // The base theme's own templates/{name}.json (the same seed a brand-new project is created
 // with, via lib/store-config/store.ts's defaultConfiguration) is the fixed page structure AI
@@ -65,12 +65,43 @@ export async function loadFixedSections(
   return { seedTemplate: raw, order, fixed };
 }
 
-/** Lists the fixed section ids/types the model must fill, one per catalog entry it may write into. */
+/**
+ * Renders a `fixed_blocks` section's body: instead of `describeSectionBody`'s menu of allowed
+ * block types to freely choose from, lists the base theme's own seeded block ids/types
+ * verbatim — the model may only write settings for these exact ids, never add, remove, or
+ * reorder them (lib/ai/content-generator.ts's applyToFixedStructure enforces this the same way
+ * it enforces the section-level fixed structure).
+ */
+function describeFixedBlocksBody(schema: SectionSchema, seed: ShopifySection, blocks: BlockSchema[]): string {
+  const blockById = new Map(blocks.map((b) => [b.id, b]));
+  const settings = describeSettings(schema.settings);
+  const order = seed.block_order ?? Object.keys(seed.blocks ?? {});
+  const body = order
+    .map((blockId) => {
+      const block = seed.blocks?.[blockId];
+      if (!block) return null;
+      const blockSchema = blockById.get(block.type);
+      return `    - block id "${blockId}" (${block.type})\n${describeSettings(blockSchema?.settings).replace(/^ {4}/gm, "        ")}`;
+    })
+    .filter((line): line is string => line !== null)
+    .join("\n");
+  const notes = schema._notes ? `\n  note: ${schema._notes}` : "";
+  return `  settings:\n${settings}\n  blocks (fixed — write settings for exactly these block ids, in this order; do not add, remove, or reorder blocks):\n${body}${notes}`;
+}
+
+/**
+ * Lists the fixed section ids/types the model must fill, one per catalog entry it may write
+ * into. Sections whose schema is `locked` are omitted entirely — they always keep the base
+ * theme's own seeded content (lib/ai/content-generator.ts's applyToFixedStructure), so the
+ * model is never asked to write for them and never told an id it isn't allowed to return.
+ */
 export function describeFixedSections(fixed: FixedSection[], blocks: BlockSchema[]): string {
   return fixed
-    .map(({ id, type, schema }) => {
+    .filter(({ schema }) => !schema.locked)
+    .map(({ id, type, schema, seed }) => {
       const head = `- id "${id}" (${type} — ${schema.label}${schema.purpose ? `: ${schema.purpose}` : ""})`;
-      return `${head}\n${describeSectionBody(schema, blocks)}`;
+      const body = schema.fixed_blocks ? describeFixedBlocksBody(schema, seed, blocks) : describeSectionBody(schema, blocks);
+      return `${head}\n${body}`;
     })
     .join("\n\n");
 }

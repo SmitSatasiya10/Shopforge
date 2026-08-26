@@ -20,6 +20,15 @@ export interface TextBinding {
  */
 export const PRODUCT_TITLE_SETTING = "__sf_product_title";
 
+/**
+ * Pseudo-setting for text that renders `{{ product.description }}` (the description block).
+ * Same reasoning as `PRODUCT_TITLE_SETTING`: product data, not a template setting, so a commit
+ * bound to this id is saved to the Product record instead of configurationJson — and, unlike a
+ * template setting, it can never be reached by a section/block rewrite, whole-section or
+ * scoped, since it simply isn't part of that JSON to begin with.
+ */
+export const PRODUCT_DESCRIPTION_SETTING = "__sf_product_description";
+
 /** Mirrors how richtext renders to visible text: tags out, entities and whitespace normalised. */
 export function normalizeText(value: string): string {
   return value

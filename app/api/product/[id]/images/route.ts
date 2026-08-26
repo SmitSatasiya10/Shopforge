@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { toProductDTO, toNormalizedProduct } from "@/lib/product/db-mapping";
 import { buildImageCandidates } from "@/lib/product/images/candidates";
+import { withAIContext } from "@/lib/ai/debug-logger";
 import { ImageCandidatesCacheSchema } from "@/lib/store-config/product-images";
 import { PersonaOptionsCacheSchema, type CustomerPersona } from "@/lib/store-config/persona";
 import { MarketingAngleCacheSchema, type MarketingAngle } from "@/lib/store-config/marketing-angle";
@@ -53,7 +54,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const normalized = toNormalizedProduct(toProductDTO(product));
-  const result = await buildImageCandidates(normalized, { persona, marketingAngle, signal: req.signal });
+  const result = await withAIContext(
+    { operation: "generate-product-images", route: "/api/product/[id]/images", productId: id },
+    () => buildImageCandidates(normalized, { persona, marketingAngle, signal: req.signal }),
+  );
 
   await prisma.product.update({ where: { id }, data: { imageCandidatesJson: result } });
 

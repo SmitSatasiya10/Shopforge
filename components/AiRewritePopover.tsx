@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowUp, LoaderCircle, Minus, Plus, RefreshCw, Sparkles, X } from "lucide-react";
-import { REWRITE_PRESETS, type RewritePreset } from "@/lib/ai/rewrite-presets";
+import { ArrowUp, LoaderCircle, Minus, Plus, RefreshCw, Sparkles, Wand2, X } from "lucide-react";
+import { presetById, REWRITE_PRESETS, type RewritePreset } from "@/lib/ai/rewrite-presets";
 import type { SelectionRect } from "./PreviewFrame";
 
 /** "Quick suggestions" render as purple-tinted line icons, per the reference editor. */
@@ -11,8 +11,17 @@ const QUICK_ICONS: Record<string, LucideIcon> = {
   minus: Minus,
   plus: Plus,
   sparkles: Sparkles,
+  wand: Wand2,
   "spell-check": RefreshCw,
 };
+
+/**
+ * The neutral "just improve this, no specific direction" preset — pre-filled into the input on
+ * open so a user with no particular instruction can submit immediately instead of being stuck
+ * (submit is disabled while the input is empty, and a field-level rewrite shows no chips at
+ * all as an alternative — see anchorToElement below).
+ */
+const DEFAULT_PRESET = presetById("rewrite")!;
 
 /** "Change angle" presets render as colored emoji, per the reference editor. Keyed by preset id. */
 const ANGLE_EMOJI: Record<string, string> = {
@@ -26,6 +35,8 @@ const ANGLE_EMOJI: Record<string, string> = {
 
 /** Rough rendered height of prompt card + suggestions card, used only to clamp into view. */
 const POPOVER_HEIGHT = 400;
+/** Rough rendered height of the prompt card alone (no suggestions card), same purpose. */
+const POPOVER_HEIGHT_COMPACT = 110;
 
 interface AiRewritePopoverProps {
   /** Display name of the selected section — the popover renders only while one is selected. */
@@ -34,6 +45,17 @@ interface AiRewritePopoverProps {
   rect: SelectionRect | null;
   /** Height of the preview container, so the popover clamps into view. */
   containerHeight: number;
+  /**
+   * True for a field selection (opened from the inline text toolbar): floats below the
+   * selected element itself — same `Math.max(8, rect.left)` horizontal anchor that toolbar
+   * already uses — instead of the fixed slot next to the section toolbar's pill, so it never
+   * sits on top of the very content being rewritten. It also renders just the prompt input,
+   * with no "Quick suggestions"/"Change angle" chips — those presets are written to rewrite a
+   * whole section and read oddly applied to one field. False (the default layout) pins the
+   * full panel, chips included, beside that pill on the right edge, for a section/block
+   * selection with no single small rect.
+   */
+  anchorToElement: boolean;
   busy: boolean;
   onSubmit: (options: { prompt?: string; preset?: string }) => void;
   onClose: () => void;
@@ -50,14 +72,18 @@ export function AiRewritePopover({
   sectionLabel,
   rect,
   containerHeight,
+  anchorToElement,
   busy,
   onSubmit,
   onClose,
 }: AiRewritePopoverProps) {
-  const [prompt, setPrompt] = useState("");
+  // Pre-filled with the neutral "Rewrite" preset rather than empty, so clicking submit with
+  // no edits still does something sensible — the same unedited-submit-sends-the-preset-id
+  // mechanism a chip click uses below.
+  const [prompt, setPrompt] = useState(DEFAULT_PRESET.prompt);
   // The chip whose prompt currently fills the input, so an unedited submit can send the
   // preset id (richer instruction) instead of the short fill text.
-  const [picked, setPicked] = useState<RewritePreset | null>(null);
+  const [picked, setPicked] = useState<RewritePreset | null>(DEFAULT_PRESET);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -85,16 +111,31 @@ export function AiRewritePopover({
   const quick = REWRITE_PRESETS.filter((p) => p.group === "quick");
   const angles = REWRITE_PRESETS.filter((p) => p.group === "angle");
 
-  // Float next to the selected section (left of the section toolbar), clamped on screen.
-  const top = Math.min(Math.max(rect?.top ?? 16, 8), Math.max(8, containerHeight - POPOVER_HEIGHT - 8));
+  // Anchored to an element (a field selection): float below it, left-aligned to it exactly
+  // like the inline text toolbar itself — so a wide element (e.g. a full-width heading) never
+  // ends up hidden underneath the panel. Otherwise: float next to the selected section (left
+  // of the section toolbar pill) — the section/block's own rect can be arbitrarily large, so
+  // it's not a useful anchor for horizontal placement the way a single text element's is.
+  const style = anchorToElement
+    ? {
+        top: Math.min(
+          Math.max((rect?.top ?? 16) + (rect?.height ?? 0) + 8, 8),
+          Math.max(8, containerHeight - POPOVER_HEIGHT_COMPACT - 8),
+        ),
+        left: Math.max(8, rect?.left ?? 8),
+      }
+    : { top: Math.min(Math.max(rect?.top ?? 16, 8), Math.max(8, containerHeight - POPOVER_HEIGHT - 8)) };
 
   return (
-    <div className="absolute right-14 z-20 w-80 select-none" style={{ top }}>
+    <div
+      className={`absolute z-20 w-80 select-none ${anchorToElement ? "" : "right-14"}`}
+      style={style}
+    >
       <div className="rounded-3xl bg-neutral-900 p-4 text-white shadow-2xl ring-1 ring-white/10">
         <div className="flex items-start gap-2">
           <textarea
             ref={inputRef}
-            rows={3}
+            rows={anchorToElement ? 2 : 3}
             value={prompt}
             disabled={busy}
             placeholder={busy ? "Rewriting…" : `Enter a prompt to rewrite ${sectionLabel}…`}
@@ -126,12 +167,14 @@ export function AiRewritePopover({
         </div>
       </div>
 
-      <div className="mt-2 rounded-2xl bg-neutral-900 p-3 text-white shadow-2xl ring-1 ring-white/10">
-        <PresetGroup title="Quick suggestions" busy={busy} presets={quick} onPick={pickPreset} />
-        <div className="mt-3">
-          <PresetGroup title="Change angle" busy={busy} presets={angles} onPick={pickPreset} />
+      {anchorToElement ? null : (
+        <div className="mt-2 rounded-2xl bg-neutral-900 p-3 text-white shadow-2xl ring-1 ring-white/10">
+          <PresetGroup title="Quick suggestions" busy={busy} presets={quick} onPick={pickPreset} />
+          <div className="mt-3">
+            <PresetGroup title="Change angle" busy={busy} presets={angles} onPick={pickPreset} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

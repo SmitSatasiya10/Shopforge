@@ -26,6 +26,28 @@ export interface SectionSchema {
    * block sets these notes already describe instead of leaving it to chance.
    */
   _notes?: string;
+  /**
+   * `image_picker`/`image` settings that are an optional override of a Material-icon field
+   * (e.g. `icon_1_image` next to `icon_1`) rather than genuine content the page needs. The
+   * model already leaves these as "" per the system prompt, but without this list
+   * collectImageTargets (lib/ai/images.ts) can't tell them apart from a real content image and
+   * fills them from the product's photos anyway, silently overriding the intended icon.
+   */
+  _optional_image_settings?: string[];
+  /**
+   * When true, this section is never sent to the model for content generation — it always
+   * keeps the base theme's own seeded settings/blocks verbatim, so it renders identically
+   * across every generated store (e.g. a trust-badges strip that shouldn't vary per product).
+   */
+  locked?: boolean;
+  /**
+   * When true, this section's blocks are structural building blocks of the page (e.g. main
+   * product's bundle offer, sticky ATC, tabs) rather than repeatable content items (slides,
+   * testimonial cards, ticker messages) — the model may only write settings for the base
+   * theme's own seeded block ids, in their seeded order; it never adds, removes, or reorders
+   * blocks the way it can for an ordinary section's `allowed_blocks` menu.
+   */
+  fixed_blocks?: boolean;
 }
 
 export interface BlockSchema {
@@ -36,6 +58,8 @@ export interface BlockSchema {
   _image_generation?: { enabled?: boolean; field_name?: string };
   /** See SectionSchema._notes — the same curated guidance, at the block level. */
   _notes?: string;
+  /** See SectionSchema._optional_image_settings — the same exclusion, at the block level. */
+  _optional_image_settings?: string[];
 }
 
 const CATALOG_ROOT = path.join(process.cwd(), "lib", "ai", "catalog");
@@ -72,7 +96,7 @@ export function sectionsForTemplate(sections: SectionSchema[], template: string)
  * field-by-field here, since `String(anObject)` silently collapses it to the useless literal
  * "[object Object]" and the model would see that string as if it were the actual value.
  */
-function describeSpec(spec: unknown): string {
+export function describeSpec(spec: unknown): string {
   if (Array.isArray(spec)) return `one of [${spec.join(" | ")}]`;
   if (spec && typeof spec === "object") {
     const { type, default: def, min, max, ...rest } = spec as Record<string, unknown>;
@@ -85,7 +109,7 @@ function describeSpec(spec: unknown): string {
   return String(spec);
 }
 
-function describeSettings(settings: Record<string, unknown> | undefined): string {
+export function describeSettings(settings: Record<string, unknown> | undefined): string {
   if (!settings || Object.keys(settings).length === 0) return "    (no settings)";
   return Object.entries(settings)
     .map(([key, spec]) => `    ${key}: ${describeSpec(spec)}`)

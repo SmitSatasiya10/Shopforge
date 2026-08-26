@@ -5,6 +5,7 @@ import { describeProduct } from "./content-generator";
 import { languageInstruction } from "@/lib/store-config/language";
 import { personaInstruction, type CustomerPersona } from "@/lib/store-config/persona";
 import { marketingAngleInstruction, type MarketingAngle } from "@/lib/store-config/marketing-angle";
+import { part, joinParts, type PromptPart } from "./prompt-breakdown";
 
 // AI rewrite of the product TITLE (docs/EDITOR-TOOLBARS.md "Editing the product name"): the
 // title is product data, not a template setting, so it can't go through rewriteSection's
@@ -41,12 +42,34 @@ Hard rules:
 Return a single JSON object of this exact shape and nothing else:
 { "title": "..." }`;
 
+/** The message content's parts, decomposed for audit-log breakdown. Exported for tests and for `promptBreakdown`. */
+export function buildTitleRewritePromptParts(options: RewriteProductTitleOptions): PromptPart[] {
+  const persona = personaInstruction(options.customerPersona);
+  const angle = marketingAngleInstruction(options.marketingAngle);
+  return [
+    part("product_data", "Product data", `PRODUCT:`, describeProduct(options.product)),
+    part("language_instruction", "Target language", `TARGET LANGUAGE:`, languageInstruction(options.language)),
+    ...(persona ? [part("persona", "Target customer persona", `TARGET CUSTOMER PERSONA:`, persona)] : []),
+    ...(angle ? [part("marketing_angle", "Marketing angle", `MARKETING ANGLE:`, angle)] : []),
+    part("existing_content", "Existing title", `CURRENT TITLE:`, options.product.title || "(missing)"),
+    part("user_instruction", "Instruction", `INSTRUCTION:`, options.instruction),
+  ];
+}
+
+/** The full message list for a title rewrite. Exported for tests. */
+export function buildTitleRewriteMessages(
+  options: RewriteProductTitleOptions,
+): { role: "system" | "user"; content: string }[] {
+  return [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: joinParts(buildTitleRewritePromptParts(options)) },
+  ];
+}
+
 export async function rewriteProductTitle(
   options: RewriteProductTitleOptions,
 ): Promise<RewriteProductTitleResult> {
   const config = loadAiConfig(options.config);
-  const persona = personaInstruction(options.customerPersona);
-  const angle = marketingAngleInstruction(options.marketingAngle);
 
   const raw = await chat({
     config,
@@ -54,27 +77,8 @@ export async function rewriteProductTitle(
     signal: options.signal,
     // Rewrites should stay close to the original: lower temperature than full generation.
     temperature: 0.4,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [
-          `PRODUCT:`,
-          describeProduct(options.product),
-          ``,
-          `TARGET LANGUAGE:`,
-          languageInstruction(options.language),
-          ...(persona ? [``, `TARGET CUSTOMER PERSONA:`, persona] : []),
-          ...(angle ? [``, `MARKETING ANGLE:`, angle] : []),
-          ``,
-          `CURRENT TITLE:`,
-          options.product.title || "(missing)",
-          ``,
-          `INSTRUCTION:`,
-          options.instruction,
-        ].join("\n"),
-      },
-    ],
+    messages: buildTitleRewriteMessages(options),
+    promptBreakdown: buildTitleRewritePromptParts(options),
   });
 
   const parsed = parseJsonResponse<{ title?: unknown }>(raw);

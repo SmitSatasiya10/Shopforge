@@ -2,6 +2,7 @@ import { NormalizedProduct } from "@/lib/product/types";
 import { ShopifyTemplate } from "@/lib/preview/shopify-template";
 import { SectionSchema, BlockSchema } from "./catalog";
 import { AiConfig, requireApiKey } from "./config";
+import { startAIRequest, logAIRequestInput, logAIRequestOutput, finishAIRequest, logAIRequestError } from "./debug-logger";
 
 // The image toggle (AiConfig.generateImages).
 //
@@ -29,8 +30,9 @@ export interface ImageTarget {
 
 export function imageSettingIds(schema: SectionSchema | BlockSchema | undefined): string[] {
   if (!schema?.settings) return [];
+  const optional = new Set(schema._optional_image_settings ?? []);
   return Object.entries(schema.settings)
-    .filter(([, spec]) => typeof spec === "string" && IMAGE_SETTING_TYPES.has(spec))
+    .filter(([id, spec]) => typeof spec === "string" && IMAGE_SETTING_TYPES.has(spec) && !optional.has(id))
     .map(([id]) => id);
 }
 
@@ -174,28 +176,59 @@ export async function requestImage(
   config: AiConfig,
   signal?: AbortSignal,
 ): Promise<GeneratedImage | null> {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${config.apiKey}`,
-      "content-type": "application/json",
-      "x-title": "Shopforge",
-    },
-    body: JSON.stringify({
-      model: config.imageModel,
-      messages: [{ role: "user", content: prompt }],
-      modalities: ["image", "text"],
-    }),
-    signal,
-  });
+  const messages = [{ role: "user", content: prompt }];
+  const handle = startAIRequest({ model: config.imageModel, provider: "OpenRouter", messages });
+  logAIRequestInput(handle, messages);
 
-  if (!response.ok) return null;
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config.apiKey}`,
+        "content-type": "application/json",
+        "x-title": "Shopforge",
+      },
+      body: JSON.stringify({
+        model: config.imageModel,
+        messages,
+        modalities: ["image", "text"],
+      }),
+      signal,
+    });
 
-  const payload = (await response.json()) as {
-    choices?: { message?: { images?: { image_url?: { url?: string } }[] } }[];
-  };
-  const url = payload.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-  return url ? { url } : null;
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      logAIRequestError(
+        handle,
+        new Error(`OpenRouter returned ${response.status}`),
+        { providerStatus: response.status, providerResponse: body.slice(0, 400) },
+      );
+      return null;
+    }
+
+    const payload = (await response.json()) as {
+      choices?: { message?: { images?: { image_url?: { url?: string } }[] } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+    };
+    const url = payload.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!url) {
+      logAIRequestError(handle, new Error("OpenRouter returned no image"));
+      return null;
+    }
+
+    logAIRequestOutput(handle, JSON.stringify({ url }));
+    finishAIRequest(handle, {
+      usage: {
+        inputTokens: typeof payload.usage?.prompt_tokens === "number" ? payload.usage.prompt_tokens : null,
+        outputTokens: typeof payload.usage?.completion_tokens === "number" ? payload.usage.completion_tokens : null,
+        totalTokens: typeof payload.usage?.total_tokens === "number" ? payload.usage.total_tokens : null,
+      },
+    });
+    return { url };
+  } catch (error) {
+    logAIRequestError(handle, error);
+    throw error;
+  }
 }
 
 /** Runs whichever side of the toggle is active. */

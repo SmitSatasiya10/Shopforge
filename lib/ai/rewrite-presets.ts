@@ -21,6 +21,15 @@ export interface RewritePreset {
 
 export const REWRITE_PRESETS: RewritePreset[] = [
   {
+    id: "rewrite",
+    label: "Rewrite",
+    icon: "wand",
+    group: "quick",
+    prompt: "Rewrite this text.",
+    instruction:
+      "Rewrite this copy with fresh wording and improved clarity. Keep the same meaning, tone, and roughly the same length — this is a general refresh, not a change in direction.",
+  },
+  {
     id: "shorter",
     label: "Shorter",
     icon: "minus",

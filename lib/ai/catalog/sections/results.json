@@ -12,6 +12,7 @@
         "page"
     ],
     "settings": {
+        "results_headline": "inline_richtext",
         "title": "inline_richtext",
         "text": "richtext",
         "image": "image_picker",
@@ -41,5 +42,6 @@
     },
     "allowed_blocks": [
         "row"
-    ]
+    ],
+    "_notes": "'results_headline' is a short eyebrow/label rendered above 'title' (e.g. 'Results That Matter') — distinct from 'title', the section's own larger heading (e.g. 'The Numbers Don't Lie'). Write both; keep results_headline short (a few words), not a restatement of title."
 }

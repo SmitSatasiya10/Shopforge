@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { toProductDTO, toNormalizedProduct } from "@/lib/product/db-mapping";
 import { generateAngleOptions, AngleGenerationError } from "@/lib/ai/marketing-angle-generator";
+import { withAIContext } from "@/lib/ai/debug-logger";
 import { AiConfigError } from "@/lib/ai/config";
 import { OpenRouterError } from "@/lib/ai/openrouter";
 import { DEFAULT_STORE_LANGUAGE, normalizeStoreLanguage } from "@/lib/store-config/language";
@@ -50,12 +51,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const generated = await generateAngleOptions({
-      product: toNormalizedProduct(toProductDTO(product)),
-      persona: persona.data,
-      language,
-      signal: req.signal,
-    });
+    const generated = await withAIContext(
+      { operation: "generate-marketing-angle", route: "/api/product/[id]/marketing-angles", productId: id },
+      () =>
+        generateAngleOptions({
+          product: toNormalizedProduct(toProductDTO(product)),
+          persona: persona.data,
+          language,
+          signal: req.signal,
+        }),
+    );
 
     await prisma.product.update({
       where: { id },

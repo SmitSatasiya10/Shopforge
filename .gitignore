@@ -42,3 +42,7 @@ next-env.d.ts
 
 /app/generated/prisma
 node_modules
+
+ai-prompt-token-audit-details.md
+ai-prompt-token-audit-logs.md
+ai-prompt-token-audit-summary.md

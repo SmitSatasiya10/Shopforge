@@ -1,4 +1,6 @@
 import { AiConfig, requireApiKey } from "./config";
+import { startAIRequest, logAIRequestInput, logAIRequestOutput, finishAIRequest, logAIRequestError } from "./debug-logger";
+import type { PromptPart, GenerationMeta } from "./prompt-breakdown";
 
 // Minimal OpenRouter client. Only the chat-completions call the generator needs, with the
 // JSON-object response format so the model cannot wrap its output in prose or a code fence.
@@ -25,44 +27,75 @@ export interface ChatOptions {
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
+  /** Per-component breakdown of the user-message content, for the audit log's "Context breakdown" table. Never sent to the provider. */
+  promptBreakdown?: PromptPart[];
+  /** Full-page-generation structure (page type, section/block counts), for the audit log's "Generation structure" table. Never sent to the provider. */
+  generationMeta?: GenerationMeta;
 }
 
 export async function chat(options: ChatOptions): Promise<string> {
   const { config, messages } = options;
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${requireApiKey(config)}`,
-      "content-type": "application/json",
-      "x-title": "Shopforge",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      max_tokens: options.maxTokens ?? 16000,
-      temperature: options.temperature ?? 0.7,
-      ...(options.json ? { response_format: { type: "json_object" } } : {}),
-    }),
-    signal: options.signal,
+  const handle = startAIRequest({ model: config.model, provider: "OpenRouter", messages });
+  logAIRequestInput(handle, messages, {
+    promptBreakdown: options.promptBreakdown,
+    generationMeta: options.generationMeta,
   });
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new OpenRouterError(
-      `OpenRouter returned ${response.status}: ${body.slice(0, 400)}`,
-      response.status,
-    );
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${requireApiKey(config)}`,
+        "content-type": "application/json",
+        "x-title": "Shopforge",
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages,
+        max_tokens: options.maxTokens ?? 16000,
+        temperature: options.temperature ?? 0.7,
+        ...(options.json ? { response_format: { type: "json_object" } } : {}),
+      }),
+      signal: options.signal,
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new OpenRouterError(
+        `OpenRouter returned ${response.status}: ${body.slice(0, 400)}`,
+        response.status,
+      );
+    }
+
+    const payload = (await response.json()) as {
+      choices?: { message?: { content?: string } }[];
+      error?: { message?: string };
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+    };
+    if (payload.error) throw new OpenRouterError(payload.error.message ?? "OpenRouter error");
+
+    const content = payload.choices?.[0]?.message?.content;
+    if (!content) throw new OpenRouterError("OpenRouter returned no content");
+
+    logAIRequestOutput(handle, content);
+    finishAIRequest(handle, { usage: extractUsage(payload.usage) });
+    return content;
+  } catch (error) {
+    logAIRequestError(handle, error);
+    throw error;
   }
+}
 
-  const payload = (await response.json()) as {
-    choices?: { message?: { content?: string } }[];
-    error?: { message?: string };
+function extractUsage(raw?: {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}): { inputTokens: number | null; outputTokens: number | null; totalTokens: number | null } {
+  return {
+    inputTokens: typeof raw?.prompt_tokens === "number" ? raw.prompt_tokens : null,
+    outputTokens: typeof raw?.completion_tokens === "number" ? raw.completion_tokens : null,
+    totalTokens: typeof raw?.total_tokens === "number" ? raw.total_tokens : null,
   };
-  if (payload.error) throw new OpenRouterError(payload.error.message ?? "OpenRouter error");
-
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) throw new OpenRouterError("OpenRouter returned no content");
-  return content;
 }
 
 /**

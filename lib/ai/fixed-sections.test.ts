@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loadFixedSections } from "./fixed-sections";
+import { loadFixedSections, describeFixedSections } from "./fixed-sections";
 import { loadCatalog } from "./catalog";
 import { createFsTemplateReader } from "@/lib/preview/fs-template-reader";
 
@@ -30,6 +30,38 @@ describe("loadFixedSections", () => {
     expect(fixed.fixed.length).toBeGreaterThan(0);
     for (const section of fixed.fixed) {
       expect(section.schema.id).toBe(section.type);
+    }
+  });
+
+  it("marks the real base theme's main product section fixed_blocks and lists every seeded block id", async () => {
+    const { sections, blocks } = await loadCatalog();
+    const readTemplate = createFsTemplateReader();
+    const fixed = await loadFixedSections(readTemplate, "product", sections);
+    const main = fixed.fixed.find((f) => f.type === "main-product")!;
+    expect(main.schema.fixed_blocks).toBe(true);
+
+    const description = describeFixedSections(fixed.fixed, blocks);
+    const seededBlockIds = main.seed.block_order ?? Object.keys(main.seed.blocks ?? {});
+    expect(seededBlockIds.length).toBeGreaterThan(0);
+    for (const blockId of seededBlockIds) {
+      expect(description).toContain(`block id "${blockId}"`);
+    }
+    expect(description).toContain("blocks (fixed");
+  });
+
+  it("marks the real base theme's horizontal ticker fixed_blocks and lists every seeded block id", async () => {
+    const { sections, blocks } = await loadCatalog();
+    const readTemplate = createFsTemplateReader();
+    const fixed = await loadFixedSections(readTemplate, "product", sections);
+    const ticker = fixed.fixed.find((f) => f.type === "horizontal-ticker")!;
+    expect(ticker.schema.fixed_blocks).toBe(true);
+    expect(ticker.schema.locked).toBeFalsy();
+
+    const description = describeFixedSections(fixed.fixed, blocks);
+    const seededBlockIds = ticker.seed.block_order ?? Object.keys(ticker.seed.blocks ?? {});
+    expect(seededBlockIds.length).toBeGreaterThan(0);
+    for (const blockId of seededBlockIds) {
+      expect(description).toContain(`block id "${blockId}"`);
     }
   });
 });

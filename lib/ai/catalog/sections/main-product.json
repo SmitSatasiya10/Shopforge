@@ -8,6 +8,7 @@
     "allowed_on": [
         "product"
     ],
+    "fixed_blocks": true,
     "settings": {
         "enable_sticky_info": {
             "type": "checkbox",

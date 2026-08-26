@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { toProductDTO, toNormalizedProduct } from "@/lib/product/db-mapping";
 import { rewriteSection, SectionNotRewritableError } from "@/lib/ai/section-rewriter";
+import { withAIContext } from "@/lib/ai/debug-logger";
 import { presetById } from "@/lib/ai/rewrite-presets";
 import { AiConfigError } from "@/lib/ai/config";
 import { OpenRouterError } from "@/lib/ai/openrouter";
@@ -19,7 +20,9 @@ import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
 //     "prompt"?: string,     a free-typed instruction
 //     "preset"?: string,     a REWRITE_PRESETS id (chips); combined with prompt when both given
 //     "blockPath"?: string[],  with settingId: scope the rewrite to ONE setting — the result
-//     "settingId"?: string,    is the stored section with only that value changed
+//     "settingId"?: string,    is the stored section with only that value changed;
+//                              blockPath alone (no settingId): scope to that ONE block — the
+//                              result is the stored section with only that block's settings changed
 //     "model"?: string }     overrides OPENROUTER_MODEL for this one run
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -51,13 +54,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Provide a prompt or a preset" }, { status: 400 });
   }
 
-  const scope =
-    typeof body.settingId === "string" && body.settingId
-      ? {
-          settingId: body.settingId,
-          blockPath: Array.isArray(body.blockPath) ? body.blockPath.filter((b): b is string => typeof b === "string") : [],
-        }
-      : undefined;
+  const settingId = typeof body.settingId === "string" && body.settingId ? body.settingId : undefined;
+  const blockPath = Array.isArray(body.blockPath)
+    ? body.blockPath.filter((b): b is string => typeof b === "string")
+    : [];
+  // settingId alone (or with blockPath) scopes to one setting; blockPath alone (no settingId)
+  // scopes to one whole block. Neither present = no scope, the legacy whole-section rewrite.
+  const scope = settingId || blockPath.length > 0 ? { settingId, blockPath } : undefined;
 
   const project = await prisma.project.findUnique({ where: { id }, include: { product: true } });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -78,19 +81,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const result = await rewriteSection({
-      product: toNormalizedProduct(toProductDTO(project.product)),
-      sectionId: body.sectionId,
-      section,
-      instruction,
-      // Rewrites honor the same customer store-content language and persona as full generation.
-      language: project.language,
-      customerPersona: parseCustomerPersona(project.personaJson),
-      marketingAngle: parseMarketingAngle(project.marketingAngleJson),
-      scope,
-      config: typeof body.model === "string" && body.model ? { model: body.model } : {},
-      signal: req.signal,
-    });
+    const result = await withAIContext(
+      {
+        operation: "section-rewrite",
+        route: "/api/project/[id]/rewrite-section",
+        projectId: id,
+        productId: project.productId,
+        template: page,
+        sectionId: body.sectionId,
+        field: settingId,
+        blockId: blockPath.length > 0 ? blockPath.join("/") : undefined,
+      },
+      () =>
+        rewriteSection({
+          product: toNormalizedProduct(toProductDTO(project.product)),
+          sectionId: body.sectionId as string,
+          section,
+          instruction,
+          // Rewrites honor the same customer store-content language and persona as full generation.
+          language: project.language,
+          customerPersona: parseCustomerPersona(project.personaJson),
+          marketingAngle: parseMarketingAngle(project.marketingAngleJson),
+          scope,
+          config: typeof body.model === "string" && body.model ? { model: body.model } : {},
+          signal: req.signal,
+        }),
+    );
 
     configuration.templates[page].sections[body.sectionId] = result.section;
 

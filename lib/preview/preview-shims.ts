@@ -95,7 +95,30 @@ function unescapeThumbnailImages(html: string): string {
   );
 }
 
+/**
+ * Results section stat counters (sections/results.liquid). Each `.results__percentage` block
+ * always server-renders its visible `<p>` as the literal text "0%" (and, for the "circle"
+ * style, the ring's `stroke-dasharray="0 100"`) — real Dawn behavior, not a Shopforge bug — and
+ * relies on ResultsContainer (assets/secondary.js), an IntersectionObserver-triggered counter,
+ * to animate it up to the block's real `data-percentage` value on scroll. The "number" style's
+ * real value is server-rendered too, but into a second `<p>` that base.css hides with
+ * `opacity: 0` purely to reserve layout width during the animation (base.css:16744-16752) — so
+ * neither style has a visible fallback. This reproduces exactly what the animation would have
+ * landed on: the visible `<p>` and the ring both jump straight to the real value.
+ */
+function settleResultsCounters(html: string): string {
+  return html.replace(
+    /(<div\b[^>]*\bclass="[^"]*\bresults__percentage\b[^"]*"[^>]*\bdata-percentage="(\d+)"[^>]*>)([\s\S]*?)(<\/div>)/g,
+    (_match, openTag: string, percentage: string, body: string, closeTag: string) => {
+      const settled = body
+        .replace('stroke-dasharray="0 100"', `stroke-dasharray="${percentage} 100"`)
+        .replace(/(<p>\s*)0%(\s*<\/p>)/, `$1${percentage}%$2`);
+      return `${openTag}${settled}${closeTag}`;
+    },
+  );
+}
+
 /** Applies every preview shim to a fully rendered page. */
 export function applyPreviewShims(html: string): string {
-  return injectPreviewStyles(applyJsClass(unescapeThumbnailImages(html)));
+  return injectPreviewStyles(applyJsClass(settleResultsCounters(unescapeThumbnailImages(html))));
 }

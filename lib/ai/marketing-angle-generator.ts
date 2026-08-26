@@ -6,6 +6,7 @@ import { describeProduct } from "./content-generator";
 import { type MarketingAngleOption } from "@/lib/store-config/marketing-angle";
 import { type CustomerPersona } from "@/lib/store-config/persona";
 import { DEFAULT_STORE_LANGUAGE, findStoreLanguage } from "@/lib/store-config/language";
+import { part, joinParts, type PromptPart } from "./prompt-breakdown";
 
 // Product + persona -> four distinct marketing angles for the Persona step's second state,
 // "How do you want to sell it?" (persona_step_marketing_angle_implementation.md). Angles are
@@ -53,6 +54,39 @@ function describePersona(persona: CustomerPersona): string {
   return `${persona.name} — ${persona.description}`;
 }
 
+/** The message content's parts, decomposed for audit-log breakdown. Exported for tests and for `promptBreakdown`. */
+export function buildAnglePromptParts(
+  product: NormalizedProduct,
+  persona: CustomerPersona,
+  language: string | undefined,
+): PromptPart[] {
+  const code = language?.trim().toLowerCase() || DEFAULT_STORE_LANGUAGE;
+  const label = findStoreLanguage(code)?.label ?? code;
+  return [
+    part("product_data", "Product data", `PRODUCT:`, describeProduct(product)),
+    part(
+      "persona",
+      "Customer persona",
+      `CUSTOMER PERSONA (hard constraint — every angle must target this buyer):`,
+      describePersona(persona),
+    ),
+    part(
+      "language_instruction",
+      "Angle language",
+      `ANGLE LANGUAGE:`,
+      `Write every angle "title" and "description" in ${label} (${code}) — this is the`,
+      `customer-facing store language. Keep every "id" in English kebab-case.`,
+    ),
+    part(
+      "user_instruction",
+      "Task brief",
+      `TASK:`,
+      `Generate exactly four distinct marketing angles for selling this product to this`,
+      `persona, and name the strongest one as recommendedId.`,
+    ),
+  ];
+}
+
 /**
  * The messages sent to generate marketing angles. Exported so tests can verify the product,
  * persona and customer language all reach the angle prompt.
@@ -62,28 +96,9 @@ export function buildAngleMessages(
   persona: CustomerPersona,
   language: string | undefined,
 ): { role: "system" | "user"; content: string }[] {
-  const code = language?.trim().toLowerCase() || DEFAULT_STORE_LANGUAGE;
-  const label = findStoreLanguage(code)?.label ?? code;
   return [
     { role: "system", content: SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: [
-        `PRODUCT:`,
-        describeProduct(product),
-        ``,
-        `CUSTOMER PERSONA (hard constraint — every angle must target this buyer):`,
-        describePersona(persona),
-        ``,
-        `ANGLE LANGUAGE:`,
-        `Write every angle "title" and "description" in ${label} (${code}) — this is the`,
-        `customer-facing store language. Keep every "id" in English kebab-case.`,
-        ``,
-        `TASK:`,
-        `Generate exactly four distinct marketing angles for selling this product to this`,
-        `persona, and name the strongest one as recommendedId.`,
-      ].join("\n"),
-    },
+    { role: "user", content: joinParts(buildAnglePromptParts(product, persona, language)) },
   ];
 }
 
@@ -164,6 +179,7 @@ export async function generateAngleOptions(
     maxTokens: 2000,
     signal: options.signal,
     messages: buildAngleMessages(options.product, options.persona, options.language),
+    promptBreakdown: buildAnglePromptParts(options.product, options.persona, options.language),
   });
   return { ...parseAngleOptions(parseJsonResponse(raw)), model: config.model };
 }

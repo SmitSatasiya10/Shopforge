@@ -3,6 +3,7 @@
     "label": "Section Divider",
     "purpose": "Visual divider between sections with customizable style",
     "category": "layout-structural",
+    "locked": true,
     "tags": [],
     "allowed_on": [
         "index",

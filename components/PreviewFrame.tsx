@@ -19,7 +19,15 @@ export interface SelectInfo {
   editable: string | null;
   /** Set when the click resolved to a text setting (docs/EDITOR-TOOLBARS.md). */
   binding: TextBinding | null;
-  /** Box of the clicked text element (binding set) or of the section itself. */
+  /**
+   * Block ids from the section down to the clicked block, set when the click landed inside a
+   * block (via its `data-shopify-editor-block` marker) but didn't resolve to a single text
+   * setting — e.g. an image, icon or non-text area of the block. Null when `binding` is set
+   * (field scope) or the click landed on the section but no block (section scope). Never set
+   * together with `binding`: a resolved field always takes precedence.
+   */
+  blockScope: string[] | null;
+  /** Box of the clicked text element (binding set), block (blockScope set), or the section itself. */
   rect: SelectionRect | null;
 }
 
@@ -56,26 +64,45 @@ interface PreviewFrameProps {
 /**
  * Editor affordances injected into the preview document: the selected section's outline,
  * a dashed hover outline on any text the editor can bind to a setting (so "this is
- * editable" is visible before clicking), and the active inline-edit outline.
+ * editable" is visible before clicking), and the active inline-edit outline. `.sf-field-selected`
+ * shares the contenteditable outline's look but survives the element losing focus — blurring
+ * to type into the Rewrite popover, or the popover simply being open — so the field that a
+ * rewrite will land on stays visibly marked the whole time, not just while it's mid-edit.
  *
- * The text outlines use an em-based offset: theme headings render at line-height 1, so
- * their glyphs (cap heights, descenders, padded highlight spans) overflow the border box
- * the outline traces — a fixed pixel offset leaves large headings sticking out of the box.
+ * `user-select: none` on the body: a click that drags even slightly (easy to do when the
+ * intent is "select this paragraph to edit it") makes the browser highlight a native text
+ * selection instead — that consumes the gesture, so no `click` reaches `handleClick` and the
+ * editor looks like it silently ignored the click. Disabling native selection outside an
+ * actively-editing element turns that same drag back into a plain click.
  */
 const EDITOR_STYLES = `
+  body { -webkit-user-select: none; user-select: none; }
+  [contenteditable="true"] { -webkit-user-select: text; user-select: text; }
   [data-sf-section-id].sf-selected { outline: 3px solid #22c55e; outline-offset: -3px; box-shadow: inset 0 0 0 3px rgba(34, 197, 94, 0.25), 0 0 0 1px rgba(34, 197, 94, 0.35); }
   [data-sf-section-id]:hover:not(.sf-selected) { outline: 2px dashed rgba(34, 197, 94, 0.55); outline-offset: -2px; }
   .sf-text-hover { outline: 1.5px dashed #22c55e; outline-offset: max(3px, 0.25em); cursor: text; border-radius: 2px; background-color: rgba(34, 197, 94, 0.12); box-shadow: 0 0 0 max(3px, 0.25em) rgba(34, 197, 94, 0.12); }
-  [contenteditable="true"] { outline: 2px solid #22c55e !important; outline-offset: max(3px, 0.25em); cursor: text; border-radius: 2px; background-color: rgba(34, 197, 94, 0.14) !important; box-shadow: 0 0 0 max(3px, 0.25em) rgba(34, 197, 94, 0.14) !important; }
+  [contenteditable="true"], .sf-field-selected { outline: 2px solid #22c55e !important; outline-offset: max(3px, 0.25em); cursor: text; border-radius: 2px; background-color: rgba(34, 197, 94, 0.14) !important; box-shadow: 0 0 0 max(3px, 0.25em) rgba(34, 197, 94, 0.14) !important; }
 `;
 
 /**
  * `getBoundingClientRect()` on an element inside the iframe is relative to the iframe's own
- * viewport, not the outer page — they only coincide when the iframe fills its container at
- * offset (0, 0). Passing the iframe's own rect (relative to the outer page) folds that offset
- * back in, so the result stays correct even when the iframe is narrower than its container
- * (the mobile preview) and centered with gutters on either side.
+ * viewport, not the outer page, so it needs the iframe's own offset folded back in — but the
+ * toolbars/popover this feeds are `position: absolute` inside PreviewFrame's own container
+ * (`previewRef` in the editor page), not the browser viewport, so that offset must be relative
+ * to THAT container, not the viewport. `iframe.offsetTop`/`offsetLeft` are exactly that (the
+ * iframe's position relative to its nearest positioned ancestor, which is that same container
+ * — the wrapper div between them has no `position` of its own) — unlike
+ * `iframe.getBoundingClientRect()`, which is viewport-relative and would double-count however
+ * far the container itself sits below the viewport top (the app's header), pushing every
+ * floating toolbar and the rewrite popover down by exactly that much. Still correct when the
+ * iframe is narrower than its container (the mobile preview) and centered with gutters on
+ * either side, since offsetLeft reflects that centering too.
  */
+/** The iframe's offset within PreviewFrame's own container — see the comment on `toRect` above. */
+function iframeOffset(iframe: HTMLIFrameElement | null | undefined): SelectionRect | null {
+  return iframe ? { top: iframe.offsetTop, left: iframe.offsetLeft, width: iframe.offsetWidth, height: iframe.offsetHeight } : null;
+}
+
 function toRect(el: Element, frame?: SelectionRect | null): SelectionRect {
   const r = el.getBoundingClientRect();
   return {
@@ -206,7 +233,7 @@ export function PreviewFrame({
 
   /** Re-points the toolbars at the (possibly re-created) selected element and reports its box. */
   const reanchor = useCallback((doc: Document) => {
-    const frame = iframeRef.current?.getBoundingClientRect();
+    const frame = iframeOffset(iframeRef.current);
     const tracked = trackedRef.current;
     if (tracked && doc.contains(tracked.el)) {
       onRectChangeRef.current(toRect(tracked.el, frame));
@@ -272,6 +299,21 @@ export function PreviewFrame({
         onTextCommit(sectionId, binding, value);
       };
       node.addEventListener("blur", commit);
+    };
+
+    // The currently selected field or block's outline — the same mark either way, since both
+    // are "the one thing a rewrite from here will touch." Kept separate from
+    // `[contenteditable="true"]` (which the browser only honors while the element is actually
+    // focused) so it survives losing focus to the Rewrite popover instead of disappearing the
+    // moment it opens, and applied to the whole block wrapper (not a single line) when the
+    // click resolved to block scope, so multi-line block content gets the same visible
+    // selection a single bindable text field already does.
+    let fieldSelectedEl: HTMLElement | null = null;
+    const setFieldSelected = (el: HTMLElement | null) => {
+      if (fieldSelectedEl === el) return;
+      fieldSelectedEl?.classList.remove("sf-field-selected");
+      el?.classList.add("sf-field-selected");
+      fieldSelectedEl = el;
     };
 
     // Hover affordance: outline any text the editor could bind, so "this is editable" is
@@ -350,13 +392,15 @@ export function PreviewFrame({
           const editable = node.getAttribute("data-sf-editable");
           const binding: TextBinding = { blockPath: [], settingId };
           trackedRef.current = { el: node, text: node.textContent?.trim() ?? null };
+          setFieldSelected(node);
           onSelect({
             sectionId,
             sectionType: sectionEl.getAttribute("data-sf-section-type"),
             settingId,
             editable,
             binding,
-            rect: toRect(node, iframe.getBoundingClientRect()),
+            blockScope: null,
+            rect: toRect(node, iframeOffset(iframe)),
           });
           if (editable === "text" || editable === "richtext") {
             enableInlineEdit(node, sectionId, binding);
@@ -366,7 +410,7 @@ export function PreviewFrame({
         if (sectionEl) {
           const sectionId = sectionEl.getAttribute("data-sf-section-id")!;
           const sectionType = sectionEl.getAttribute("data-sf-section-type");
-          const frame = iframe.getBoundingClientRect();
+          const frame = iframeOffset(iframe);
 
           // No metadata — try to bind the clicked text to a setting by matching its
           // content against the section's JSON (docs/EDITOR-TOOLBARS.md).
@@ -375,11 +419,47 @@ export function PreviewFrame({
           const binding = textEl && text ? resolveTextRef.current(sectionId, text) : null;
           if (textEl && binding) {
             trackedRef.current = { el: textEl, text: text! };
-            onSelect({ sectionId, sectionType, settingId: binding.settingId, editable: "text", binding, rect: toRect(textEl, frame) });
+            setFieldSelected(textEl);
+            onSelect({ sectionId, sectionType, settingId: binding.settingId, editable: "text", binding, blockScope: null, rect: toRect(textEl, frame) });
             enableInlineEdit(textEl, sectionId, binding);
+            return;
+          }
+
+          // Text didn't resolve to a unique setting (an image/icon area, ambiguous copy, …).
+          // Themes mark each block's own wrapper with the (otherwise-inert) Shopify editor
+          // attribute — walk up to the nearest one, then collect every such id between it and
+          // the section root, so a click inside a nested block resolves the whole chain. This
+          // is what lets a block-level click scope a rewrite to just that block instead of
+          // silently falling back to the whole section.
+          const blockEl = (e.target as HTMLElement).closest(
+            "[data-shopify-editor-block]",
+          ) as HTMLElement | null;
+          const blockPath: string[] = [];
+          if (blockEl && sectionEl.contains(blockEl)) {
+            let n: HTMLElement | null = blockEl;
+            while (n && n !== sectionEl) {
+              const id = n.getAttribute("data-shopify-editor-block");
+              if (id) blockPath.unshift(id);
+              n = n.parentElement;
+            }
+          }
+
+          if (blockPath.length > 0 && blockEl) {
+            trackedRef.current = { el: blockEl, text: null };
+            setFieldSelected(blockEl);
+            onSelect({
+              sectionId,
+              sectionType,
+              settingId: null,
+              editable: null,
+              binding: null,
+              blockScope: blockPath,
+              rect: toRect(blockEl, frame),
+            });
           } else {
             trackedRef.current = { el: sectionEl, text: null };
-            onSelect({ sectionId, sectionType, settingId: null, editable: null, binding: null, rect: toRect(sectionEl, frame) });
+            setFieldSelected(null);
+            onSelect({ sectionId, sectionType, settingId: null, editable: null, binding: null, blockScope: null, rect: toRect(sectionEl, frame) });
           }
           return;
         }
@@ -389,7 +469,7 @@ export function PreviewFrame({
 
     const handleScroll = () => {
       onRectChangeRef.current(
-        trackedRef.current ? toRect(trackedRef.current.el, iframeRef.current?.getBoundingClientRect()) : null,
+        trackedRef.current ? toRect(trackedRef.current.el, iframeOffset(iframeRef.current)) : null,
       );
     };
 
@@ -448,6 +528,17 @@ export function PreviewFrame({
         el.getAttribute("data-sf-section-id") === selectedSectionId,
       );
     });
+    // The field-selected outline is otherwise owned entirely inside handleClick's closure, so
+    // it can't react to the selection being cleared from outside a click in the iframe (the
+    // toolbar's close button, deleting the section). Strip any leftover here when that happens
+    // — but ONLY when selection was cleared entirely: this effect also re-runs on the very
+    // first click of a session (selectedSectionId going from null to that click's own section),
+    // and stripping unconditionally there would erase the class handleClick had just set for
+    // that same click, moments earlier in the same tick.
+    if (!selectedSectionId) {
+      doc.querySelectorAll(".sf-field-selected").forEach((el) => el.classList.remove("sf-field-selected"));
+      trackedRef.current = null;
+    }
   }, [selectedSectionId, html]);
 
   if (!mount.html) return <div className="h-full w-full bg-white" />;
