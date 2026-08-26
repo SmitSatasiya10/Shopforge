@@ -9,6 +9,7 @@ import {
   type PersonaOption,
 } from "@/lib/store-config/persona";
 import { DEFAULT_STORE_LANGUAGE, findStoreLanguage } from "@/lib/store-config/language";
+import { part, joinParts, type PromptPart } from "./prompt-breakdown";
 
 export type { PersonaOption };
 
@@ -48,6 +49,27 @@ Hard rules:
 Return a single JSON object of this exact shape and nothing else:
 { "personas": [ { "id": "...", "name": "...", "description": "...", "category": "..." } ] }`;
 
+/** The message content's parts, decomposed for audit-log breakdown. Exported for tests and for `promptBreakdown`. */
+export function buildPersonaPromptParts(
+  product: NormalizedProduct,
+  language: string | undefined,
+): PromptPart[] {
+  const code = language?.trim().toLowerCase() || DEFAULT_STORE_LANGUAGE;
+  const label = findStoreLanguage(code)?.label ?? code;
+  return [
+    part("product_data", "Product data", `PRODUCT:`, describeProduct(product)),
+    part(
+      "language_instruction",
+      "Persona language",
+      `PERSONA LANGUAGE:`,
+      `Write every persona "name" and "description" in ${label} (${code}) — this is the`,
+      `customer-facing store language. Keep every "id" in English kebab-case and every`,
+      `"category" as one of the allowed English values.`,
+    ),
+    part("user_instruction", "Task brief", `TASK:`, `Generate exactly four distinct customer personas for this product.`),
+  ];
+}
+
 /**
  * The messages sent to generate persona options. Exported so tests can verify the product
  * data and the customer language actually reach the persona prompt.
@@ -56,25 +78,9 @@ export function buildPersonaMessages(
   product: NormalizedProduct,
   language: string | undefined,
 ): { role: "system" | "user"; content: string }[] {
-  const code = language?.trim().toLowerCase() || DEFAULT_STORE_LANGUAGE;
-  const label = findStoreLanguage(code)?.label ?? code;
   return [
     { role: "system", content: SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: [
-        `PRODUCT:`,
-        describeProduct(product),
-        ``,
-        `PERSONA LANGUAGE:`,
-        `Write every persona "name" and "description" in ${label} (${code}) — this is the`,
-        `customer-facing store language. Keep every "id" in English kebab-case and every`,
-        `"category" as one of the allowed English values.`,
-        ``,
-        `TASK:`,
-        `Generate exactly four distinct customer personas for this product.`,
-      ].join("\n"),
-    },
+    { role: "user", content: joinParts(buildPersonaPromptParts(product, language)) },
   ];
 }
 
@@ -141,6 +147,7 @@ export async function generatePersonaOptions(
     maxTokens: 2000,
     signal: options.signal,
     messages: buildPersonaMessages(options.product, options.language),
+    promptBreakdown: buildPersonaPromptParts(options.product, options.language),
   });
   return { options: parsePersonaOptions(parseJsonResponse(raw)), model: config.model };
 }

@@ -19,5 +19,6 @@
         "icon_heading_size": ["h5", "h4", "h3", "h2"],
         "text": "richtext"
     },
-    "_notes": "'icon' is free text — a Material Symbols icon name (e.g. check_circle, local_shipping, verified, star). 'image' optionally replaces it with an uploaded custom icon image (left empty by the AI per system prompt). filled_icon toggles solid vs outline icon style. icon_position changes composition: above the title+text, next to just the title, or next to both title and text. icon_heading_size sizes the 'title' field (h2 largest, h5 smallest). 'text' is richtext and MUST be wrapped in <p> tags. All remaining real settings (icon size, icon color, custom colors, text alignment, text size, margins) are pure visual styling, omitted."
+    "_notes": "'icon' is free text — a Material Symbols icon name (e.g. check_circle, local_shipping, verified, star). 'image' optionally replaces it with an uploaded custom icon image (left empty by the AI per system prompt). filled_icon toggles solid vs outline icon style. icon_position changes composition: above the title+text, next to just the title, or next to both title and text. icon_heading_size sizes the 'title' field (h2 largest, h5 smallest). 'text' is richtext and MUST be wrapped in <p> tags. All remaining real settings (icon size, icon color, custom colors, text alignment, text size, margins) are pure visual styling, omitted.",
+    "_optional_image_settings": ["image"]
 }

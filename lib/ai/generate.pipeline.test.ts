@@ -101,7 +101,7 @@ describe.each(["index", "product"] as const)("full pipeline for %s.json", (templ
     const fixedTemplate = await loadFixedSections(readTemplate, templateName, sections as SectionSchema[]);
 
     const modelResponse = buildSyntheticModelResponse(fixedTemplate.fixed, blocks);
-    const { template } = applyToFixedStructure(fixedTemplate, modelResponse);
+    const { template } = applyToFixedStructure(fixedTemplate, modelResponse, blocks);
     assertFixedTemplateStructure(template, fixedTemplate);
 
     const html = await renderTemplate({

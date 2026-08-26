@@ -1,6 +1,28 @@
-import { describe, it, expect } from "vitest";
-import { applyScopedRewrite, buildRewriteMessages, sanitizeRewrittenSection } from "./section-rewriter";
+import { describe, it, expect, vi } from "vitest";
+
+const chatMock = vi.fn();
+vi.mock("./openrouter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./openrouter")>();
+  return { ...actual, chat: (...args: unknown[]) => chatMock(...args) };
+});
+
+import {
+  applyScopedRewrite,
+  buildRewriteMessages,
+  buildRewritePromptParts,
+  buildScopedSettingMessages,
+  buildScopedSettingPromptParts,
+  buildScopedBlockMessages,
+  buildScopedBlockPromptParts,
+  buildScopedSectionSettingsMessages,
+  buildScopedSectionSettingsPromptParts,
+  clampAndRestoreImages,
+  rewriteWholeSectionParallel,
+  sanitizeRewrittenSection,
+} from "./section-rewriter";
+import { joinParts } from "./prompt-breakdown";
 import type { SectionSchema, BlockSchema } from "./catalog";
+import type { AiConfig } from "./config";
 import type { ShopifySection } from "@/lib/preview/shopify-template";
 import { NormalizedProductSchema } from "@/lib/product/types";
 
@@ -187,6 +209,45 @@ describe("applyScopedRewrite", () => {
     const rewritten: typeof original = { type: "image-with-text", settings: {} };
     expect(applyScopedRewrite(original, rewritten, { blockPath: [], settingId: "heading" })).toBe(original);
   });
+
+  it("block scope (no settingId): takes every setting on that block, nothing else", () => {
+    const withTwoBlocks: ShopifySection = {
+      type: "image-with-text",
+      settings: { heading: "Old heading", image: "https://img.example/original.jpg" },
+      blocks: {
+        b1: { type: "paragraph", settings: { text: "Old body", background: "https://img.example/bg.jpg" } },
+        b2: { type: "heading", settings: { text: "Old h2" } },
+      },
+      block_order: ["b1", "b2"],
+    };
+    const rewritten: ShopifySection = {
+      type: "image-with-text",
+      settings: { heading: "Rewritten section heading" }, // model touched section-level too — must be ignored
+      blocks: {
+        b1: { type: "paragraph", settings: { text: "Rewritten body", background: "swapped.jpg" } },
+        b2: { type: "heading", settings: { text: "Rewritten h2" } },
+      },
+      block_order: ["b1", "b2"],
+    };
+    const scoped = applyScopedRewrite(withTwoBlocks, rewritten, { blockPath: ["b1"] });
+    // The scoped block's settings all moved to the model's values.
+    expect(scoped.blocks!.b1.settings.text).toBe("Rewritten body");
+    expect(scoped.blocks!.b1.settings.background).toBe("swapped.jpg");
+    // Everything else — the sibling block and section-level settings — stays original.
+    expect(scoped.blocks!.b2.settings.text).toBe("Old h2");
+    expect(scoped.settings.heading).toBe("Old heading");
+    expect(scoped.settings.image).toBe("https://img.example/original.jpg");
+  });
+
+  it("block scope returns the original untouched when the model dropped the scoped block", () => {
+    const rewritten: ShopifySection = { type: "image-with-text", settings: {}, blocks: {}, block_order: [] };
+    expect(applyScopedRewrite(original, rewritten, { blockPath: ["b1"] })).toBe(original);
+  });
+
+  it("block scope with an empty path (no block identified) is a no-op, never the whole section", () => {
+    const rewritten: ShopifySection = { type: "image-with-text", settings: { heading: "Rewritten everything" } };
+    expect(applyScopedRewrite(original, rewritten, { blockPath: [] })).toBe(original);
+  });
 });
 
 describe("buildRewriteMessages", () => {
@@ -255,6 +316,272 @@ describe("buildRewriteMessages", () => {
   it("omits the angle block when the project has none", () => {
     const content = buildRewriteMessages(baseOptions, schema, blocks).find((m) => m.role === "user")!.content;
     expect(content).not.toContain("MARKETING ANGLE:");
+  });
+
+});
+
+describe("buildRewritePromptParts", () => {
+  const baseOptions = {
+    product,
+    sectionId: "s1",
+    section: original,
+    instruction: "Make the heading punchier",
+  };
+
+  it("joins back to exactly the same content buildRewriteMessages produces", () => {
+    const messages = buildRewriteMessages(baseOptions, schema, blocks);
+    const parts = buildRewritePromptParts(baseOptions, schema, blocks);
+    expect(joinParts(parts)).toBe(messages.find((m) => m.role === "user")!.content);
+  });
+
+  it("categorizes the existing section JSON as existing_content and the instruction as user_instruction", () => {
+    const parts = buildRewritePromptParts(baseOptions, schema, blocks);
+    expect(parts.find((p) => p.key === "existing_content")?.text).toContain("CURRENT SECTION JSON");
+    expect(parts.find((p) => p.key === "user_instruction")?.text).toContain("Make the heading punchier");
+    expect(parts.find((p) => p.key === "schema_definitions")?.text).toContain("SECTION SCHEMA");
+  });
+
+  it("includes a persona part only when a persona was supplied", () => {
+    const withPersona = buildRewritePromptParts(
+      {
+        ...baseOptions,
+        customerPersona: {
+          type: "generated",
+          id: "frequent-traveler",
+          name: "Frequent Traveler",
+          description: "Values stylish organization for travel essentials",
+        },
+      },
+      schema,
+      blocks,
+    );
+    expect(withPersona.some((p) => p.key === "persona")).toBe(true);
+    expect(buildRewritePromptParts(baseOptions, schema, blocks).some((p) => p.key === "persona")).toBe(false);
+  });
+});
+
+describe("buildScopedSettingMessages", () => {
+  const baseOptions = {
+    product,
+    sectionId: "s1",
+    section: original,
+    instruction: "Make it punchier",
+  };
+
+  it("names the setting and carries its current value, not the whole section", () => {
+    const content = buildScopedSettingMessages(baseOptions, "heading", "inline_richtext", "Old heading").find(
+      (m) => m.role === "user",
+    )!.content;
+    expect(content).toContain('SETTING (id "heading"): inline_richtext');
+    expect(content).toContain('"Old heading"');
+    expect(content).not.toContain("SECTION SCHEMA");
+    expect(content).not.toContain("CURRENT SECTION JSON");
+  });
+
+  it("carries the project's customer language, same as the whole-section prompt", () => {
+    const content = buildScopedSettingMessages({ ...baseOptions, language: "de" }, "heading", "inline_richtext", "Old").find(
+      (m) => m.role === "user",
+    )!.content;
+    expect(content).toContain("German (de)");
+  });
+
+  it("never leaks a sibling setting's value into the prompt", () => {
+    const content = buildScopedSettingMessages(baseOptions, "text", "richtext", "Old body").find(
+      (m) => m.role === "user",
+    )!.content;
+    expect(content).not.toContain("Old heading");
+  });
+});
+
+describe("buildScopedSettingPromptParts", () => {
+  const baseOptions = {
+    product,
+    sectionId: "s1",
+    section: original,
+    instruction: "Make it punchier",
+  };
+
+  it("joins back to exactly the same content buildScopedSettingMessages produces", () => {
+    const messages = buildScopedSettingMessages(baseOptions, "heading", "inline_richtext", "Old heading");
+    const parts = buildScopedSettingPromptParts(baseOptions, "heading", "inline_richtext", "Old heading");
+    expect(joinParts(parts)).toBe(messages.find((m) => m.role === "user")!.content);
+  });
+
+  it("categorizes the current value as existing_settings", () => {
+    const parts = buildScopedSettingPromptParts(baseOptions, "heading", "inline_richtext", "Old heading");
+    expect(parts.find((p) => p.key === "existing_settings")?.text).toContain("CURRENT VALUE");
+    expect(parts.find((p) => p.key === "schema_definitions")?.text).toContain('SETTING (id "heading")');
+  });
+});
+
+describe("buildScopedBlockMessages", () => {
+  const baseOptions = {
+    product,
+    sectionId: "s1",
+    section: original,
+    instruction: "Make it punchier",
+  };
+  const paragraphBlock = blocks.find((b) => b.id === "paragraph")!;
+  const currentBlock = original.blocks!.b1;
+
+  it("describes only this block's own schema and settings, not the whole section", () => {
+    const content = buildScopedBlockMessages(baseOptions, paragraphBlock, currentBlock).find(
+      (m) => m.role === "user",
+    )!.content;
+    expect(content).toContain("BLOCK SCHEMA");
+    expect(content).toContain("text: richtext");
+    expect(content).toContain('"Old body"');
+    expect(content).not.toContain("SECTION SCHEMA");
+    expect(content).not.toContain("allowed blocks");
+  });
+});
+
+describe("buildScopedBlockPromptParts", () => {
+  const baseOptions = {
+    product,
+    sectionId: "s1",
+    section: original,
+    instruction: "Make it punchier",
+  };
+  const paragraphBlock = blocks.find((b) => b.id === "paragraph")!;
+  const currentBlock = original.blocks!.b1;
+
+  it("joins back to exactly the same content buildScopedBlockMessages produces", () => {
+    const messages = buildScopedBlockMessages(baseOptions, paragraphBlock, currentBlock);
+    const parts = buildScopedBlockPromptParts(baseOptions, paragraphBlock, currentBlock);
+    expect(joinParts(parts)).toBe(messages.find((m) => m.role === "user")!.content);
+  });
+
+  it("categorizes the current block settings as existing_settings", () => {
+    const parts = buildScopedBlockPromptParts(baseOptions, paragraphBlock, currentBlock);
+    expect(parts.find((p) => p.key === "existing_settings")?.text).toContain("CURRENT BLOCK SETTINGS");
+    expect(parts.find((p) => p.key === "schema_definitions")?.text).toContain("BLOCK SCHEMA");
+  });
+});
+
+describe("buildScopedSectionSettingsMessages", () => {
+  const baseOptions = {
+    product,
+    sectionId: "s1",
+    section: original,
+    instruction: "Make it punchier",
+  };
+
+  it("describes only the section's own settings schema and current values, not any block", () => {
+    const content = buildScopedSectionSettingsMessages(baseOptions, schema).find((m) => m.role === "user")!
+      .content;
+    expect(content).toContain("SECTION SETTINGS SCHEMA");
+    expect(content).toContain("heading: inline_richtext");
+    expect(content).toContain('"Old heading"');
+    expect(content).not.toContain("Old body"); // the block's own setting value
+    expect(content).not.toContain("allowed blocks");
+  });
+});
+
+describe("buildScopedSectionSettingsPromptParts", () => {
+  const baseOptions = {
+    product,
+    sectionId: "s1",
+    section: original,
+    instruction: "Make it punchier",
+  };
+
+  it("joins back to exactly the same content buildScopedSectionSettingsMessages produces", () => {
+    const messages = buildScopedSectionSettingsMessages(baseOptions, schema);
+    const parts = buildScopedSectionSettingsPromptParts(baseOptions, schema);
+    expect(joinParts(parts)).toBe(messages.find((m) => m.role === "user")!.content);
+  });
+
+  it("categorizes the current section settings as existing_settings", () => {
+    const parts = buildScopedSectionSettingsPromptParts(baseOptions, schema);
+    expect(parts.find((p) => p.key === "existing_settings")?.text).toContain("CURRENT SECTION SETTINGS");
+    expect(parts.find((p) => p.key === "schema_definitions")?.text).toContain("SECTION SETTINGS SCHEMA");
+  });
+});
+
+describe("clampAndRestoreImages", () => {
+  it("takes catalog-described keys from the model, keeps a non-catalog existing key original", () => {
+    const kept = clampAndRestoreImages(
+      { text: "New body", enable_custom_color: false },
+      { text: "Old body", enable_custom_color: true },
+      { id: "paragraph", settings: { text: "richtext" } },
+    );
+    expect(kept.text).toBe("New body");
+    // enable_custom_color isn't in this schema's settings — the model's value is discarded.
+    expect(kept.enable_custom_color).toBe(true);
+  });
+
+  it("restores the original image/video setting even if the model tried to change it", () => {
+    const kept = clampAndRestoreImages(
+      { background: "https://evil.example/swapped.jpg" },
+      { background: "https://img.example/bg.jpg" },
+      { id: "paragraph", settings: { background: "image_picker" } },
+    );
+    expect(kept.background).toBe("https://img.example/bg.jpg");
+  });
+});
+
+describe("rewriteWholeSectionParallel", () => {
+  // A page-builder-style section: settings live on blocks nested inside other blocks (a
+  // "column" wrapper holding "text"/"heading" blocks), not just at the top level — the shape
+  // that exposed the bug where only immediate blocks were ever reached.
+  const nestedSchema: SectionSchema = {
+    id: "page-builder",
+    label: "Page builder",
+    settings: {},
+    allowed_blocks: ["column"],
+  };
+  const nestedBlocks: BlockSchema[] = [
+    { id: "column", settings: {}, allowed_blocks: ["text", "heading"] },
+    { id: "text", settings: { text: "richtext" } },
+    { id: "heading", settings: { title: "richtext" } },
+  ];
+  const nestedSection: ShopifySection = {
+    type: "page-builder",
+    settings: {},
+    blocks: {
+      column_1: {
+        type: "column",
+        settings: {},
+        blocks: {
+          text_1: { type: "text", settings: { text: "Old text" } },
+          heading_1: { type: "heading", settings: { title: "Old heading" } },
+        },
+      },
+    },
+    block_order: ["column_1"],
+  };
+  const config: AiConfig = {
+    apiKey: "test-key",
+    model: "test-model",
+    baseUrl: "https://example.invalid",
+    generateImages: false,
+    imageModel: "test-image-model",
+  };
+
+  it("reaches and rewrites blocks nested inside other blocks, not just top-level ones", async () => {
+    chatMock.mockReset();
+    chatMock.mockImplementation(async ({ messages }: { messages: { role: string; content: string }[] }) => {
+      const content = messages.find((m) => m.role === "user")!.content;
+      if (content.includes("Old text")) return '{"block":{"settings":{"text":"New text"}}}';
+      if (content.includes("Old heading")) return '{"block":{"settings":{"title":"New heading"}}}';
+      throw new Error(`Unexpected chat() call for a block with no settings of its own: ${content.slice(0, 100)}`);
+    });
+
+    const result = await rewriteWholeSectionParallel(
+      { product, sectionId: "s1", section: nestedSection, instruction: "Punch it up" },
+      nestedSchema,
+      nestedBlocks,
+      config,
+    );
+
+    // Exactly the two blocks that actually have their own settings — the "column" wrapper
+    // (no settings) never generates a wasted call, but recursion still reaches through it.
+    expect(chatMock).toHaveBeenCalledTimes(2);
+    const column = result.section.blocks!.column_1;
+    expect(column.type).toBe("column");
+    expect(column.blocks!.text_1.settings.text).toBe("New text");
+    expect(column.blocks!.heading_1.settings.title).toBe("New heading");
   });
 });
 

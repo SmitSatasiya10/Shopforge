@@ -52,6 +52,31 @@ describe("preview shims", () => {
     expect(html).toContain('<img src="data:image/png;base64,QUJD">');
   });
 
+  it("settles a circle-style results counter to its real percentage, as the theme's own animation would", () => {
+    const html = applyPreviewShims(
+      '<html><head></head><body><div class="results__percentage flex-center center" style="--percentage: 0%" data-percentage="94"><svg class="results__ring-svg"><circle class="ring__prog" stroke-dasharray="0 100" /></svg><p>\n0%\n</p></div></body></html>',
+    );
+    expect(html).toContain('stroke-dasharray="94 100"');
+    expect(html).toMatch(/<p>\s*94%\s*<\/p>/);
+    expect(html).not.toMatch(/<p>\s*0%\s*<\/p>/);
+  });
+
+  it("settles a number-style results counter without touching its hidden width-fix duplicate", () => {
+    const html = applyPreviewShims(
+      '<html><head></head><body><div class="results__percentage flex-center center results__percentage--width-fix" style="--percentage: 0%" data-percentage="89"><p>\n0%\n</p><p>\n89%\n</p></div></body></html>',
+    );
+    const matches = html.match(/89%/g) ?? [];
+    expect(matches.length).toBe(2); // the now-settled visible <p> and the pre-existing hidden width-fix <p>
+    expect(html).not.toMatch(/<p>\s*0%\s*<\/p>/);
+  });
+
+  it("leaves a results counter with a genuine 0% stat alone", () => {
+    const html = applyPreviewShims(
+      '<html><head></head><body><div class="results__percentage" data-percentage="0"><p>\n0%\n</p></div></body></html>',
+    );
+    expect(html).toMatch(/<p>\s*0%\s*<\/p>/);
+  });
+
   it("leaves the rest of the document untouched", () => {
     const html = applyPreviewShims('<html class="no-js"><head></head><body><p>hello</p></body></html>');
     expect(html).toContain("<p>hello</p>");

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { toProductDTO, toNormalizedProduct } from "@/lib/product/db-mapping";
-import { rewriteProductTitle } from "@/lib/ai/title-rewriter";
+import { rewriteProductDescription } from "@/lib/ai/description-rewriter";
 import { withAIContext } from "@/lib/ai/debug-logger";
 import { presetById } from "@/lib/ai/rewrite-presets";
 import { AiConfigError } from "@/lib/ai/config";
@@ -9,10 +9,10 @@ import { OpenRouterError } from "@/lib/ai/openrouter";
 import { parseCustomerPersona } from "@/lib/store-config/persona";
 import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
 
-// POST /api/project/:id/rewrite-product-title — AI-rewrites the product's title and persists
-// it to the Product record (docs/EDITOR-TOOLBARS.md "Editing the product name"): the title is
-// product data, not a template setting, so it has its own endpoint rather than going through
-// rewrite-section's catalog-scoped machinery.
+// POST /api/project/:id/rewrite-product-description — AI-rewrites the product's description
+// and persists it to the Product record (docs/EDITOR-TOOLBARS.md "Editing the product
+// description"): the description is product data, not a template setting, so it has its own
+// endpoint rather than going through rewrite-section's catalog-scoped machinery.
 //
 // Body:
 //   { "prompt"?: string,   a free-typed instruction
@@ -42,13 +42,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const result = await withAIContext(
       {
-        operation: "rewrite-product-title",
-        route: "/api/project/[id]/rewrite-product-title",
+        operation: "rewrite-product-description",
+        route: "/api/project/[id]/rewrite-product-description",
         projectId: id,
         productId: project.productId,
       },
       () =>
-        rewriteProductTitle({
+        rewriteProductDescription({
           product: toNormalizedProduct(toProductDTO(project.product)),
           instruction,
           // Rewrites honor the same customer store-content language and persona as full generation.
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const product = await prisma.product.update({
       where: { id: project.productId },
-      data: { title: result.title },
+      data: { description: result.description },
     });
 
     return NextResponse.json({ product: toProductDTO(product), model: result.model });

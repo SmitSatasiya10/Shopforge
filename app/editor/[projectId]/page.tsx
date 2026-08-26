@@ -35,6 +35,7 @@ import {
   locateTextSetting,
   normalizeText,
   PRODUCT_TITLE_SETTING,
+  PRODUCT_DESCRIPTION_SETTING,
   TextBinding,
 } from "@/lib/editor/setting-locator";
 import { applyAlign, applyColor, cycleWeight, findTextControls, stepSize } from "@/lib/editor/text-controls";
@@ -216,8 +217,8 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configuration]);
 
-  // Debounced persistence for the product title — mirrors the configuration save above, so
-  // inline renames, AI rewrites, and undo/redo of the title all end up saved the same way.
+  // Debounced persistence for the product title/description — mirrors the configuration save
+  // above, so inline edits, AI rewrites, and undo/redo of either all end up saved the same way.
   useEffect(() => {
     if (skipNextProductSave.current) {
       skipNextProductSave.current = false;
@@ -226,24 +227,24 @@ export default function EditorPage() {
     if (!product) return;
     queueMicrotask(() => setSaveState("saving"));
     if (productSaveTimer.current) clearTimeout(productSaveTimer.current);
-    const title = product.title;
+    const { title, description } = product;
     productSaveTimer.current = setTimeout(() => {
       fetch(`/api/project/${projectId}/product`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({ title, description }),
       })
         .then((res) => {
           if (!res.ok) throw new Error();
           setSaveState("saved");
         })
-        .catch(() => setNotice("Could not save the product name."));
+        .catch(() => setNotice("Could not save the product."));
     }, 500);
     return () => {
       if (productSaveTimer.current) clearTimeout(productSaveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.title]);
+  }, [product?.title, product?.description]);
 
   // The clicked section's schema drives the Inspector. The loaded schema is stored with the
   // type it belongs to, so a stale result for a previously-selected section is ignored by
@@ -265,10 +266,18 @@ export default function EditorPage() {
   const currentTemplate = configuration?.templates[page] ?? null;
   const selectedSection = selection?.sectionId ? currentTemplate?.sections[selection.sectionId] : undefined;
   const binding = selection?.binding ?? null;
+  // Set only when the click landed inside a block but didn't resolve to one text setting —
+  // narrows a rewrite to that block instead of the whole section (docs/EDITOR-TOOLBARS.md).
+  const blockScope = !binding ? (selection?.blockScope ?? null) : null;
+  const scopedBlockType =
+    selectedSection && blockScope ? (getBlockAt(selectedSection, blockScope) as { type?: string } | undefined)?.type ?? null : null;
   // Product-name text binds to the Product record, not a template setting — the schema
   // controls that anchor to a real product_title block still apply, but AI rewrite goes
-  // through its own endpoint instead of rewrite-section (docs/EDITOR-TOOLBARS.md).
+  // through its own endpoint instead of rewrite-section (docs/EDITOR-TOOLBARS.md). The product
+  // description is the same story: rewrite-section can only ever read and write the section's
+  // own JSON, and the description was never part of that JSON to begin with.
   const isProductTitleBinding = binding?.settingId === PRODUCT_TITLE_SETTING;
+  const isProductDescriptionBinding = binding?.settingId === PRODUCT_DESCRIPTION_SETTING;
   const boundNode =
     selectedSection && binding ? getBlockAt(selectedSection, binding.blockPath) : undefined;
 
@@ -294,9 +303,10 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boundKey, readTemplate]);
 
-  // The section-level pseudo-binding (product title with no product_title block found) has
-  // no schema; anchored to a block, the block's own schema drives the controls as usual.
-  const boundSettingDefs = binding && !(isProductTitleBinding && binding.blockPath.length === 0)
+  // The section-level pseudo-binding (product title/description with no matching block found)
+  // has no schema; anchored to a block, the block's own schema drives the controls as usual.
+  const boundSettingDefs = binding &&
+    !((isProductTitleBinding || isProductDescriptionBinding) && binding.blockPath.length === 0)
     ? binding.blockPath.length === 0
       ? (activeSchema?.settings ?? [])
       : boundDefs?.key === boundKey
@@ -506,21 +516,25 @@ export default function EditorPage() {
       setRewriting(true);
       setNotice(null);
       try {
-        // The product title is product data, not a template setting (docs/EDITOR-TOOLBARS.md)
-        // — it has its own AI endpoint and persists to the Product record, not the template.
-        if (isProductTitleBinding) {
-          const res = await fetch(`/api/project/${projectId}/rewrite-product-title`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(options),
-          });
+        // The product title/description are product data, not template settings
+        // (docs/EDITOR-TOOLBARS.md) — each has its own AI endpoint and persists to the Product
+        // record, not the template.
+        if (isProductTitleBinding || isProductDescriptionBinding) {
+          const res = await fetch(
+            `/api/project/${projectId}/${isProductTitleBinding ? "rewrite-product-title" : "rewrite-product-description"}`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(options),
+            },
+          );
           const data = await res.json();
           if (!res.ok) {
             setNotice(data.error ?? "Rewrite failed");
             return;
           }
-          // The server already persisted this title — skip the debounced re-save it would
-          // otherwise trigger.
+          // The server already persisted this — skip the debounced re-save it would otherwise
+          // trigger.
           skipNextProductSave.current = true;
           commitProduct(data.product);
           return;
@@ -531,7 +545,11 @@ export default function EditorPage() {
           body: JSON.stringify({
             page,
             sectionId: selectedSectionId,
-            ...(binding ? { blockPath: binding.blockPath, settingId: binding.settingId } : {}),
+            ...(binding
+              ? { blockPath: binding.blockPath, settingId: binding.settingId }
+              : blockScope
+                ? { blockPath: blockScope }
+                : {}),
             ...options,
           }),
         });
@@ -547,7 +565,17 @@ export default function EditorPage() {
         setRewriting(false);
       }
     },
-    [projectId, page, selectedSectionId, binding, isProductTitleBinding, commitConfiguration, commitProduct],
+    [
+      projectId,
+      page,
+      selectedSectionId,
+      binding,
+      blockScope,
+      isProductTitleBinding,
+      isProductDescriptionBinding,
+      commitConfiguration,
+      commitProduct,
+    ],
   );
 
   // Magic brush: the section's own schema names its color settings; a random curated
@@ -616,9 +644,10 @@ export default function EditorPage() {
   );
 
   // Selection resolver for PreviewFrame: does this rendered text belong to a setting?
-  // The product name comes first: text matching `product.title` renders product DATA
-  // (`{{ product.title }}` in the theme), so editing it means renaming the product —
-  // even if some section setting happens to hold the same string.
+  // The product name and description come first: text matching `product.title` or
+  // `product.description` renders product DATA (`{{ product.title }}`/`{{ product.description
+  // }}` in the theme), so editing it means updating the product record — even if some section
+  // setting happens to hold the same string.
   const resolveText = useCallback(
     (sectionId: string, text: string): TextBinding | null => {
       const section = currentTemplate?.sections[sectionId];
@@ -629,9 +658,13 @@ export default function EditorPage() {
         const blockPath = section ? locateBlockPathByType(section, "product_title") : null;
         return { blockPath: blockPath ?? [], settingId: PRODUCT_TITLE_SETTING };
       }
+      if (product?.description && normalizeText(product.description) === normalizeText(text)) {
+        const blockPath = section ? locateBlockPathByType(section, "product_description") : null;
+        return { blockPath: blockPath ?? [], settingId: PRODUCT_DESCRIPTION_SETTING };
+      }
       return section ? locateTextSetting(section, text) : null;
     },
-    [currentTemplate, product?.title],
+    [currentTemplate, product?.title, product?.description],
   );
 
   const handleSelect = useCallback((info: SelectInfo) => {
@@ -648,6 +681,11 @@ export default function EditorPage() {
         // the template JSON.
         if (!productRef.current) return;
         commitProduct({ ...productRef.current, title: value });
+        return;
+      }
+      if (textBinding.settingId === PRODUCT_DESCRIPTION_SETTING) {
+        if (!productRef.current) return;
+        commitProduct({ ...productRef.current, description: value });
         return;
       }
       updateTemplate((template) => {
@@ -834,7 +872,7 @@ export default function EditorPage() {
             />
           </div>
 
-          {selection?.sectionId && !binding ? (
+          {selection?.sectionId && !binding && !showRewrite ? (
             <SectionToolbar
               rect={selectionRect}
               containerHeight={previewHeight}
@@ -847,7 +885,7 @@ export default function EditorPage() {
             />
           ) : null}
 
-          {selection?.sectionId && binding && selectionRect ? (
+          {selection?.sectionId && binding && selectionRect && !showRewrite ? (
             <InlineTextToolbar
               rect={selectionRect}
               controls={textControls}
@@ -884,12 +922,22 @@ export default function EditorPage() {
               sectionLabel={
                 isProductTitleBinding
                   ? "the product title"
-                  : binding
-                    ? `the "${binding.settingId}" text`
-                    : (selection.sectionType ?? "this section")
+                  : isProductDescriptionBinding
+                    ? "the product description"
+                    : binding
+                      ? `the "${binding.settingId}" text`
+                      : blockScope
+                        ? `the "${scopedBlockType ?? "selected"}" block`
+                        : (selection.sectionType ?? "this section")
               }
               rect={selectionRect}
               containerHeight={previewHeight}
+              // Opened from the inline text toolbar (a field selection): float below the
+              // selected text itself, like that toolbar does, instead of the fixed slot next
+              // to the section toolbar's pill — pinning it to the right edge regardless of
+              // where the text sits used to park the popover directly on top of any wide
+              // element (e.g. a full-width heading), hiding the very content being rewritten.
+              anchorToElement={Boolean(binding)}
               busy={rewriting}
               onSubmit={rewriteSection}
               onClose={() => setShowRewrite(false)}

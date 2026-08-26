@@ -109,6 +109,9 @@ async function renderSection(
   try {
     source = await readTemplate(`sections/${instance.type}.liquid`);
   } catch {
+    console.warn(
+      `shopforge: section "${id}" (type "${instance.type}") has no matching template — skipped from preview`,
+    );
     return `<!-- shopforge: section type "${instance.type}" is not in this theme -->`;
   }
 
@@ -142,6 +145,7 @@ async function renderSection(
     // One broken section must not blank the whole page — the preview degrades to a visible
     // marker so the editor still renders every other section.
     const message = error instanceof Error ? error.message : String(error);
+    console.warn(`shopforge: section "${id}" (type "${instance.type}") failed to render: ${message}`);
     inner = `<!-- shopforge: "${instance.type}" failed to render: ${message.replace(/-->/g, "")} -->`;
   }
 

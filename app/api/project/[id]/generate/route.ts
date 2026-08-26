@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { toProductDTO } from "@/lib/product/db-mapping";
 import { generateStore } from "@/lib/ai/content-generator";
+import { withAITrace } from "@/lib/ai/debug-logger";
 import { AiConfigError } from "@/lib/ai/config";
 import { OpenRouterError } from "@/lib/ai/openrouter";
 import { parseConfiguration, StoreConfiguration } from "@/lib/store-config/store";
@@ -38,20 +39,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const generated = await generateStore(normalized, {
-      // The customer-language and persona selections made during onboarding: all
-      // customer-facing copy is generated in this language, written for this buyer
-      // (store-content-language-selection-implementation.md,
-      // product_based_customer_persona_implementation.md).
-      language: project.language,
-      customerPersona: parseCustomerPersona(project.personaJson),
-      marketingAngle: parseMarketingAngle(project.marketingAngleJson),
-      config: {
-        ...(typeof body.generateImages === "boolean" ? { generateImages: body.generateImages } : {}),
-        ...(typeof body.model === "string" && body.model ? { model: body.model } : {}),
-      },
-      signal: req.signal,
-    });
+    const generated = await withAITrace(
+      "generate-store",
+      { route: "/api/project/[id]/generate", projectId: id, productId: project.productId },
+      () =>
+        generateStore(normalized, {
+          // The customer-language and persona selections made during onboarding: all
+          // customer-facing copy is generated in this language, written for this buyer
+          // (store-content-language-selection-implementation.md,
+          // product_based_customer_persona_implementation.md).
+          language: project.language,
+          customerPersona: parseCustomerPersona(project.personaJson),
+          marketingAngle: parseMarketingAngle(project.marketingAngleJson),
+          config: {
+            ...(typeof body.generateImages === "boolean" ? { generateImages: body.generateImages } : {}),
+            ...(typeof body.model === "string" && body.model ? { model: body.model } : {}),
+          },
+          signal: req.signal,
+        }),
+    );
 
     const configuration: StoreConfiguration = {
       version: 2,

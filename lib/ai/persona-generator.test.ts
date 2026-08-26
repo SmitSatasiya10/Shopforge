@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   buildPersonaMessages,
+  buildPersonaPromptParts,
   parsePersonaOptions,
   PersonaGenerationError,
 } from "./persona-generator";
+import { joinParts } from "./prompt-breakdown";
 import { NormalizedProductSchema } from "@/lib/product/types";
 
 // Persona generation (product_based_customer_persona_implementation.md): the prompt must be
@@ -46,6 +48,24 @@ describe("buildPersonaMessages", () => {
   it("defaults to English when no language was selected", () => {
     const user = buildPersonaMessages(product, undefined).find((m) => m.role === "user")!.content;
     expect(user).toContain("English (en)");
+  });
+});
+
+describe("buildPersonaPromptParts", () => {
+  it("joins back to exactly the same content buildPersonaMessages produces", () => {
+    const messages = buildPersonaMessages(product, "de");
+    const parts = buildPersonaPromptParts(product, "de");
+    expect(joinParts(parts)).toBe(messages.find((m) => m.role === "user")!.content);
+  });
+
+  it("categorizes product data, language, and task brief — no persona/angle/schema/existing-* parts for this generator", () => {
+    const parts = buildPersonaPromptParts(product, "en");
+    expect(parts.find((p) => p.key === "product_data")?.text).toContain("Canvas Travel Backpack");
+    expect(parts.find((p) => p.key === "language_instruction")?.text).toContain("PERSONA LANGUAGE");
+    expect(parts.find((p) => p.key === "user_instruction")?.text).toContain("exactly four distinct");
+    expect(parts.some((p) => ["persona", "marketing_angle", "schema_definitions", "existing_content", "existing_settings"].includes(p.key))).toBe(
+      false,
+    );
   });
 });
 

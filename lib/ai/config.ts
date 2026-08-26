@@ -23,7 +23,7 @@ function envFlag(value: string | undefined, fallback: boolean): boolean {
 export function loadAiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
   return {
     apiKey: overrides.apiKey ?? process.env.OPENROUTER_API_KEY ?? "",
-    model: overrides.model ?? process.env.OPENROUTER_MODEL ?? "anthropic/claude-sonnet-4.5",
+    model: overrides.model ?? process.env.OPENROUTER_MODEL ?? "google/gemini-3.7-flash",
     baseUrl: overrides.baseUrl ?? process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
     generateImages:
       overrides.generateImages ?? envFlag(process.env.SHOPFORGE_GENERATE_IMAGES, false),
