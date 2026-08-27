@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { AlertCircle, Monitor, Redo2, Smartphone, Undo2 } from "lucide-react";
+import { AlertCircle, Monitor, Plus, Redo2, Smartphone, Undo2, X } from "lucide-react";
 import { PreviewFrame, SelectInfo, SelectionRect } from "@/components/PreviewFrame";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { MediaPanel } from "@/components/MediaPanel";
+import { EditorRail } from "@/components/EditorRail";
 import { AiRewritePopover } from "@/components/AiRewritePopover";
 import { SectionToolbar } from "@/components/SectionToolbar";
+import { SectionPicker } from "@/components/SectionPicker";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { InlineTextToolbar } from "@/components/InlineTextToolbar";
@@ -24,6 +26,7 @@ import { PAGE_TEMPLATES, PageTemplate, parseConfiguration, StoreConfiguration } 
 import { deriveStoreName } from "@/lib/store-config/store-name";
 import {
   getBlockAt,
+  insertSection,
   moveSection,
   removeBlockAt,
   removeSection,
@@ -31,6 +34,11 @@ import {
   setSettingAtPath,
   setSettingsAtPath,
 } from "@/lib/store-config/template-ops";
+import { createSectionInstance, generateInstanceId, presetBlockTypes } from "@/lib/store-config/section-factory";
+// Type-only: lib/ai/catalog.ts reads from disk (node:fs/promises) and must never be imported
+// for its runtime code from this client component — GET /api/catalog/sections is how this
+// page reaches loadCatalog()'s data instead.
+import type { SectionSchema } from "@/lib/ai/catalog";
 import { applyMagicBrush, cycleColorScheme, rollPalette, PALETTES } from "@/lib/editor/magic-brush";
 import {
   locateBlockPathByType,
@@ -109,6 +117,18 @@ export default function EditorPage() {
   const [publishResult, setPublishResult] = useState<{ storeUrl: string } | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
+  // Which section a new one should land after — set when the picker is opened from the inline
+  // "+" below a selected section; null means the header's own Add Section button opened it,
+  // which appends to the end of the page instead.
+  const [insertAfterId, setInsertAfterId] = useState<string | null>(null);
+  const [sectionCatalog, setSectionCatalog] = useState<SectionSchema[]>([]);
+  // Left tool rail: AI's controls live in this inline panel; Media's rail entry opens
+  // MediaPanel in a browse-only mode (no `image_picker` target to write into, unlike its other
+  // two entry points below). Sections has no panel of its own — the rail button opens the
+  // existing SectionPicker modal directly, same as the old header button did.
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [mediaPanelOpen, setMediaPanelOpen] = useState(false);
 
   const readTemplate = useMemo(() => createFetchTemplateReader(), []);
   const readBinary = useMemo(() => createFetchBinaryReader(), []);
@@ -174,6 +194,15 @@ export default function EditorPage() {
       .then((raw) => setSchemaLocale(JSON.parse(raw)))
       .catch(() => setSchemaLocale({}));
   }, [readTemplate]);
+
+  // The Add Section picker's catalog — the same curated list AI generation reads from
+  // (lib/ai/catalog.ts), fetched once via the server since it's a disk-backed module.
+  useEffect(() => {
+    fetch("/api/catalog/sections")
+      .then((res) => res.json())
+      .then((data) => setSectionCatalog(Array.isArray(data.sections) ? data.sections : []))
+      .catch(() => setSectionCatalog([]));
+  }, []);
 
   // The section toolbar clamps itself into the preview's height.
   useEffect(() => {
@@ -272,6 +301,14 @@ export default function EditorPage() {
   }, [selection?.sectionType, readTemplate]);
 
   const activeSchema = schema && schema.type === selection?.sectionType ? schema.schema : null;
+
+  // Same rule as lib/ai/catalog.ts's sectionsForTemplate() + excluding locked sections — kept
+  // as a local one-liner rather than importing that module, which is disk-backed (node:fs) and
+  // cannot be bundled into this client component.
+  const addableSections = useMemo(
+    () => sectionCatalog.filter((s) => !s.locked && (!s.allowed_on || s.allowed_on.includes(page))),
+    [sectionCatalog, page],
+  );
 
   const currentTemplate = configuration?.templates[page] ?? null;
   const selectedSection = selection?.sectionId ? currentTemplate?.sections[selection.sectionId] : undefined;
@@ -639,6 +676,44 @@ export default function EditorPage() {
     if (paletteApplied) paletteIndex.current = index;
   }, [selectedSectionId, selectedSectionType, readTemplate, updateTemplate]);
 
+  // Add Section: builds a real instance of the picked catalog entry from the theme's own
+  // schema/presets (createSectionInstance), appends it, then selects it so its toolbar shows
+  // up as soon as the preview re-renders. Goes through updateTemplate like every other
+  // mutation, so undo/redo and the debounced autosave need nothing extra here.
+  const addSection = useCallback(
+    async (catalogEntry: SectionSchema) => {
+      const sectionSchema = await loadSectionSchema(readTemplate, catalogEntry.id);
+      if (!sectionSchema) {
+        setNotice(`Couldn't add "${catalogEntry.label}" — its section file is missing from the theme.`);
+        setSectionPickerOpen(false);
+        return;
+      }
+      const blockSchemas = new Map(
+        await Promise.all(
+          presetBlockTypes(sectionSchema).map(
+            async (type) => [type, await loadBlockSchema(readTemplate, type)] as const,
+          ),
+        ),
+      );
+      const sectionId = generateInstanceId(catalogEntry.id);
+      const section = createSectionInstance(catalogEntry.id, sectionSchema, blockSchemas);
+      updateTemplate((template) => insertSection(template, sectionId, section, insertAfterId));
+      setSelection({
+        sectionId,
+        sectionType: catalogEntry.id,
+        settingId: null,
+        editable: null,
+        binding: null,
+        blockScope: null,
+        rect: null,
+      });
+      setSelectionRect(null);
+      setSectionPickerOpen(false);
+      setInsertAfterId(null);
+    },
+    [readTemplate, updateTemplate, insertAfterId],
+  );
+
   const handleMove = useCallback(
     (delta: -1 | 1) => {
       if (!selectedSectionId) return;
@@ -746,10 +821,10 @@ export default function EditorPage() {
     // Explicit light background: the editor chrome is designed light, and without this it
     // inherits the body background, which goes dark under `prefers-color-scheme: dark`.
     <div className="flex min-h-0 flex-1 flex-col bg-white text-neutral-900">
-      <header className="flex items-center justify-between gap-4 border-b border-neutral-200 px-4 py-2 text-sm">
-        <span className="text-neutral-600">{product?.title ?? "Untitled store"}</span>
+      <header className="flex items-center justify-between gap-4 border-b border-neutral-800 bg-neutral-900 px-4 py-2 text-sm text-white">
+        <span className="text-neutral-400">{product?.title ?? "Untitled store"}</span>
 
-        <div className="flex items-center gap-1 rounded border border-neutral-200 p-0.5">
+        <div className="flex items-center gap-1 rounded border border-neutral-700 p-0.5">
           {PAGE_TEMPLATES.map((name) => (
             <button
               key={name}
@@ -759,7 +834,7 @@ export default function EditorPage() {
                 setShowRewrite(false);
               }}
               className={`rounded px-3 py-1 text-xs capitalize ${
-                page === name ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
+                page === name ? "bg-white text-neutral-900" : "text-neutral-400 hover:bg-white/10 hover:text-white"
               }`}
             >
               {name === "index" ? "Homepage" : "Product page"}
@@ -768,12 +843,12 @@ export default function EditorPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-0.5 rounded border border-neutral-200 p-0.5">
+          <div className="flex items-center gap-0.5 rounded border border-neutral-700 p-0.5">
             <button
               onClick={undo}
               disabled={!canUndo}
               title="Undo (Ctrl+Z)"
-              className="rounded p-1.5 text-neutral-600 hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent"
+              className="rounded p-1.5 text-neutral-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
             >
               <Undo2 className="h-3.5 w-3.5" />
             </button>
@@ -781,7 +856,7 @@ export default function EditorPage() {
               onClick={redo}
               disabled={!canRedo}
               title="Redo (Ctrl+Shift+Z)"
-              className="rounded p-1.5 text-neutral-600 hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent"
+              className="rounded p-1.5 text-neutral-400 hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
             >
               <Redo2 className="h-3.5 w-3.5" />
             </button>
@@ -789,12 +864,12 @@ export default function EditorPage() {
 
           <HistoryPanel projectId={projectId} onRestore={restoreFromHistory} />
 
-          <div className="flex items-center gap-0.5 rounded border border-neutral-200 p-0.5">
+          <div className="flex items-center gap-0.5 rounded border border-neutral-700 p-0.5">
             <button
               onClick={() => setViewport("desktop")}
               title="Desktop preview"
               className={`rounded p-1.5 ${
-                viewport === "desktop" ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
+                viewport === "desktop" ? "bg-white text-neutral-900" : "text-neutral-400 hover:bg-white/10 hover:text-white"
               }`}
             >
               <Monitor className="h-3.5 w-3.5" />
@@ -803,45 +878,30 @@ export default function EditorPage() {
               onClick={() => setViewport("mobile")}
               title="Mobile preview"
               className={`rounded p-1.5 ${
-                viewport === "mobile" ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
+                viewport === "mobile" ? "bg-white text-neutral-900" : "text-neutral-400 hover:bg-white/10 hover:text-white"
               }`}
             >
               <Smartphone className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <label className="flex items-center gap-1.5 text-xs text-neutral-600" title="When off, image settings are filled from the imported product's own photos and no image model is called.">
-            <input
-              type="checkbox"
-              checked={generateImages}
-              onChange={(e) => setGenerateImages(e.target.checked)}
-            />
-            Generate images
-          </label>
-          <button
-            onClick={generate}
-            disabled={generating}
-            className="rounded bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-          >
-            {generating ? "Generating…" : "Generate content"}
-          </button>
-          <span className="w-14 text-right text-xs text-neutral-400">
+          <span className="w-14 text-right text-xs text-neutral-500">
             {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}
           </span>
 
           <a
             href={`/api/project/${projectId}/export-zip`}
             title="Download the theme this project would publish to Shopify, as a zip"
-            className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+            className="rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:bg-white/10 hover:text-white"
           >
             Download zip
           </a>
 
-          <div className="h-4 w-px bg-neutral-200" aria-hidden="true" />
+          <div className="h-4 w-px bg-neutral-700" aria-hidden="true" />
 
           {shopifyShopDomain ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-neutral-500" title={shopifyShopDomain}>
+              <span className="text-xs text-neutral-400" title={shopifyShopDomain}>
                 {shopifyShopDomain}
               </span>
               <button
@@ -856,17 +916,17 @@ export default function EditorPage() {
                   href={publishResult.storeUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs text-emerald-700 underline"
+                  className="text-xs text-emerald-400 underline"
                 >
                   View live store
                 </a>
               )}
-              {publishError && <span className="text-xs text-red-600">{publishError}</span>}
+              {publishError && <span className="text-xs text-red-400">{publishError}</span>}
               <button
                 onClick={disconnectStore}
                 disabled={disconnecting}
                 title="Disconnect this store so a different one can be connected"
-                className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                className="rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:bg-white/10 hover:text-white disabled:opacity-50"
               >
                 {disconnecting ? "Disconnecting…" : "Disconnect"}
               </button>
@@ -884,12 +944,12 @@ export default function EditorPage() {
                 value={shopInput}
                 onChange={(e) => setShopInput(e.target.value)}
                 placeholder="your-store.myshopify.com"
-                className="w-48 rounded border border-neutral-200 px-2 py-1 text-xs"
+                className="w-48 rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-white placeholder:text-neutral-500"
               />
               <button
                 type="submit"
                 disabled={shopInput.trim() === ""}
-                className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                className="rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:bg-white/10 hover:text-white disabled:opacity-50"
               >
                 Connect store
               </button>
@@ -903,6 +963,83 @@ export default function EditorPage() {
       ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
+        <EditorRail
+          sectionsActive={sectionPickerOpen}
+          aiActive={aiPanelOpen}
+          mediaActive={mediaPickerTarget !== null || mediaPanelOpen}
+          onSections={() => {
+            setInsertAfterId(null);
+            setSectionPickerOpen(true);
+          }}
+          onAI={() =>
+            setAiPanelOpen((v) => {
+              const next = !v;
+              if (next) {
+                setMediaPickerTarget(null);
+                setMediaPanelOpen(false);
+              }
+              return next;
+            })
+          }
+          onMedia={() => {
+            if (mediaPickerTarget || mediaPanelOpen) {
+              setMediaPickerTarget(null);
+              setMediaPanelOpen(false);
+            } else {
+              setMediaPanelOpen(true);
+              setAiPanelOpen(false);
+            }
+          }}
+        />
+
+        {/* Sections, AI, and Media are three views of the same left sidebar slot — only one
+            renders at a time, right beside the rail, never as a separate floating overlay. */}
+        {mediaPickerTarget !== null || mediaPanelOpen ? (
+          <MediaPanel
+            open
+            images={product?.images ?? []}
+            onSelect={(url) => {
+              if (mediaPickerTarget && selection?.sectionId) {
+                updateSetting(selection.sectionId, mediaPickerTarget.settingId, url, mediaPickerTarget.blockPath);
+              }
+              setMediaPickerTarget(null);
+              setMediaPanelOpen(false);
+            }}
+            onClose={() => {
+              setMediaPickerTarget(null);
+              setMediaPanelOpen(false);
+            }}
+          />
+        ) : aiPanelOpen ? (
+          <div className="flex w-72 shrink-0 flex-col gap-3 border-r border-neutral-200 bg-white p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-neutral-900">AI</p>
+              <button
+                onClick={() => setAiPanelOpen(false)}
+                title="Close"
+                className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-xs text-neutral-500">Regenerate this page&apos;s content from the imported product.</p>
+            <label
+              className="flex items-center gap-1.5 text-xs text-neutral-600"
+              title="When off, image settings are filled from the imported product's own photos and no image model is called."
+            >
+              <input type="checkbox" checked={generateImages} onChange={(e) => setGenerateImages(e.target.checked)} />
+              Generate images
+            </label>
+            <button
+              onClick={generate}
+              disabled={generating}
+              className="rounded bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+            >
+              {generating ? "Generating…" : "Generate content"}
+            </button>
+          </div>
+        ) : null}
+
         <div
           ref={previewRef}
           className={`relative min-h-0 min-w-0 flex-1 ${
@@ -934,6 +1071,27 @@ export default function EditorPage() {
               onMove={handleMove}
               onDelete={() => setConfirmDelete("section")}
             />
+          ) : null}
+
+          {selection?.sectionId && !binding && !showRewrite && selectionRect ? (
+            <div
+              className="pointer-events-none absolute inset-x-0 z-10"
+              style={{ top: selectionRect.top + selectionRect.height }}
+            >
+              <div className="relative">
+                <div className="h-px w-full bg-emerald-500" />
+                <button
+                  onClick={() => {
+                    setInsertAfterId(selection.sectionId);
+                    setSectionPickerOpen(true);
+                  }}
+                  className="pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white shadow-lg ring-1 ring-white/10 hover:bg-neutral-700"
+                >
+                  <Plus className="h-3 w-3" />
+                  Add a section
+                </button>
+              </div>
+            </div>
           ) : null}
 
           {selection?.sectionId && binding && selectionRect && !showRewrite ? (
@@ -971,7 +1129,10 @@ export default function EditorPage() {
           {imageSettingId && selectionRect && !showRewrite ? (
             <ImageChangeButton
               rect={selectionRect}
-              onClick={() => setMediaPickerTarget({ settingId: imageSettingId, blockPath: blockScope ?? [] })}
+              onClick={() => {
+                setMediaPickerTarget({ settingId: imageSettingId, blockPath: blockScope ?? [] });
+                setAiPanelOpen(false);
+              }}
             />
           ) : null}
 
@@ -1020,7 +1181,10 @@ export default function EditorPage() {
             onChange={(settingId, value) =>
               selection?.sectionId && updateSetting(selection.sectionId, settingId, value)
             }
-            onBrowseMedia={(settingId) => setMediaPickerTarget({ settingId, blockPath: [] })}
+            onBrowseMedia={(settingId) => {
+              setMediaPickerTarget({ settingId, blockPath: [] });
+              setAiPanelOpen(false);
+            }}
             onClose={() => {
               setSelection(null);
               setMediaPickerTarget(null);
@@ -1040,16 +1204,19 @@ export default function EditorPage() {
         )}
       </div>
 
-      <MediaPanel
-        open={mediaPickerTarget !== null}
-        images={product?.images ?? []}
-        onSelect={(url) => {
-          if (mediaPickerTarget && selection?.sectionId) {
-            updateSetting(selection.sectionId, mediaPickerTarget.settingId, url, mediaPickerTarget.blockPath);
-          }
-          setMediaPickerTarget(null);
+      <SectionPicker
+        open={sectionPickerOpen}
+        sections={addableSections}
+        onSelect={addSection}
+        templateName={page}
+        readTemplate={readTemplate}
+        readBinary={readBinary}
+        product={product ? toNormalizedProduct(product) : null}
+        storeName={deriveStoreName(product)}
+        onClose={() => {
+          setSectionPickerOpen(false);
+          setInsertAfterId(null);
         }}
-        onClose={() => setMediaPickerTarget(null)}
       />
 
       {confirmDelete ? (
