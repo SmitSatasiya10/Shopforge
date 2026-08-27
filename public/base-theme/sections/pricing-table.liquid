@@ -70,17 +70,29 @@
                 {%- capture sizes -%}
                   320px
                 {%- endcapture -%}
-                {{
-                  displayed_image
-                  | image_url: width: 1500
-                  | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1500'
-                }}
+                {% if block.settings.displayed_image == 'custom' %}
+                  <span data-sf-setting="custom_image" data-sf-editable="image" style="display: contents;">
+                    {{
+                      displayed_image
+                      | image_url: width: 1500
+                      | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1500'
+                    }}
+                  </span>
+                {% else %}
+                  {{
+                    displayed_image
+                    | image_url: width: 1500
+                    | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1500'
+                  }}
+                {% endif %}
               </div>
             {% endif %}
             {% unless block.settings.custom_icon == blank and block.settings.icon == 'none' %}
               <div class="plan-card__icon plan-card__icon--{{ section.settings.icon_size }}{% if block.settings.card_style == 'style-3' %} color-scheme-{{ section.id }}-{{ block.id }} color-{{ block.settings.color_scheme }}{% endif %}">
                 {% if block.settings.custom_icon != blank %}
-                  {{ block.settings.custom_icon | image_url: width: 600 | image_tag: loading: 'lazy', width: 500 }}
+                  <span data-sf-setting="custom_icon" data-sf-editable="image" style="display: contents;">
+                    {{ block.settings.custom_icon | image_url: width: 600 | image_tag: loading: 'lazy', width: 500 }}
+                  </span>
                 {% else %}
                   {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon %}
                 {% endif %}

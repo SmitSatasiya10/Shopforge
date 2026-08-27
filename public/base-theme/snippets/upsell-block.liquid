@@ -95,6 +95,7 @@
         if forloop.index == 1
           assign preselected = block.settings.prdouct_1_preselected
           assign featured_image = block.settings.product_1_image
+          assign featured_image_setting_id = 'product_1_image'
           assign description = block.settings.product_1_desc
           assign percentage_discount = block.settings.product_1_percentage_discount | plus: 0
           assign percentage_left = 100.0 | minus: percentage_discount | divided_by: 100.0
@@ -102,6 +103,7 @@
         elsif forloop.index == 2 
           assign preselected = block.settings.prdouct_2_preselected
           assign featured_image = block.settings.product_2_image
+          assign featured_image_setting_id = 'product_2_image'
           assign description = block.settings.product_2_desc
           assign percentage_discount = block.settings.product_2_percentage_discount | plus: 0
           assign percentage_left = 100.0 | minus: percentage_discount | divided_by: 100.0
@@ -109,6 +111,7 @@
         else
           assign preselected = block.settings.prdouct_3_preselected
           assign featured_image = block.settings.product_3_image
+          assign featured_image_setting_id = 'product_3_image'
           assign description = block.settings.product_3_desc
           assign percentage_discount = block.settings.product_3_percentage_discount | plus: 0
           assign percentage_left = 100.0 | minus: percentage_discount | divided_by: 100.0
@@ -198,6 +201,10 @@
                       loading="lazy"
                       width="auto"
                       height="auto"
+                      {% if featured_image != blank %}
+                        data-sf-setting="{{ featured_image_setting_id }}"
+                        data-sf-editable="image"
+                      {% endif %}
                     >
                   </div>
                 {% endif %}

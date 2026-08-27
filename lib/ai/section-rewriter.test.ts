@@ -1,9 +1,19 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const chatMock = vi.fn();
 vi.mock("./openrouter", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./openrouter")>();
   return { ...actual, chat: (...args: unknown[]) => chatMock(...args) };
+});
+
+// rewriteSection() (unlike rewriteWholeSectionParallel/tryScopedRewrite, which take schema/blocks
+// as direct params) calls loadCatalog() itself, which reads the real lib/ai/catalog/ files off
+// disk. Mocking it lets rewriteSection() tests use a small synthetic catalog instead of coupling
+// to real, changeable catalog content.
+const loadCatalogMock = vi.fn();
+vi.mock("./catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./catalog")>();
+  return { ...actual, loadCatalog: () => loadCatalogMock() };
 });
 
 import {
@@ -17,13 +27,17 @@ import {
   buildScopedSectionSettingsMessages,
   buildScopedSectionSettingsPromptParts,
   clampAndRestoreImages,
+  filterSectionForPrompt,
+  rewriteSection,
   rewriteWholeSectionParallel,
+  rewriteWholeSectionSingleCall,
+  SMALL_SECTION_BLOCK_THRESHOLD,
   sanitizeRewrittenSection,
 } from "./section-rewriter";
 import { joinParts } from "./prompt-breakdown";
 import type { SectionSchema, BlockSchema } from "./catalog";
 import type { AiConfig } from "./config";
-import type { ShopifySection } from "@/lib/preview/shopify-template";
+import type { ShopifyBlock, ShopifySection } from "@/lib/preview/shopify-template";
 import { NormalizedProductSchema } from "@/lib/product/types";
 
 // The guard between the model and the template: whatever a rewrite returns, the section
@@ -250,6 +264,60 @@ describe("applyScopedRewrite", () => {
   });
 });
 
+describe("filterSectionForPrompt", () => {
+  // Same section as the top-level `original` fixture, plus non-catalog settings at both the
+  // section and block level — the presentation-style keys (color_scheme, enable_custom_color,
+  // ...) a theme-seeded section carries that schema/blocks (the catalog schema fixtures above)
+  // never expose, modeled on what the audit of request 72971f found in a real section.
+  const sectionWithExtras: ShopifySection = {
+    ...original,
+    settings: { ...original.settings, color_scheme: "background-1", padding_top: 36 },
+    blocks: {
+      b1: {
+        ...original.blocks!.b1,
+        settings: { ...original.blocks!.b1.settings, enable_custom_color: true, custom_color: "#000000" },
+      },
+    },
+  };
+
+  it("keeps section settings the catalog schema declares", () => {
+    const filtered = filterSectionForPrompt(sectionWithExtras, schema, blocks);
+    expect(filtered.settings.heading).toBe("Old heading");
+    expect(filtered.settings.image).toBe("https://img.example/original.jpg");
+  });
+
+  it("excludes section settings the catalog schema does not declare", () => {
+    const filtered = filterSectionForPrompt(sectionWithExtras, schema, blocks);
+    expect(filtered.settings).not.toHaveProperty("color_scheme");
+    expect(filtered.settings).not.toHaveProperty("padding_top");
+  });
+
+  it("keeps block settings the block's own catalog schema declares", () => {
+    const filtered = filterSectionForPrompt(sectionWithExtras, schema, blocks);
+    expect(filtered.blocks!.b1.settings.text).toBe("Old body");
+    expect(filtered.blocks!.b1.settings.background).toBe("https://img.example/bg.jpg");
+  });
+
+  it("excludes block settings the block's own catalog schema does not declare", () => {
+    const filtered = filterSectionForPrompt(sectionWithExtras, schema, blocks);
+    expect(filtered.blocks!.b1.settings).not.toHaveProperty("enable_custom_color");
+    expect(filtered.blocks!.b1.settings).not.toHaveProperty("custom_color");
+  });
+
+  it("leaves block structure (type, id, block_order) and the section type untouched — only settings values are filtered", () => {
+    const filtered = filterSectionForPrompt(sectionWithExtras, schema, blocks);
+    expect(filtered.type).toBe("image-with-text");
+    expect(filtered.blocks!.b1.type).toBe("paragraph");
+    expect(filtered.block_order).toEqual(["b1"]);
+  });
+
+  it("does not mutate the section it was given", () => {
+    const before = JSON.stringify(sectionWithExtras);
+    filterSectionForPrompt(sectionWithExtras, schema, blocks);
+    expect(JSON.stringify(sectionWithExtras)).toBe(before);
+  });
+});
+
 describe("buildRewriteMessages", () => {
   const baseOptions = {
     product,
@@ -339,6 +407,23 @@ describe("buildRewritePromptParts", () => {
     expect(parts.find((p) => p.key === "existing_content")?.text).toContain("CURRENT SECTION JSON");
     expect(parts.find((p) => p.key === "user_instruction")?.text).toContain("Make the heading punchier");
     expect(parts.find((p) => p.key === "schema_definitions")?.text).toContain("SECTION SCHEMA");
+  });
+
+  it("excludes non-catalog settings from CURRENT SECTION JSON while keeping catalog-declared ones", () => {
+    const sectionWithExtras: ShopifySection = {
+      ...original,
+      settings: { ...original.settings, color_scheme: "background-1" },
+      blocks: {
+        b1: { ...original.blocks!.b1, settings: { ...original.blocks!.b1.settings, enable_custom_color: true } },
+      },
+    };
+    const existingContent = buildRewritePromptParts({ ...baseOptions, section: sectionWithExtras }, schema, blocks).find(
+      (p) => p.key === "existing_content",
+    )!.text;
+    expect(existingContent).not.toContain("color_scheme");
+    expect(existingContent).not.toContain("enable_custom_color");
+    expect(existingContent).toContain("Old heading");
+    expect(existingContent).toContain("Old body");
   });
 
   it("includes a persona part only when a persona was supplied", () => {
@@ -499,6 +584,49 @@ describe("buildScopedSectionSettingsPromptParts", () => {
   });
 });
 
+describe("scoped rewrites are unaffected by the whole-section CURRENT SECTION JSON filter", () => {
+  // filterSectionForPrompt only trims buildRewriteMessages'/buildRewritePromptParts' whole-section
+  // dump — the scoped paths below send a single setting/block/section-settings object directly
+  // (never the whole section), so they were never carrying the non-catalog waste that filter
+  // targets, and must keep showing their current value exactly as before.
+
+  it("buildScopedBlockMessages still sends a block's full current settings, unfiltered", () => {
+    const blockWithExtra: ShopifyBlock = {
+      type: "paragraph",
+      settings: { text: "Old body", background: "https://img.example/bg.jpg", enable_custom_color: true },
+    };
+    const content = buildScopedBlockMessages(
+      { product, sectionId: "s1", section: original, instruction: "Make it punchier" },
+      blocks.find((b) => b.id === "paragraph")!,
+      blockWithExtra,
+    ).find((m) => m.role === "user")!.content;
+    expect(content).toContain("enable_custom_color");
+  });
+
+  it("buildScopedSectionSettingsMessages still sends the section's full current settings, unfiltered", () => {
+    const sectionWithExtra: ShopifySection = {
+      ...original,
+      settings: { ...original.settings, color_scheme: "background-1" },
+    };
+    const content = buildScopedSectionSettingsMessages(
+      { product, sectionId: "s1", section: sectionWithExtra, instruction: "Make it punchier" },
+      schema,
+    ).find((m) => m.role === "user")!.content;
+    expect(content).toContain("color_scheme");
+  });
+
+  it("buildScopedSettingMessages is untouched — it only ever carries the one setting's own value, never the whole section", () => {
+    const content = buildScopedSettingMessages(
+      { product, sectionId: "s1", section: original, instruction: "Make it punchier" },
+      "heading",
+      "inline_richtext",
+      "Old heading",
+    ).find((m) => m.role === "user")!.content;
+    expect(content).toContain('"Old heading"');
+    expect(content).not.toContain("CURRENT SECTION JSON");
+  });
+});
+
 describe("clampAndRestoreImages", () => {
   it("takes catalog-described keys from the model, keeps a non-catalog existing key original", () => {
     const kept = clampAndRestoreImages(
@@ -582,6 +710,262 @@ describe("rewriteWholeSectionParallel", () => {
     expect(column.type).toBe("column");
     expect(column.blocks!.text_1.settings.text).toBe("New text");
     expect(column.blocks!.heading_1.settings.title).toBe("New heading");
+  });
+});
+
+describe("rewriteSection — small vs large section routing", () => {
+  // rewriteSection() calls loadCatalog() itself (unlike rewriteWholeSectionParallel/
+  // tryScopedRewrite, which take schema/blocks directly), so this describe block needs its own
+  // small synthetic catalog rather than the file's top-level `schema`/`blocks` fixtures.
+  const listSchema: SectionSchema = {
+    id: "list-section",
+    label: "List section",
+    settings: { heading: "text" },
+    allowed_blocks: ["item"],
+  };
+  const itemBlock: BlockSchema = { id: "item", settings: { text: "text" } };
+  const config: AiConfig = {
+    apiKey: "test-key",
+    model: "test-model",
+    baseUrl: "https://example.invalid",
+    generateImages: false,
+    imageModel: "test-image-model",
+  };
+
+  function makeSection(blockCount: number): ShopifySection {
+    const sectionBlocks: NonNullable<ShopifySection["blocks"]> = {};
+    const order: string[] = [];
+    for (let i = 1; i <= blockCount; i++) {
+      const id = `item_${i}`;
+      sectionBlocks[id] = { type: "item", settings: { text: `Old text ${i}` } };
+      order.push(id);
+    }
+    return { type: "list-section", settings: { heading: "Old heading" }, blocks: sectionBlocks, block_order: order };
+  }
+
+  function singleCallResponse(blockCount: number): string {
+    return JSON.stringify({
+      section: {
+        type: "list-section",
+        settings: { heading: "New heading" },
+        blocks: Object.fromEntries(
+          Array.from({ length: blockCount }, (_, i) => [
+            `item_${i + 1}`,
+            { type: "item", settings: { text: `New text ${i + 1}` } },
+          ]),
+        ),
+        block_order: Array.from({ length: blockCount }, (_, i) => `item_${i + 1}`),
+      },
+    });
+  }
+
+  beforeEach(() => {
+    loadCatalogMock.mockResolvedValue({ sections: [listSchema], blocks: [itemBlock] });
+    chatMock.mockReset();
+  });
+
+  it.each([0, 1, 3, SMALL_SECTION_BLOCK_THRESHOLD])(
+    "makes exactly ONE AI call for a %i-block section (at or under the threshold)",
+    async (blockCount) => {
+      chatMock.mockResolvedValue(singleCallResponse(blockCount));
+
+      const result = await rewriteSection({
+        product,
+        sectionId: "s1",
+        section: makeSection(blockCount),
+        instruction: "Punch it up",
+        config,
+      });
+
+      expect(chatMock).toHaveBeenCalledTimes(1);
+      // The single-call path's prompt names the whole section's current JSON — the fan-out's
+      // per-block/per-settings prompts never mention this label.
+      const content = (
+        chatMock.mock.calls[0][0] as { messages: { role: string; content: string }[] }
+      ).messages.find((m) => m.role === "user")!.content;
+      expect(content).toContain("CURRENT SECTION JSON");
+      expect(result.section.settings.heading).toBe("New heading");
+    },
+  );
+
+  it("keeps the existing one-call-per-block-plus-settings fan-out for a section just over the threshold", async () => {
+    const blockCount = SMALL_SECTION_BLOCK_THRESHOLD + 1;
+    chatMock.mockImplementation(async ({ messages }: { messages: { role: string; content: string }[] }) => {
+      const content = messages.find((m) => m.role === "user")!.content;
+      if (content.includes("SECTION SETTINGS SCHEMA")) return '{"settings":{"heading":"New heading"}}';
+      const match = content.match(/Old text (\d+)/);
+      return `{"block":{"settings":{"text":"New text ${match ? match[1] : "?"}"}}}`;
+    });
+
+    const result = await rewriteSection({
+      product,
+      sectionId: "s1",
+      section: makeSection(blockCount),
+      instruction: "Punch it up",
+      config,
+    });
+
+    // One call per block, plus one for the section's own settings — never one combined call.
+    expect(chatMock).toHaveBeenCalledTimes(blockCount + 1);
+    expect(result.section.settings.heading).toBe("New heading");
+    expect(result.section.blocks!.item_1.settings.text).toBe("New text 1");
+    expect(result.section.blocks![`item_${blockCount}`].settings.text).toBe(`New text ${blockCount}`);
+  });
+
+  it("updates all settings and all blocks from a small-section single-call response", async () => {
+    chatMock.mockResolvedValue(singleCallResponse(3));
+
+    const result = await rewriteSection({
+      product,
+      sectionId: "s1",
+      section: makeSection(3),
+      instruction: "Punch it up",
+      config,
+    });
+
+    expect(result.section.type).toBe("list-section");
+    expect(result.section.settings.heading).toBe("New heading");
+    expect(result.section.blocks!.item_1.settings.text).toBe("New text 1");
+    expect(result.section.blocks!.item_2.settings.text).toBe("New text 2");
+    expect(result.section.blocks!.item_3.settings.text).toBe("New text 3");
+  });
+
+  it("still applies catalog validation to a small-section single-call response: drops disallowed blocks, keeps a pre-existing non-catalog setting at its original value", async () => {
+    const section = makeSection(1);
+    // A presentation-style setting the catalog doesn't expose, already present on the section —
+    // same shape as the "settings outside the catalog vocabulary" clamp tested above for
+    // sanitizeRewrittenSection directly, exercised here through rewriteSection's small-section path.
+    section.settings.legacy_setting = "original value";
+
+    chatMock.mockResolvedValue(
+      JSON.stringify({
+        section: {
+          type: "list-section",
+          settings: { heading: "New heading", legacy_setting: "model tried to change this" },
+          blocks: {
+            item_1: { type: "item", settings: { text: "New text 1" } },
+            hallucinated: { type: "not-a-real-block", settings: {} },
+          },
+          block_order: ["item_1", "hallucinated"],
+        },
+      }),
+    );
+
+    const result = await rewriteSection({
+      product,
+      sectionId: "s1",
+      section,
+      instruction: "Punch it up",
+      config,
+    });
+
+    expect(result.section.blocks).not.toHaveProperty("hallucinated");
+    expect(result.section.settings.legacy_setting).toBe("original value");
+    expect(result.section.settings.heading).toBe("New heading");
+  });
+
+  it("a non-catalog setting is never shown to the model, yet the final result is identical to today's fully-visible-then-clamped behavior", async () => {
+    const section = makeSection(1);
+    section.settings.legacy_setting = "original value";
+
+    chatMock.mockImplementation(async ({ messages }: { messages: { role: string; content: string }[] }) => {
+      const content = messages.find((m) => m.role === "user")!.content;
+      // The whole point of the filter: the model can't echo, drift, or leak a value it was
+      // never shown — proving that, not just asserting the end state, is what makes this a
+      // safety proof rather than a coincidence.
+      expect(content).not.toContain("legacy_setting");
+      expect(content).not.toContain("original value");
+      return singleCallResponse(1);
+    });
+
+    const result = await rewriteSection({
+      product,
+      sectionId: "s1",
+      section,
+      instruction: "Punch it up",
+      config,
+    });
+
+    // Catalog setting: the model's new value, same as always.
+    expect(result.section.settings.heading).toBe("New heading");
+    // Non-catalog setting: still exactly the ORIGINAL value — sanitizeRewrittenSection's clamp
+    // falls back to the true original regardless of what the model saw or returned, so hiding
+    // it from the prompt cannot change this outcome.
+    expect(result.section.settings.legacy_setting).toBe("original value");
+  });
+
+  it("rewriteWholeSectionSingleCall makes exactly one call and returns the whole sanitized section, called directly", async () => {
+    chatMock.mockResolvedValue(singleCallResponse(2));
+
+    const result = await rewriteWholeSectionSingleCall(
+      { product, sectionId: "s1", section: makeSection(2), instruction: "Punch it up", config },
+      listSchema,
+      [itemBlock],
+      config,
+    );
+
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(result.section.settings.heading).toBe("New heading");
+    expect(result.section.blocks!.item_1.settings.text).toBe("New text 1");
+    expect(result.section.blocks!.item_2.settings.text).toBe("New text 2");
+  });
+
+  it("a catalog-resolvable scoped rewrite (the fast path) remains a single call, unaffected by the small/large routing", async () => {
+    chatMock.mockResolvedValue('{"value":"New heading"}');
+
+    const result = await rewriteSection({
+      product,
+      sectionId: "s1",
+      section: makeSection(3),
+      instruction: "Punch it up",
+      config,
+      scope: { blockPath: [], settingId: "heading" },
+    });
+
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(result.section.settings.heading).toBe("New heading");
+    // Everything outside the scoped setting stays exactly as it was.
+    expect(result.section.blocks!.item_1.settings.text).toBe("Old text 1");
+  });
+
+  it("a non-catalog-resolvable scoped rewrite still falls back to ONE whole-section call, scoped down afterward", async () => {
+    // The model's response changes BOTH "heading" (a real catalog setting) and a brand-new,
+    // non-catalog key — sanitizeRewrittenSection keeps a genuinely new key like this (it was
+    // never in the original, so there's nothing of the original's to protect), which is what
+    // lets applyScopedRewrite narrow down to exactly it below.
+    chatMock.mockResolvedValue(
+      JSON.stringify({
+        section: {
+          type: "list-section",
+          settings: { heading: "New heading", not_a_catalog_setting: "New custom value" },
+          blocks: {
+            item_1: { type: "item", settings: { text: "New text 1" } },
+            item_2: { type: "item", settings: { text: "New text 2" } },
+            item_3: { type: "item", settings: { text: "New text 3" } },
+          },
+          block_order: ["item_1", "item_2", "item_3"],
+        },
+      }),
+    );
+
+    const result = await rewriteSection({
+      product,
+      sectionId: "s1",
+      section: makeSection(3),
+      instruction: "Punch it up",
+      config,
+      // Not a key in listSchema.settings — tryScopedRewrite can't resolve this via the fast path.
+      scope: { blockPath: [], settingId: "not_a_catalog_setting" },
+    });
+
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    // applyScopedRewrite takes ONLY the scoped setting from the whole-section result...
+    expect(result.section.settings.not_a_catalog_setting).toBe("New custom value");
+    // ...heading was never the scope, so it must stay the ORIGINAL value even though the mocked
+    // model response also changed it — proving the single-call result really was narrowed down,
+    // not just returned whole.
+    expect(result.section.settings.heading).toBe("Old heading");
+    expect(result.section.blocks!.item_1.settings.text).toBe("Old text 1");
   });
 });
 

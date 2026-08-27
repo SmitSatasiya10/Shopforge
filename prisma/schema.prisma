@@ -53,7 +53,21 @@ model ShopifyStore {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  projects Project[]
+  projects       Project[]
+  uploadedAssets ShopifyUploadedAsset[]
+}
+
+/// Caches "this setting value was already uploaded to this shop as Shopify file X" (lib/shopify/asset-upload.ts)
+/// so a repeat publish doesn't re-upload the same image/video every time.
+model ShopifyUploadedAsset {
+  id               String   @id @default(uuid())
+  shopifyStoreId   String
+  shopifyStore     ShopifyStore @relation(fields: [shopifyStoreId], references: [id], onDelete: Cascade)
+  sourceUrlHash    String // sha256 of the raw setting value -- data: URIs can be multi-MB, too large to index directly
+  shopifyReference String // e.g. "shopify://shop_images/<filename>"
+  createdAt        DateTime @default(now())
+
+  @@unique([shopifyStoreId, sourceUrlHash])
 }
 
 model Project {

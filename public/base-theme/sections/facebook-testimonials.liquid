@@ -129,11 +129,13 @@
                   <div class="fb-post__top flex">
                     <div class="fb-post__profile-picture media media--transparent circle flex-shrink-0">
                       {% if block.settings.post_author_avatar != blank %}
-                        {{
-                          block.settings.post_author_avatar
-                          | image_url: width: 200
-                          | image_tag: loading: 'lazy', width: 100
-                        }}
+                        <span data-sf-setting="post_author_avatar" data-sf-editable="image" style="display: contents;">
+                          {{
+                            block.settings.post_author_avatar
+                            | image_url: width: 200
+                            | image_tag: loading: 'lazy', width: 100
+                          }}
+                        </span>
                       {% else %}
                         <svg
                           width="50"
@@ -212,15 +214,17 @@
                         class="media media--transparent ratio"
                         style="--ratio-percent: {{ 1 | divided_by: block.settings.post_image.aspect_ratio | times: 100 }}%"
                       >
-                        {{
-                          block.settings.post_image
-                          | image_url: width: 1420
-                          | image_tag:
-                            loading: 'lazy',
-                            sizes: sizes,
-                            widths: '275, 550, 710, 1420',
-                            class: 'fb-post__content__image'
-                        }}
+                        <span data-sf-setting="post_image" data-sf-editable="image" style="display: contents;">
+                          {{
+                            block.settings.post_image
+                            | image_url: width: 1420
+                            | image_tag:
+                              loading: 'lazy',
+                              sizes: sizes,
+                              widths: '275, 550, 710, 1420',
+                              class: 'fb-post__content__image'
+                          }}
+                        </span>
                       </div>
                     {% elsif block.settings.post_video != blank %}
                       <div
@@ -335,11 +339,13 @@
                     <div class="fb-post__comment flex">
                       <div class="fb-post__comment__avatar media media--transparent circle flex-shrink-0">
                         {% if block.settings.comment_1_author_avatar != blank %}
-                          {{
-                            block.settings.comment_1_author_avatar
-                            | image_url: width: 200
-                            | image_tag: loading: 'lazy', width: 100
-                          }}
+                          <span data-sf-setting="comment_1_author_avatar" data-sf-editable="image" style="display: contents;">
+                            {{
+                              block.settings.comment_1_author_avatar
+                              | image_url: width: 200
+                              | image_tag: loading: 'lazy', width: 100
+                            }}
+                          </span>
                         {% else %}
                           <svg
                             width="50"
@@ -402,11 +408,13 @@
                     <div class="fb-post__comment flex">
                       <div class="fb-post__comment__avatar media media--transparent circle flex-shrink-0">
                         {% if block.settings.comment_2_author_avatar != blank %}
-                          {{
-                            block.settings.comment_2_author_avatar
-                            | image_url: width: 200
-                            | image_tag: loading: 'lazy', width: 100
-                          }}
+                          <span data-sf-setting="comment_2_author_avatar" data-sf-editable="image" style="display: contents;">
+                            {{
+                              block.settings.comment_2_author_avatar
+                              | image_url: width: 200
+                              | image_tag: loading: 'lazy', width: 100
+                            }}
+                          </span>
                         {% else %}
                           <svg
                             width="50"

@@ -13,6 +13,8 @@ interface SettingsPanelProps {
   values: Record<string, unknown>;
   schemaLocale: Record<string, unknown>;
   onChange: (settingId: string, value: unknown) => void;
+  /** Opens the "Your media" panel targeting this image_picker setting. */
+  onBrowseMedia: (settingId: string) => void;
   onClose: () => void;
   /** Collapses the panel to its rail; distinct from onClose, which clears the selection. */
   onCollapse: () => void;
@@ -29,6 +31,7 @@ export function SettingsPanel({
   values,
   schemaLocale,
   onChange,
+  onBrowseMedia,
   onClose,
   onCollapse,
 }: SettingsPanelProps) {
@@ -97,7 +100,13 @@ export function SettingsPanel({
                 className="flex flex-col gap-1 text-xs font-medium text-neutral-700"
               >
                 {label(setting)}
-                <SettingControl setting={setting} value={value} onChange={onChange} schemaLocale={schemaLocale} />
+                <SettingControl
+                  setting={setting}
+                  value={value}
+                  onChange={onChange}
+                  onBrowseMedia={onBrowseMedia}
+                  schemaLocale={schemaLocale}
+                />
                 {setting.info ? (
                   <span className="text-[11px] font-normal text-neutral-400">
                     {resolveSchemaLabel(setting.info, schemaLocale)}
@@ -116,11 +125,13 @@ function SettingControl({
   setting,
   value,
   onChange,
+  onBrowseMedia,
   schemaLocale,
 }: {
   setting: ShopifySettingDef;
   value: unknown;
   onChange: (id: string, value: unknown) => void;
+  onBrowseMedia: (settingId: string) => void;
   schemaLocale: Record<string, unknown>;
 }) {
   const id = setting.id!;
@@ -202,8 +213,28 @@ function SettingControl({
       );
 
     // image_picker holds a URL in the preview — there is no Shopify Files store behind it,
-    // so it is edited as a URL and populated by the image toggle during generation.
+    // so it is edited as a URL, either typed directly or picked from the project's existing
+    // product images via "Your media" (MediaPanel).
     case "image_picker":
+      return (
+        <span className="flex items-center gap-2">
+          <input
+            type="url"
+            className={`${input} flex-1`}
+            placeholder={setting.placeholder}
+            value={String(value)}
+            onChange={(e) => onChange(id, e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => onBrowseMedia(id)}
+            className="shrink-0 rounded border border-neutral-300 px-2 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+          >
+            Browse media
+          </button>
+        </span>
+      );
+
     case "video":
     case "url":
     case "video_url":

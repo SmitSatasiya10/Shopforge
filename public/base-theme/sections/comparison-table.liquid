@@ -140,11 +140,13 @@
                 {%- if section.settings.logo != blank -%}
                   {%- assign logo_width = section.settings.logo_width -%}
                   {%- assign logo_height = logo_width | divided_by: section.settings.logo.aspect_ratio -%}
-                  {{
-                    section.settings.logo
-                    | image_url: width: 400
-                    | image_tag: width: logo_width, height: logo_height, alt: shop.name
-                  }}
+                  <span data-sf-setting="logo" data-sf-editable="image" style="display: contents;">
+                    {{
+                      section.settings.logo
+                      | image_url: width: 400
+                      | image_tag: width: logo_width, height: logo_height, alt: shop.name
+                    }}
+                  </span>
                 {%- else -%}
                   {{ section.settings.us_label | replace: '[shop_name]', shop.name }}
                 {%- endif -%}
@@ -158,6 +160,7 @@
                     assign logo_height = logo_width | divided_by: section.settings.others_logo.aspect_ratio
                     assign label = section.settings.others_label
                     assign label_size = section.settings.others_label_size
+                    assign logo_setting_id = 'others_logo'
                   elsif i == 2
                     assign mobile_logo_width = section.settings.others_2_mobile_logo_width
                     assign logo = section.settings.others_2_logo
@@ -165,6 +168,7 @@
                     assign logo_height = logo_width | divided_by: section.settings.others_2_logo.aspect_ratio
                     assign label = section.settings.others_2_label
                     assign label_size = section.settings.others_2_label_size
+                    assign logo_setting_id = 'others_2_logo'
                   else
                     assign mobile_logo_width = section.settings.others_3_mobile_logo_width
                     assign logo = section.settings.others_3_logo
@@ -172,6 +176,7 @@
                     assign logo_height = logo_width | divided_by: section.settings.others_3_logo.aspect_ratio
                     assign label = section.settings.others_3_label
                     assign label_size = section.settings.others_3_label_size
+                    assign logo_setting_id = 'others_3_logo'
                   endif
                 %}
                 <th
@@ -180,7 +185,9 @@
                   style="--mobile-logo-width: {{ mobile_logo_width }}px;--font-size: {{ label_size | divided_by: 10.0 }}rem;"
                 >
                   {%- if logo != blank -%}
-                    {{ logo | image_url: width: 400 | image_tag: width: logo_width, height: logo_height, alt: label }}
+                    <span data-sf-setting="{{ logo_setting_id }}" data-sf-editable="image" style="display: contents;">
+                      {{ logo | image_url: width: 400 | image_tag: width: logo_width, height: logo_height, alt: label }}
+                    </span>
                   {%- else -%}
                     {{ label }}
                   {%- endif -%}

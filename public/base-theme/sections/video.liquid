@@ -3,7 +3,13 @@
   {% render 'custome-colorscheme' %}
 {%- endstyle -%}
 
-<div class="color-{{ section.settings.color_scheme }} color-scheme-{{ section.id }} gradient content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}">
+<div
+  class="color-{{ section.settings.color_scheme }} color-scheme-{{ section.id }} gradient content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}"
+  {% if section.settings.color_scheme == 'custom' and section.settings.custom_image_background != blank %}
+    data-sf-setting="custom_image_background"
+    data-sf-editable="image"
+  {% endif %}
+>
   <div class="video-section isolate{% unless section.settings.full_width %} page-width{% endunless %} section-{{ section.id }}-padding animate-item">
     <div
       {% if section.settings.full_width %}
@@ -37,15 +43,17 @@
               {%- endif %}
             {%- endcapture -%}
             {%- assign alt = 'sections.video.load_video' | t: description: section.settings.description | escape -%}
-            {{
-              section.settings.cover_image
-              | image_url: width: 3840
-              | image_tag:
-                loading: 'lazy',
-                sizes: sizes,
-                widths: '375, 750, 1100, 1500, 1780, 2000, 3000, 3840',
-                alt: alt
-            }}
+            <span data-sf-setting="cover_image" data-sf-editable="image" style="display: contents;">
+              {{
+                section.settings.cover_image
+                | image_url: width: 3840
+                | image_tag:
+                  loading: 'lazy',
+                  sizes: sizes,
+                  widths: '375, 750, 1100, 1500, 1780, 2000, 3000, 3840',
+                  alt: alt
+              }}
+            </span>
           {%- else -%}
             {{ 'collection-2' | placeholder_svg_tag: 'placeholder-svg placeholder' }}
           {%- endif -%}
@@ -75,11 +83,13 @@
             {%- endif %}
           {%- endcapture -%}
           {%- assign alt = 'sections.video.load_video' | t: description: section.settings.description | escape -%}
-          {{
-            section.settings.cover_image
-            | image_url: width: 3840
-            | image_tag: loading: 'lazy', sizes: sizes, widths: '375, 750, 1100, 1500, 1780, 2000, 3000, 3840', alt: alt
-          }}
+          <span data-sf-setting="cover_image" data-sf-editable="image" style="display: contents;">
+            {{
+              section.settings.cover_image
+              | image_url: width: 3840
+              | image_tag: loading: 'lazy', sizes: sizes, widths: '375, 750, 1100, 1500, 1780, 2000, 3000, 3840', alt: alt
+            }}
+          </span>
         {%- else -%}
           {{ 'collection-2' | placeholder_svg_tag: 'placeholder-svg placeholder' }}
         {%- endif -%}

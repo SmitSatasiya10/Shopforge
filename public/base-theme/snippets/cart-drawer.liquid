@@ -519,11 +519,13 @@
                         (min-width: {% if section.settings.desktop_width == 'normal' %}430{% else %}580{% endif %}px) calc(370px * {{ block.settings.width | divided_by: 100 }}),
                         calc((100vw - {% if section.settings.mobile_width == 'partial' %}60{% else %}30{% endif %}px) * {{ block.settings.width | divided_by: 100 }})
                       {%- endcapture -%}
-                      {{
-                        block.settings.image
-                        | image_url: width: 1500
-                        | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1250, 1500'
-                      }}
+                      <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+                        {{
+                          block.settings.image
+                          | image_url: width: 1500
+                          | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1250, 1500'
+                        }}
+                      </span>
                     </div>
                   {% else %}
                     {{ 'image' | placeholder_svg_tag: 'placeholder-svg placeholder' }}
@@ -800,11 +802,13 @@
                         (min-width: {% if section.settings.desktop_width == 'normal' %}430{% else %}580{% endif %}px) calc(370px * {{ block.settings.width | divided_by: 100 }}),
                         calc((100vw - {% if section.settings.mobile_width == 'partial' %}60{% else %}30{% endif %}px) * {{ block.settings.width | divided_by: 100 }})
                       {%- endcapture -%}
-                      {{
-                        block.settings.image
-                        | image_url: width: 1500
-                        | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1250, 1500'
-                      }}
+                      <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+                        {{
+                          block.settings.image
+                          | image_url: width: 1500
+                          | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1250, 1500'
+                        }}
+                      </span>
                     </div>
                   {% else %}
                     {{ 'image' | placeholder_svg_tag: 'placeholder-svg placeholder' }}

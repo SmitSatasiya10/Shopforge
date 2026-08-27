@@ -96,6 +96,10 @@
                   loading="lazy"
                   width="auto"
                   height="auto"
+                  {% if block.settings.product_image != blank %}
+                    data-sf-setting="product_image"
+                    data-sf-editable="image"
+                  {% endif %}
                 >
                 {% if block.settings.show_image_locked_overlay and unlocked == false %}
                   <div class='cart-drawer-gift__image__locked'>

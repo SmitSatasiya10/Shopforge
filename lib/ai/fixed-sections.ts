@@ -1,6 +1,6 @@
 import { TemplateReader } from "@/lib/preview/template-loader";
 import { ShopifySection, ShopifyTemplate, ShopifyTemplateSchema } from "@/lib/preview/shopify-template";
-import { SectionSchema, describeSectionBody, describeSettings, sectionsForTemplate, BlockSchema } from "./catalog";
+import { SectionSchema, describeSettings, sectionsForTemplate, BlockSchema } from "./catalog";
 
 // The base theme's own templates/{name}.json (the same seed a brand-new project is created
 // with, via lib/store-config/store.ts's defaultConfiguration) is the fixed page structure AI
@@ -66,42 +66,87 @@ export async function loadFixedSections(
 }
 
 /**
- * Renders a `fixed_blocks` section's body: instead of `describeSectionBody`'s menu of allowed
- * block types to freely choose from, lists the base theme's own seeded block ids/types
- * verbatim — the model may only write settings for these exact ids, never add, remove, or
- * reorder them (lib/ai/content-generator.ts's applyToFixedStructure enforces this the same way
- * it enforces the section-level fixed structure).
- */
-function describeFixedBlocksBody(schema: SectionSchema, seed: ShopifySection, blocks: BlockSchema[]): string {
-  const blockById = new Map(blocks.map((b) => [b.id, b]));
-  const settings = describeSettings(schema.settings);
-  const order = seed.block_order ?? Object.keys(seed.blocks ?? {});
-  const body = order
-    .map((blockId) => {
-      const block = seed.blocks?.[blockId];
-      if (!block) return null;
-      const blockSchema = blockById.get(block.type);
-      return `    - block id "${blockId}" (${block.type})\n${describeSettings(blockSchema?.settings).replace(/^ {4}/gm, "        ")}`;
-    })
-    .filter((line): line is string => line !== null)
-    .join("\n");
-  const notes = schema._notes ? `\n  note: ${schema._notes}` : "";
-  return `  settings:\n${settings}\n  blocks (fixed — write settings for exactly these block ids, in this order; do not add, remove, or reorder blocks):\n${body}${notes}`;
-}
-
-/**
- * Lists the fixed section ids/types the model must fill, one per catalog entry it may write
- * into. Sections whose schema is `locked` are omitted entirely — they always keep the base
- * theme's own seeded content (lib/ai/content-generator.ts's applyToFixedStructure), so the
- * model is never asked to write for them and never told an id it isn't allowed to return.
+ * Lists the fixed section ids/types the model must fill, then two appendices — one section
+ * schema per section TYPE actually used above, one block schema per block TYPE actually
+ * referenced above (as a fixed block id or as an allowed-block menu choice) — each described
+ * exactly once regardless of how many instances/ids on the page share that type. Sections
+ * whose schema is `locked` are omitted entirely — they always keep the base theme's own seeded
+ * content (lib/ai/content-generator.ts's applyToFixedStructure), so the model is never asked to
+ * write for them and never told an id it isn't allowed to return.
  */
 export function describeFixedSections(fixed: FixedSection[], blocks: BlockSchema[]): string {
-  return fixed
-    .filter(({ schema }) => !schema.locked)
+  const visible = fixed.filter(({ schema }) => !schema.locked);
+  const blockById = new Map(blocks.map((b) => [b.id, b]));
+
+  const sectionTypesSeen = new Map<string, SectionSchema>();
+  // A block type's `_notes` is only ever shown to the model where it was reached as an
+  // allowed-block menu choice (matching the old per-instance behavior) — never for a type only
+  // ever seen as a fixed_blocks seed, which historically got settings only. Tracking `viaMenu`
+  // keeps the dedup a strict no-op on prompt size instead of bulk-adding every fixed_blocks
+  // type's notes (some sections seed a couple dozen structural block types), which would work
+  // directly against the point of deduplicating in the first place.
+  const blockTypesSeen = new Map<string, { block: BlockSchema | undefined; viaMenu: boolean }>();
+  const noteBlockType = (type: string, viaMenu: boolean) => {
+    const existing = blockTypesSeen.get(type);
+    if (existing) {
+      if (viaMenu) existing.viaMenu = true;
+    } else {
+      blockTypesSeen.set(type, { block: blockById.get(type), viaMenu });
+    }
+  };
+
+  const structure = visible
     .map(({ id, type, schema, seed }) => {
+      if (!sectionTypesSeen.has(type)) sectionTypesSeen.set(type, schema);
       const head = `- id "${id}" (${type} — ${schema.label}${schema.purpose ? `: ${schema.purpose}` : ""})`;
-      const body = schema.fixed_blocks ? describeFixedBlocksBody(schema, seed, blocks) : describeSectionBody(schema, blocks);
-      return `${head}\n${body}`;
+
+      if (schema.fixed_blocks) {
+        const order = seed.block_order ?? Object.keys(seed.blocks ?? {});
+        const body = order
+          .map((blockId) => {
+            const block = seed.blocks?.[blockId];
+            if (!block) return null;
+            noteBlockType(block.type, false);
+            return `    - block id "${blockId}" (${block.type})`;
+          })
+          .filter((line): line is string => line !== null)
+          .join("\n");
+        return `${head}\n  blocks (fixed — write settings for exactly these block ids, in this order; do not add, remove, or reorder blocks):\n${body}`;
+      }
+
+      for (const blockType of schema.allowed_blocks ?? []) {
+        noteBlockType(blockType, true);
+      }
+      return head;
     })
+    .join("\n\n");
+
+  const sectionSchemas = [...sectionTypesSeen.entries()]
+    .map(([type, schema]) => {
+      const settings = `  settings:\n${describeSettings(schema.settings)}`;
+      const allowed = schema.fixed_blocks
+        ? ""
+        : `\n  allowed blocks: ${schema.allowed_blocks?.length ? schema.allowed_blocks.join(", ") : "(no blocks)"}`;
+      const notes = schema._notes ? `\n  note: ${schema._notes}` : "";
+      return `Section schema: ${type}\n${settings}${allowed}${notes}`;
+    })
+    .join("\n\n");
+
+  const blockSchemas = [...blockTypesSeen.entries()]
+    .map(([type, { block, viaMenu }]) => {
+      const settings = `  settings:\n${describeSettings(block?.settings)}`;
+      const notes = viaMenu && block?._notes ? `\n  note: ${block._notes}` : "";
+      return `Block schema: ${type}\n${settings}${notes}`;
+    })
+    .join("\n\n");
+
+  return [
+    structure,
+    sectionSchemas &&
+      `SECTION SCHEMAS (one entry per section type used above — applies to every section id above of that type):\n\n${sectionSchemas}`,
+    blockSchemas &&
+      `BLOCK SCHEMAS (one entry per block type referenced above — applies to every block of that type, whether listed as a fixed block id or offered as an allowed-block choice):\n\n${blockSchemas}`,
+  ]
+    .filter(Boolean)
     .join("\n\n");
 }

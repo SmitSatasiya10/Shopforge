@@ -7,7 +7,13 @@
    {% render 'custome-colorscheme' %}
 {%- endstyle -%}
 
-<div class="color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} gradient isolate content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}">
+<div
+  class="color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} gradient isolate content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}"
+  {% if section.settings.color_scheme == 'custom' and section.settings.custom_image_background != blank %}
+    data-sf-setting="custom_image_background"
+    data-sf-editable="image"
+  {% endif %}
+>
   <div class="page-width{% if section.settings.title == blank %} no-heading{% endif %} section-{{ section.id }}-padding">
     {% render 'section-title', className: 'collage-wrapper-title', animate: true %}
     <div class="collage{% if section.settings.mobile_layout == 'collage' %} collage--mobile{% endif %}">
@@ -30,11 +36,13 @@
                 >
                   {%- if block.settings.image != blank -%}
                     {%- capture sizes -%}(min-width: {{ settings.page_width }}px) {% if section.blocks.size == 1 %}calc({{ settings.page_width }}px - 100px){% else %}{{ settings.page_width | minus: 100 | times: 0.67 | round }}px{% endif %}, (min-width: 750px){% if section.blocks.size == 1 %} calc(100vw - 100px){% else %} 500px{% endif %}, calc(100vw - 30px){%- endcapture -%}
-                    {{
-                      block.settings.image
-                      | image_url: width: 3000
-                      | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500, 2200, 3000'
-                    }}
+                    <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+                      {{
+                        block.settings.image
+                        | image_url: width: 3000
+                        | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500, 2200, 3000'
+                      }}
+                    </span>
                   {%- else -%}
                     {{ 'image' | placeholder_svg_tag: 'placeholder-svg placeholder' }}
                   {%- endif -%}
@@ -82,11 +90,13 @@
                           {%- if section.blocks.size == 1 %} calc(100vw - 100px){% else %} 500px{% endif -%}
                           , calc(100vw - 30px)
                         {%- endcapture -%}
-                        {{
-                          block.settings.cover_image
-                          | image_url: width: 3000
-                          | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500, 2200, 3000'
-                        }}
+                        <span data-sf-setting="cover_image" data-sf-editable="image" style="display: contents;">
+                          {{
+                            block.settings.cover_image
+                            | image_url: width: 3000
+                            | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500, 2200, 3000'
+                          }}
+                        </span>
                       {%- else -%}
                         {{ 'collection-2' | placeholder_svg_tag: 'placeholder-svg placeholder' }}
                       {%- endif -%}
@@ -126,11 +136,13 @@
                             {%- if section.blocks.size == 1 %} calc(100vw - 100px){% else %} 500px{% endif -%}
                             , calc(100vw - 30px)
                           {%- endcapture -%}
-                          {{
-                            block.settings.cover_image
-                            | image_url: width: 3000
-                            | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500, 2200, 3000'
-                          }}
+                          <span data-sf-setting="cover_image" data-sf-editable="image" style="display: contents;">
+                            {{
+                              block.settings.cover_image
+                              | image_url: width: 3000
+                              | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500, 2200, 3000'
+                            }}
+                          </span>
                         {%- else -%}
                           {{ 'collection-2' | placeholder_svg_tag: 'placeholder-svg placeholder' }}
                         {%- endif -%}

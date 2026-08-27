@@ -168,6 +168,8 @@
                                 height="auto"
                                 width="auto"
                                 loading="lazy"
+                                data-sf-setting="custom_icon"
+                                data-sf-editable="image"
                               >
                             {% else %}
                               {% render 'material-icon',
@@ -230,11 +232,13 @@
                             (min-width: {{ settings.page_width }}px) calc({{ settings.page_width | divided_by: 12.0 | times: desktop_width }}px * {{ width_decimal }}),
                             (min-width: 750px) calc((100vw - 30px) / 12 * {{ desktop_width }} * {{ width_decimal }}), calc((100vw - 30px) / 4 * {{ mobile_width }} * {{ width_decimal }})
                           {%- endcapture -%}
-                          {{
-                            block.settings.image
-                            | image_url: width: 1500
-                            | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1250, 1500'
-                          }}
+                          <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+                            {{
+                              block.settings.image
+                              | image_url: width: 1500
+                              | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1250, 1500'
+                            }}
+                          </span>
                         </div>
                       {% else %}
                         {{ 'image' | placeholder_svg_tag: 'placeholder-svg placeholder' }}

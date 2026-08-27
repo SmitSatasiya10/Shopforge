@@ -112,6 +112,8 @@
                           width="auto"
                           height="auto"
                           loading="lazy"
+                          data-sf-setting="profile_picture"
+                          data-sf-editable="image"
                         >
                       {% else %}
                         {% render 'material-icon', icon: 'person', filled: true %}
@@ -160,6 +162,8 @@
                           width="auto"
                           height="auto"
                           loading="lazy"
+                          data-sf-setting="profile_picture"
+                          data-sf-editable="image"
                         >
                       {% else %}
                         {% render 'material-icon', icon: 'person', filled: true %}
@@ -215,11 +219,13 @@
                     data-time-posted="{{ block.settings.story_1_time_posted }}"
                     style="--background:{{ block.settings.story_1_bg }};--object-fit:{{ block.settings.story_1_media_fit }}"
                   >
-                    {{
-                      block.settings.story_1_image
-                      | image_url: width: 1500
-                      | image_tag: loading: 'lazy', widths: '165, 360, 535, 750, 1070, 1250, 1500'
-                    }}
+                    <span data-sf-setting="story_1_image" data-sf-editable="image" style="display: contents;">
+                      {{
+                        block.settings.story_1_image
+                        | image_url: width: 1500
+                        | image_tag: loading: 'lazy', widths: '165, 360, 535, 750, 1070, 1250, 1500'
+                      }}
+                    </span>
                   </div>
                 {% endif %}
                 {% if block.settings.story_2_video != blank %}
@@ -243,11 +249,13 @@
                     data-time-posted="{{ block.settings.story_2_time_posted }}"
                     style="--background:{{ block.settings.story_2_bg }};--object-fit:{{ block.settings.story_2_media_fit }}"
                   >
-                    {{
-                      block.settings.story_2_image
-                      | image_url: width: 1500
-                      | image_tag: loading: 'lazy', widths: '165, 360, 535, 750, 1070, 1250, 1500'
-                    }}
+                    <span data-sf-setting="story_2_image" data-sf-editable="image" style="display: contents;">
+                      {{
+                        block.settings.story_2_image
+                        | image_url: width: 1500
+                        | image_tag: loading: 'lazy', widths: '165, 360, 535, 750, 1070, 1250, 1500'
+                      }}
+                    </span>
                   </div>
                 {% endif %}
                 {% if block.settings.story_3_video != blank %}
@@ -271,11 +279,13 @@
                     data-time-posted="{{ block.settings.story_3_time_posted }}"
                     style="--background:{{ block.settings.story_3_bg }};--object-fit:{{ block.settings.story_3_media_fit }}"
                   >
-                    {{
-                      block.settings.story_3_image
-                      | image_url: width: 1500
-                      | image_tag: loading: 'lazy', widths: '165, 360, 535, 750, 1070, 1250, 1500'
-                    }}
+                    <span data-sf-setting="story_3_image" data-sf-editable="image" style="display: contents;">
+                      {{
+                        block.settings.story_3_image
+                        | image_url: width: 1500
+                        | image_tag: loading: 'lazy', widths: '165, 360, 535, 750, 1070, 1250, 1500'
+                      }}
+                    </span>
                   </div>
                 {% endif %}
                 <button
@@ -292,6 +302,8 @@
                             width="auto"
                             height="auto"
                             loading="lazy"
+                            data-sf-setting="profile_picture"
+                            data-sf-editable="image"
                           >
                         {% else %}
                           {% render 'material-icon', icon: 'person', filled: true %}

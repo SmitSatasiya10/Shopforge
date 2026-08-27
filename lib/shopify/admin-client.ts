@@ -16,19 +16,25 @@ export async function executeAdminGraphQL<T>(
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<T> {
-  // A Theme Access password (shptka_...) needs an extra X-Shopify-Shop header alongside the
-  // access token — confirmed from Shopify CLI's own theme-auth header builder, which sends
-  // both headers together specifically when the token has this prefix. A regular OAuth token
-  // doesn't need it, so it's added conditionally rather than unconditionally.
+  // A Theme Access password (shptka_...) doesn't call the shop's own Admin API directly at all
+  // — it goes through Shopify's Theme Kit Access proxy, identifying the target shop via an
+  // extra X-Shopify-Shop header. Confirmed straight from Shopify CLI's own request log
+  // (`shopify theme list --verbose`): it posts to theme-kit-access.shopifyapps.com/cli/admin/...,
+  // never to `${shopDomain}/admin/...`, when authenticating with this token type. Posting a
+  // Theme Access token to the shop's own domain instead returns a misleading generic 401
+  // ("unrecognized login or wrong password") that looks exactly like an invalid/wrong token.
+  const isThemeAccessToken = accessToken.startsWith("shptka_");
   const headers: Record<string, string> = {
     "content-type": "application/json",
     "X-Shopify-Access-Token": accessToken,
   };
-  if (accessToken.startsWith("shptka_")) {
-    headers["X-Shopify-Shop"] = shopDomain;
-  }
+  if (isThemeAccessToken) headers["X-Shopify-Shop"] = shopDomain;
 
-  const res = await fetch(`https://${shopDomain}/admin/api/${ADMIN_API_VERSION}/graphql.json`, {
+  const base = isThemeAccessToken
+    ? "https://theme-kit-access.shopifyapps.com/cli/admin/api"
+    : `https://${shopDomain}/admin/api`;
+
+  const res = await fetch(`${base}/${ADMIN_API_VERSION}/graphql.json`, {
     method: "POST",
     headers,
     body: JSON.stringify({ query, variables }),

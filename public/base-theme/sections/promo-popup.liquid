@@ -15,11 +15,13 @@
         </button>
         {%- unless section.settings.image == blank -%}
           <div class="popup-modal__image">
-            {{
-              section.settings.image
-              | image_url: width: 1300
-              | image_tag: loading: 'lazy', width: '100%', height: '100%'
-            }}
+            <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+              {{
+                section.settings.image
+                | image_url: width: 1300
+                | image_tag: loading: 'lazy', width: '100%', height: '100%'
+              }}
+            </span>
           </div>
         {%- endunless -%}
         <div class="popup-modal__content color-{{ section.settings.color_scheme }}">
@@ -164,11 +166,13 @@
     <div class="popup-modal__container">
       {%- unless section.settings.image == blank or section.settings.success_display_image == false -%}
         <div class="popup-modal__image">
-          {{
-            section.settings.image
-            | image_url: width: 1300
-            | image_tag: loading: 'lazy', width: '100%', height: '100%'
-          }}
+          <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+            {{
+              section.settings.image
+              | image_url: width: 1300
+              | image_tag: loading: 'lazy', width: '100%', height: '100%'
+            }}
+          </span>
         </div>
       {%- endunless -%}
       <div class="popup-modal__content color-{{ section.settings.color_scheme }}">

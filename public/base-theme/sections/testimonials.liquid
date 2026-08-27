@@ -131,15 +131,17 @@
                               (min-width: 990px) {% if section.blocks.size <= 2 %}710px{% else %}550px{% endif %}, (min-width:
                               750px) {% if section.blocks.size == 1 %}710px{% else %}550px{% endif %}, calc(100vw - 30px)
                             {%- endcapture -%}
-                          {{
-                            block.settings.image
-                            | image_url: width: 1420
-                            | image_tag:
-                              loading: 'lazy',
-                              sizes: sizes,
-                              widths: '275, 550, 710, 1420',
-                              class: 'multicolumn-card__image'
-                          }}
+                          <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+                            {{
+                              block.settings.image
+                              | image_url: width: 1420
+                              | image_tag:
+                                loading: 'lazy',
+                                sizes: sizes,
+                                widths: '275, 550, 710, 1420',
+                                class: 'multicolumn-card__image'
+                            }}
+                          </span>
                         {% else %}
                           <internal-video class="internal-video" data-action-on-inactive="pause">
                             {% liquid
@@ -252,11 +254,13 @@
                       <div class="testimonial-card__author-container">
                         {%- if block.settings.author_avatar != blank -%}
                           <div class="testimonial-card__avatar">
-                            {{
-                              block.settings.author_avatar
-                              | image_url: width: 150
-                              | image_tag: loading: 'lazy', width: 100
-                            }}
+                            <span data-sf-setting="author_avatar" data-sf-editable="image" style="display: contents;">
+                              {{
+                                block.settings.author_avatar
+                                | image_url: width: 150
+                                | image_tag: loading: 'lazy', width: 100
+                              }}
+                            </span>
                           </div>
                         {%- endif -%}
                         {%- if block.settings.author != blank -%}
