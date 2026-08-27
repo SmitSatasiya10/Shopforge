@@ -49,6 +49,8 @@ import {
   TextBinding,
 } from "@/lib/editor/setting-locator";
 import { applyAlign, applyColor, cycleWeight, findTextControls, stepSize } from "@/lib/editor/text-controls";
+import { buildThemePalette, parsePredefinedSwatches, FALLBACK_COMMON_COLORS, NamedColor, ThemeColorRow } from "@/lib/editor/color-palette";
+import { loadThemeSettings } from "@/lib/preview/theme-settings";
 import type { ProductDTO } from "@/lib/product/db-mapping";
 import { toNormalizedProduct } from "@/lib/product/db-mapping";
 
@@ -84,6 +86,10 @@ export default function EditorPage() {
   const [schema, setSchema] = useState<{ type: string; schema: ShopifySectionSchema | null } | null>(null);
   const [boundDefs, setBoundDefs] = useState<{ key: string; defs: ShopifySettingDef[] } | null>(null);
   const [schemaLocale, setSchemaLocale] = useState<Record<string, unknown>>({});
+  // Feeds the inline toolbar's color picker ("Theme"/"Common Colors" tabs) from the store's
+  // own settings_data.json, rather than the picker only ever offering a bare hex input.
+  const [themeColorRows, setThemeColorRows] = useState<ThemeColorRow[]>([]);
+  const [commonColors, setCommonColors] = useState<NamedColor[]>(FALLBACK_COMMON_COLORS);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [generating, setGenerating] = useState(false);
@@ -203,6 +209,17 @@ export default function EditorPage() {
       .then((data) => setSectionCatalog(Array.isArray(data.sections) ? data.sections : []))
       .catch(() => setSectionCatalog([]));
   }, []);
+
+  // The store's brand colors, for the inline toolbar's color-picker "Theme" tab.
+  useEffect(() => {
+    loadThemeSettings(readTemplate)
+      .then((settings) => {
+        setThemeColorRows(buildThemePalette(settings));
+        const predefined = parsePredefinedSwatches(settings.swatches_predefined_colors ?? settings.swatches_predefined_colors_list);
+        if (predefined.length) setCommonColors(predefined);
+      })
+      .catch(() => {});
+  }, [readTemplate]);
 
   // The section toolbar clamps itself into the preview's height.
   useEffect(() => {
@@ -363,7 +380,7 @@ export default function EditorPage() {
         ? boundDefs.defs
         : []
     : [];
-  const textControls = findTextControls(boundSettingDefs);
+  const textControls = findTextControls(boundSettingDefs, binding?.settingId);
   const boundValues = useMemo(() => {
     const defaults: Record<string, unknown> = {};
     for (const def of boundSettingDefs) if (def.id && def.default !== undefined) defaults[def.id] = def.default;
@@ -1101,6 +1118,8 @@ export default function EditorPage() {
               values={boundValues}
               busy={rewriting}
               canDeleteBlock={binding.blockPath.length > 0}
+              themeColorRows={themeColorRows}
+              commonColors={commonColors}
               onRewrite={() => setShowRewrite(true)}
               onStepSize={(direction) => {
                 if (!textControls.size) return;
