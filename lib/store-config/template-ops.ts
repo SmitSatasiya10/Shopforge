@@ -17,6 +17,28 @@ export function moveSection(template: ShopifyTemplate, sectionId: string, delta:
   return { ...template, order: next };
 }
 
+/**
+ * Adds a new section. With no `afterSectionId` (or one that isn't in the template), appends to
+ * the end — the page-level "Add section" button's behavior. With `afterSectionId`, inserts
+ * right after that section — the inline "+" shown below the selected section.
+ */
+export function insertSection(
+  template: ShopifyTemplate,
+  sectionId: string,
+  section: ShopifySection,
+  afterSectionId?: string | null,
+): ShopifyTemplate {
+  const order = template.order ?? Object.keys(template.sections);
+  const at = afterSectionId ? order.indexOf(afterSectionId) : -1;
+  const nextOrder = [...order];
+  nextOrder.splice(at === -1 ? nextOrder.length : at + 1, 0, sectionId);
+  return {
+    ...template,
+    sections: { ...template.sections, [sectionId]: section },
+    order: nextOrder,
+  };
+}
+
 /** Removes a section and its order entry. */
 export function removeSection(template: ShopifyTemplate, sectionId: string): ShopifyTemplate {
   if (!template.sections[sectionId]) return template;

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   getBlockAt,
+  insertSection,
   moveSection,
   removeBlockAt,
   removeSection,
@@ -46,6 +47,35 @@ describe("removeSection", () => {
     expect(next.order).toEqual(["a", "c"]);
     expect(next.sections.b).toBeUndefined();
     expect(template.sections.b).toBeDefined();
+  });
+});
+
+describe("insertSection", () => {
+  it("appends a new section and its order entry, immutably, with no afterSectionId", () => {
+    const newSection: ShopifySection = { type: "faq", settings: {} };
+    const next = insertSection(template, "d", newSection);
+    expect(next.order).toEqual(["a", "b", "c", "d"]);
+    expect(next.sections.d).toBe(newSection);
+    expect(template.sections.d).toBeUndefined();
+    expect(template.order).toEqual(["a", "b", "c"]);
+  });
+
+  it("falls back to the sections' key order when order is missing", () => {
+    const noOrder: ShopifyTemplate = { sections: { a: template.sections.a } };
+    const next = insertSection(noOrder, "b", template.sections.b);
+    expect(next.order).toEqual(["a", "b"]);
+  });
+
+  it("inserts right after afterSectionId", () => {
+    const newSection: ShopifySection = { type: "faq", settings: {} };
+    const next = insertSection(template, "d", newSection, "a");
+    expect(next.order).toEqual(["a", "d", "b", "c"]);
+  });
+
+  it("falls back to append-to-end when afterSectionId is not in order", () => {
+    const newSection: ShopifySection = { type: "faq", settings: {} };
+    const next = insertSection(template, "d", newSection, "missing");
+    expect(next.order).toEqual(["a", "b", "c", "d"]);
   });
 });
 

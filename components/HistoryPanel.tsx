@@ -102,7 +102,7 @@ export function HistoryPanel({ projectId, onRestore }: HistoryPanelProps) {
       <button
         onClick={toggleOpen}
         title="Recent changes"
-        className={`rounded p-1.5 text-neutral-600 hover:bg-neutral-100 ${open ? "bg-neutral-100" : ""}`}
+        className={`rounded p-1.5 text-neutral-400 hover:bg-white/10 hover:text-white ${open ? "bg-white/10 text-white" : ""}`}
       >
         <HistoryIcon className="h-3.5 w-3.5" />
       </button>

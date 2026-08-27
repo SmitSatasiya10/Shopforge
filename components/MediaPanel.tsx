@@ -25,11 +25,12 @@ const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 /**
  * "Your media" — browse existing product photos and assign one to the currently targeted
- * image_picker setting (opened via SettingsPanel's "Browse media" button). Product images come
- * straight from the project's own product data; Reviews has no backing data source in this app
- * yet, so it shows an honest empty state rather than fabricated content. Uploaded holds images
- * picked from the user's device for this session, encoded as data: URIs (the same value shape
- * every other tab hands to onSelect).
+ * image_picker setting. Renders inline as the editor's left sidebar slot (same spot as the AI
+ * panel), opened via the left rail's Media button, SettingsPanel's "Browse media" button, or
+ * ImageChangeButton. Product images come straight from the project's own product data; Reviews
+ * has no backing data source in this app yet, so it shows an honest empty state rather than
+ * fabricated content. Uploaded holds images picked from the user's device for this session,
+ * encoded as data: URIs (the same value shape every other tab hands to onSelect).
  */
 export function MediaPanel({ open, images, onSelect, onClose }: MediaPanelProps) {
   const [tab, setTab] = useState<Tab>("product");
@@ -38,21 +39,21 @@ export function MediaPanel({ open, images, onSelect, onClose }: MediaPanelProps)
   if (!open) return null;
 
   return (
-    <div className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-neutral-900 text-white shadow-2xl ring-1 ring-white/10">
+    <div className="flex min-h-0 w-72 shrink-0 flex-col border-r border-neutral-200 bg-white text-neutral-900">
       <div className="flex items-center justify-between px-4 py-3">
-        <p className="text-sm font-semibold">Your media</p>
-        <button onClick={onClose} title="Close" className="rounded p-1 text-neutral-400 hover:bg-neutral-700 hover:text-white">
+        <p className="text-sm font-semibold text-neutral-900">Your media</p>
+        <button onClick={onClose} title="Close" className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900">
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="flex border-b border-white/10 px-4">
+      <div className="flex border-b border-neutral-200 px-4">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`-mb-px border-b-2 px-2 py-2 text-xs font-medium ${
-              tab === t.id ? "border-white text-white" : "border-transparent text-neutral-400 hover:text-neutral-200"
+              tab === t.id ? "border-neutral-900 text-neutral-900" : "border-transparent text-neutral-400 hover:text-neutral-600"
             }`}
           >
             {t.label}
@@ -88,7 +89,7 @@ function ProductTab({ images, onSelect }: { images: { url: string; altText: stri
           key={`${image.url}-${i}`}
           onClick={() => onSelect(image.url)}
           title={image.altText ?? undefined}
-          className="aspect-square overflow-hidden rounded-lg bg-neutral-800 ring-1 ring-white/10 hover:ring-white/40"
+          className="aspect-square overflow-hidden rounded-lg bg-neutral-100 ring-1 ring-neutral-200 hover:ring-neutral-400"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -150,12 +151,12 @@ function UploadedTab({
       />
       <button
         onClick={() => inputRef.current?.click()}
-        className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/20 py-3 text-xs font-medium text-neutral-300 hover:border-white/40 hover:text-white"
+        className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-3 text-xs font-medium text-neutral-600 hover:border-neutral-400 hover:text-neutral-900"
       >
         <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
         Upload image
       </button>
-      {error ? <p className="text-xs text-red-400">{error}</p> : null}
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
       {images.length === 0 ? (
         <p className="px-1 py-1 text-xs text-neutral-400">Images you upload appear here.</p>
       ) : (
@@ -165,7 +166,7 @@ function UploadedTab({
               key={`${image.url}-${i}`}
               onClick={() => onSelect(image.url)}
               title={image.altText ?? undefined}
-              className="aspect-square overflow-hidden rounded-lg bg-neutral-800 ring-1 ring-white/10 hover:ring-white/40"
+              className="aspect-square overflow-hidden rounded-lg bg-neutral-100 ring-1 ring-neutral-200 hover:ring-neutral-400"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={image.url} alt={image.altText ?? ""} className="h-full w-full object-cover" />
