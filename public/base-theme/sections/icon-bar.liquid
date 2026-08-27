@@ -16,6 +16,10 @@
 <div
   class="icon-bar multicolumn animate-section animate--hidden color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} gradient{% if section.settings.title == blank %} no-heading{% endif %} content-for-grouping {{ section.settings.visibility }}"
   data-mobile-columns="{{ section.settings.columns_mobile }}"
+  {% if section.settings.color_scheme == 'custom' and section.settings.custom_image_background != blank %}
+    data-sf-setting="custom_image_background"
+    data-sf-editable="image"
+  {% endif %}
 >
   {%- liquid
     assign has_mobile_slider = false
@@ -115,6 +119,8 @@
                         height="auto"
                         width="auto"
                         loading="lazy"
+                        data-sf-setting="image"
+                        data-sf-editable="image"
                       >
                     {%- endif -%}
                   </div>

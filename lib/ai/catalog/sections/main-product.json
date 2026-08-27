@@ -35,14 +35,7 @@
         "enable_video_looping": {
             "type": "checkbox",
             "default": false
-        },
-        "trust_badge": "image_picker",
-        "trust_badge_position": [
-            "top-left",
-            "top-right",
-            "bottom-left",
-            "bottom-right"
-        ]
+        }
     },
     "allowed_blocks": [
         "text",

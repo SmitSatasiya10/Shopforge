@@ -51,7 +51,13 @@
   endif
 -%}
 
-<div class="color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} isolate gradient content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}">
+<div
+  class="color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} isolate gradient content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}"
+  {% if section.settings.color_scheme == 'custom' and section.settings.custom_image_background != blank %}
+    data-sf-setting="custom_image_background"
+    data-sf-editable="image"
+  {% endif %}
+>
   <div class="collection collection-{{ section.id }} section-{{ section.id }}-padding">
     <div class="collection__title animate-item animate-item--child index-0 title-wrapper title-wrapper--no-top-margin page-width{% if show_mobile_slider %} title-wrapper--self-padded-tablet-down{% endif %}{% if show_desktop_slider %} collection__title--desktop-slider{% endif %}">
       {%- if section.settings.title != blank -%}

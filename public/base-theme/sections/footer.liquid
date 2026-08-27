@@ -67,6 +67,10 @@
 <footer
   class="footer color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} gradient section-{{ section.id }}-padding animate-section animate--hidden"
   data-animations="{{ section.settings.display_animations }}"
+  {% if section.settings.footer_bg_image != blank %}
+    data-sf-setting="footer_bg_image"
+    data-sf-editable="image"
+  {% endif %}
 >
   {%- liquid
     assign has_social_icons = true
@@ -194,6 +198,8 @@
                             loading="lazy"
                             width="{{ block.settings.image.width }}"
                             height="{{ block.settings.image.height }}"
+                            data-sf-setting="image"
+                            data-sf-editable="image"
                           >
                           {% if block.settings.url != blank %}</a>{% endif %}
                         </div>

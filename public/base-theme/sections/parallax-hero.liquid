@@ -74,17 +74,19 @@
           assign image_height = section.settings.desktop_bg_image.width | divided_by: section.settings.desktop_bg_image.aspect_ratio
           assign sizes = '100vw'
         -%}
-        {{
-          section.settings.desktop_bg_image
-          | image_url: width: 3840
-          | image_tag:
-            loading: 'lazy',
-            width: section.settings.desktop_bg_image.width,
-            height: image_height,
-            sizes: sizes,
-            widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840',
-            class: 'hero-slide__background__desktop-media'
-        }}
+        <span data-sf-setting="desktop_bg_image" data-sf-editable="image" style="display: contents;">
+          {{
+            section.settings.desktop_bg_image
+            | image_url: width: 3840
+            | image_tag:
+              loading: 'lazy',
+              width: section.settings.desktop_bg_image.width,
+              height: image_height,
+              sizes: sizes,
+              widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840',
+              class: 'hero-slide__background__desktop-media'
+          }}
+        </span>
       {% endif %}
       {% if has_mobile_bg %}
         {% if section.settings.mobile_bg_video != blank %}
@@ -103,17 +105,19 @@
             assign image_height = section.settings.mobile_bg_image.width | divided_by: section.settings.mobile_bg_image.aspect_ratio
             assign sizes = '100vw'
           -%}
-          {{
-            section.settings.mobile_bg_image
-            | image_url: width: 3840
-            | image_tag:
-              loading: 'lazy',
-              width: section.settings.mobile_bg_image.width,
-              height: image_height,
-              sizes: sizes,
-              widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840',
-              class: 'hero-slide__background__mobile-media desktop-hidden'
-          }}
+          <span data-sf-setting="mobile_bg_image" data-sf-editable="image" style="display: contents;">
+            {{
+              section.settings.mobile_bg_image
+              | image_url: width: 3840
+              | image_tag:
+                loading: 'lazy',
+                width: section.settings.mobile_bg_image.width,
+                height: image_height,
+                sizes: sizes,
+                widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840',
+                class: 'hero-slide__background__mobile-media desktop-hidden'
+            }}
+          </span>
         {% endif %}
       {% endif %}
     {% endif %}
@@ -238,34 +242,38 @@
               assign image_height = block.settings.desktop_image.width | divided_by: block.settings.desktop_image.aspect_ratio
               assign sizes = '100vw'
             -%}
-            {{
-              block.settings.desktop_image
-              | image_url: width: 3840
-              | image_tag:
-                loading: 'lazy',
-                width: block.settings.desktop_image.width,
-                height: image_height,
-                sizes: sizes,
-                widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840',
-                class: 'hero-slide__background__desktop-media'
-            }}
+            <span data-sf-setting="desktop_image" data-sf-editable="image" style="display: contents;">
+              {{
+                block.settings.desktop_image
+                | image_url: width: 3840
+                | image_tag:
+                  loading: 'lazy',
+                  width: block.settings.desktop_image.width,
+                  height: image_height,
+                  sizes: sizes,
+                  widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840',
+                  class: 'hero-slide__background__desktop-media'
+              }}
+            </span>
           {% endif %}
           {% if has_mobile_img %}
             {%- liquid
               assign image_height = block.settings.mobile_image.width | divided_by: block.settings.mobile_image.aspect_ratio
               assign sizes = '100vw'
             -%}
-            {{
-              block.settings.mobile_image
-              | image_url: width: 3840
-              | image_tag:
-                loading: 'lazy',
-                width: block.settings.mobile_image.width,
-                height: image_height,
-                sizes: sizes,
-                widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840',
-                class: 'hero-slide__background__mobile-media desktop-hidden'
-            }}
+            <span data-sf-setting="mobile_image" data-sf-editable="image" style="display: contents;">
+              {{
+                block.settings.mobile_image
+                | image_url: width: 3840
+                | image_tag:
+                  loading: 'lazy',
+                  width: block.settings.mobile_image.width,
+                  height: image_height,
+                  sizes: sizes,
+                  widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840',
+                  class: 'hero-slide__background__mobile-media desktop-hidden'
+              }}
+            </span>
           {% endif %}
         </div>
     {% endcase %}

@@ -181,6 +181,15 @@ describe("buildGenerationPromptParts", () => {
     expect(parts.some((p) => p.key === "existing_content")).toBe(false);
     expect(parts.some((p) => p.key === "existing_settings")).toBe(false);
   });
+
+  it("deduplicates a repeated section type's schema in the final joined prompt, not just an intermediate structure", () => {
+    const twoInstances: FixedSection[] = [fixed[0], { ...fixed[0], id: "promo-highlight-2" }];
+    const messages = buildGenerationMessages({ product, templateName: "index" }, twoInstances, blocks);
+    const content = messages.find((m) => m.role === "user")!.content;
+    expect(content.split("Section schema: image-with-text").length - 1).toBe(1);
+    expect(content).toContain('id "promo-highlight"');
+    expect(content).toContain('id "promo-highlight-2"');
+  });
 });
 
 describe("buildGenerationMeta", () => {

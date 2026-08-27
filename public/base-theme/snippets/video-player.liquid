@@ -10,10 +10,12 @@
     assign video = block.settings.video
   endif
 
+  assign thumbnail_is_setting = false
   if custom_thumbnail and custom_thumbnail != blank
     assign thumbnail = custom_thumbnail
   elsif block.settings.thumbnail != blank
     assign thumbnail = block.settings.thumbnail
+    assign thumbnail_is_setting = true
   else
     assign thumbnail = video.preview_image
   endif
@@ -49,6 +51,10 @@
         height="auto"
         preload="metadata"
         poster="{{ thumbnail | image_url }}"
+        {% if thumbnail_is_setting %}
+          data-sf-setting="thumbnail"
+          data-sf-editable="image"
+        {% endif %}
         {% if block.settings.loop %}
           loop
         {% endif %}

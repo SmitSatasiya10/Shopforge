@@ -21,7 +21,7 @@
 {%- endstyle -%}
 
 <div class="isolate{% unless section.settings.full_width %} page-width{% endunless %}{% if section.settings.mobile_narrow_width %} page-width--mobile-narrow{% endif %} content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}">
-  <div class="rich-text content-container color-{{ section.settings.color_scheme }} color-scheme-{{ section.id }} gradient{% if section.settings.full_width %} rich-text--full-width content-container--full-width{% endif %} section-{{ section.id }}-padding">
+  <div class="rich-text content-container color-{{ section.settings.color_scheme }} color-scheme-{{ section.id }} gradient{% if section.settings.full_width %} rich-text--full-width content-container--full-width{% endif %} section-{{ section.id }}-padding" data-sf-setting="custom_image_background" data-sf-editable="image">
     <div class="rich-text__wrapper rich-text__wrapper--{{ section.settings.desktop_content_position }}{% if section.settings.full_width %} page-width{% endif %}">
       <div class="rich-text__blocks {{ section.settings.desktop_content_alignment }} mobile-{{ section.settings.mobile_content_alignment }} animate-item block-margins">
         {% content_for 'blocks' %}

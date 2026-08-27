@@ -120,9 +120,9 @@ describe("debug-logger", () => {
   });
 
   it("logs the model", () => {
-    const handle = startAIRequest({ operation: "generate-homepage", model: "anthropic/claude-sonnet-4.5" });
+    const handle = startAIRequest({ operation: "generate-homepage", model: "google/gemini-3.7-flash" });
     finishAIRequest(handle, { usage: null });
-    expect(allLogOutput(logSpy)).toContain("anthropic/claude-sonnet-4.5");
+    expect(allLogOutput(logSpy)).toContain("google/gemini-3.7-flash");
   });
 
   it("logs the operation", () => {

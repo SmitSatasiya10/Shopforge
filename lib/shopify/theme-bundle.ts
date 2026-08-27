@@ -1,5 +1,6 @@
 import { ZipArchive } from "archiver";
 import path from "node:path";
+import { PAGE_TEMPLATES, StoreConfiguration } from "@/lib/store-config/store";
 
 const BASE_THEME_DIR = path.join(process.cwd(), "public", "base-theme");
 
@@ -37,4 +38,33 @@ export async function buildBaseThemeZip(): Promise<Buffer> {
 
   cached = { version: BASE_THEME_VERSION, buffer };
   return buffer;
+}
+
+/**
+ * Same bundle as buildBaseThemeZip, but with templates/index.json and templates/product.json
+ * replaced by this project's own current configuration — the same two files
+ * publishProjectToShopify pushes to a connected store (lib/shopify/publish.ts,
+ * buildTemplateFiles). Lets a merchant download and manually upload the theme to check it
+ * without needing a Shopify connection. Not cached, since it's per-project.
+ */
+export async function buildProjectThemeZip(config: StoreConfiguration): Promise<Buffer> {
+  const overridePaths = new Set(PAGE_TEMPLATES.map((page) => `templates/${page}.json`));
+
+  return new Promise<Buffer>((resolve, reject) => {
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    const chunks: Buffer[] = [];
+    archive.on("data", (chunk: Buffer) => chunks.push(chunk));
+    archive.on("warning", (err: { code?: string }) => {
+      if (err.code !== "ENOENT") reject(err);
+    });
+    archive.on("error", reject);
+    archive.on("end", () => resolve(Buffer.concat(chunks)));
+    archive.directory(BASE_THEME_DIR, false, (entry) =>
+      entry.name.startsWith("images/") || overridePaths.has(entry.name) ? false : entry,
+    );
+    for (const page of PAGE_TEMPLATES) {
+      archive.append(JSON.stringify(config.templates[page]), { name: `templates/${page}.json` });
+    }
+    archive.finalize();
+  });
 }

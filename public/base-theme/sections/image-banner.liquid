@@ -57,17 +57,19 @@
             assign sizes = '100vw'
           endif
         -%}
-        {{
-          section.settings.image
-          | image_url: width: 3840
-          | image_tag:
-            loading: 'lazy',
-            width: section.settings.image.width,
-            height: image_height,
-            class: image_class,
-            sizes: sizes,
-            widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840'
-        }}
+        <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+          {{
+            section.settings.image
+            | image_url: width: 3840
+            | image_tag:
+              loading: 'lazy',
+              width: section.settings.image.width,
+              height: image_height,
+              class: image_class,
+              sizes: sizes,
+              widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840'
+          }}
+        </span>
       </div>
     {%- elsif section.settings.image_2 == blank -%}
       <div class="banner__media media{% if section.settings.image == blank and section.settings.image_2 == blank %} placeholder{% endif %}{% if section.settings.image_2 != blank %} banner__media-half{% endif %}">
@@ -89,17 +91,19 @@
             assign sizes = '100vw'
           endif
         -%}
-        {{
-          section.settings.image_2
-          | image_url: width: 3840
-          | image_tag:
-            loading: 'lazy',
-            width: section.settings.image_2.width,
-            height: image_height_2,
-            class: image_class_2,
-            sizes: sizes,
-            widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840'
-        }}
+        <span data-sf-setting="image_2" data-sf-editable="image" style="display: contents;">
+          {{
+            section.settings.image_2
+            | image_url: width: 3840
+            | image_tag:
+              loading: 'lazy',
+              width: section.settings.image_2.width,
+              height: image_height_2,
+              class: image_class_2,
+              sizes: sizes,
+              widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840'
+          }}
+        </span>
       </div>
     {%- endif -%}
     <div class="banner__content banner__content--{{ section.settings.desktop_content_position }} page-width{% if section.blocks.size < 1 %} hidden{% endif %}">

@@ -120,14 +120,16 @@
                           class="article-header__avatar media media--transparent custom-border-radius flex-shrink-0"
                           style="--border-radius:{{ block.settings.avatar_corner_radius | divided_by: 2.0 }}%;--size:{{ block.settings.avatar_size }}px;"
                         >
-                          {{
-                            block.settings.author_avatar
-                            | image_url: width: block.settings.avatar_size
-                            | image_tag:
-                              loading: 'lazy',
-                              itemprop: 'image',
-                              alt: article.author
-                          }}
+                          <span data-sf-setting="author_avatar" data-sf-editable="image" style="display: contents;">
+                            {{
+                              block.settings.author_avatar
+                              | image_url: width: block.settings.avatar_size
+                              | image_tag:
+                                loading: 'lazy',
+                                itemprop: 'image',
+                                alt: article.author
+                            }}
+                          </span>
                         </div>
                       {% endif %}
                       <span itemprop="name">
@@ -218,11 +220,13 @@
                   class="sticky-promotion__logo"
                   style="text-align: {{ block.settings.logo_alignment }};--width: {{ block.settings.logo_width }}%;"
                 >
-                  {{
-                    block.settings.logo
-                    | image_url: width: 500
-                    | image_tag: loading: 'lazy'
-                  }}
+                  <span data-sf-setting="logo" data-sf-editable="image" style="display: contents;">
+                    {{
+                      block.settings.logo
+                      | image_url: width: 500
+                      | image_tag: loading: 'lazy'
+                    }}
+                  </span>
                 </div>
                 {%- if block.settings.line_divider_opacity > 0 %}
                   <div
@@ -236,11 +240,13 @@
                 {%- if block.settings.content_top_image %}
                   <div class="sticky-promotion__top-image media media--transparent ratio" style="--ratio-percent: {{ 1 | divided_by: block.settings.content_top_image.aspect_ratio | times: 100 }}%">
                     {%- capture sizes -%}(min-width: 750px) {{ block.settings.desktop_width }}px, calc(100vw - 70px){%- endcapture -%}
-                    {{
-                      block.settings.content_top_image
-                      | image_url: width: 1500
-                      | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500'
-                    }}
+                    <span data-sf-setting="content_top_image" data-sf-editable="image" style="display: contents;">
+                      {{
+                        block.settings.content_top_image
+                        | image_url: width: 1500
+                        | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500'
+                      }}
+                    </span>
                   </div>
                 {%- endif %}
             
@@ -251,11 +257,13 @@
                 {%- if block.settings.content_bottom_image %}
                   <div class="sticky-promotion__bottom-image media media--transparent ratio" style="--ratio-percent: {{ 1 | divided_by: block.settings.content_bottom_image.aspect_ratio | times: 100 }}%">
                     {%- capture sizes -%}(min-width: 750px) {{ block.settings.desktop_width }}px, calc(100vw - 70px){%- endcapture -%}
-                    {{
-                      block.settings.content_bottom_image
-                      | image_url: width: 1500
-                      | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500'
-                    }}
+                    <span data-sf-setting="content_bottom_image" data-sf-editable="image" style="display: contents;">
+                      {{
+                        block.settings.content_bottom_image
+                        | image_url: width: 1500
+                        | image_tag: loading: 'lazy', sizes: sizes, widths: '550, 720, 990, 1100, 1500'
+                      }}
+                    </span>
                   </div>
                 {%- endif %}
               </div>

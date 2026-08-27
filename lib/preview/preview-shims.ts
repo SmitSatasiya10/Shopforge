@@ -62,6 +62,31 @@ const PREVIEW_STYLES = `
     .product--thumbnail_slider .product__media-item:not(.product__media-item--variant):first-child {
       display: block !important;
     }
+
+    /* Product media zoom-lightbox trigger (snippets/product-thumbnail.liquid). It sits on top
+       of the media to open a modal on click — real Dawn behavior, driven entirely by JS that
+       never runs in this sandboxed iframe, so it is already a dead click target here. Left
+       alone it still intercepts pointer events, which swallows clicks meant for the editor's
+       click-to-select (including image_picker settings like a trust badge rendered inside the
+       same media item). Let clicks pass through it to the image underneath. */
+    .product-media-container .product__modal-opener {
+      pointer-events: none !important;
+    }
+
+    /* Banner/slideshow text overlay (.banner__content, base.css — image-banner, slideshow,
+       slideshow-hero, etc). It's a full-width/height flex wrapper that centers its content box
+       — as an ancestor spanning the whole banner, it intercepts clicks everywhere in the banner,
+       even in the empty space around the visible text/button card, which blocks clicking
+       through to the image_picker-backed image beneath. Let the wrapper itself pass clicks
+       through; its direct child (the sized content card) stays clickable, and everything
+       inside that card — heading, button, etc — keeps working exactly as before, since
+       pointer-events: auto is inherited from there down without needing to repeat it. */
+    .banner__content {
+      pointer-events: none;
+    }
+    .banner__content > * {
+      pointer-events: auto;
+    }
 `;
 
 function injectPreviewStyles(html: string): string {

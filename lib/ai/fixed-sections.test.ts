@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { loadFixedSections, describeFixedSections } from "./fixed-sections";
-import { loadCatalog } from "./catalog";
+import { loadFixedSections, describeFixedSections, type FixedSection } from "./fixed-sections";
+import { loadCatalog, type SectionSchema, type BlockSchema } from "./catalog";
 import { createFsTemplateReader } from "@/lib/preview/fs-template-reader";
+import type { ShopifySection } from "@/lib/preview/shopify-template";
 
 // Regression guard for the base-theme/catalog contract that generation now depends on
 // (lib/ai/content-generator.ts's applyToFixedStructure): every section the base theme's own
@@ -63,5 +64,100 @@ describe("loadFixedSections", () => {
     for (const blockId of seededBlockIds) {
       expect(description).toContain(`block id "${blockId}"`);
     }
+  });
+});
+
+// Regression guard for the dedup done in describeFixedSections: repeated section/block TYPES
+// must be described exactly once each, no matter how many instances/ids on the page share that
+// type — while every instance's own id, order, and fixed-block list stays intact.
+
+function occurrences(text: string, needle: string): number {
+  return text.split(needle).length - 1;
+}
+
+const imageWithText: SectionSchema = {
+  id: "image-with-text",
+  label: "Image with text",
+  settings: { heading: "inline_richtext" },
+  allowed_blocks: ["heading"],
+};
+const headingBlock: BlockSchema = { id: "heading", settings: { text: "inline_richtext" } };
+const emptySeed: ShopifySection = { type: "image-with-text", settings: {}, blocks: {}, block_order: [] };
+
+describe("describeFixedSections", () => {
+  it("describes a section type's full schema exactly once even with two instances of that type", () => {
+    const fixed: FixedSection[] = [
+      { id: "promo-1", type: "image-with-text", schema: imageWithText, seed: emptySeed },
+      { id: "promo-2", type: "image-with-text", schema: imageWithText, seed: emptySeed },
+    ];
+    const description = describeFixedSections(fixed, [headingBlock]);
+    expect(occurrences(description, "Section schema: image-with-text")).toBe(1);
+    expect(description).toContain('id "promo-1"');
+    expect(description).toContain('id "promo-2"');
+  });
+
+  it("describes a block type's full schema exactly once even with four seeded blocks of that type", () => {
+    const collapsibleRow: BlockSchema = { id: "collapsible-row", settings: { heading: "text" } };
+    const seed: ShopifySection = {
+      type: "main-product",
+      settings: {},
+      blocks: {
+        row1: { type: "collapsible-row", settings: {} },
+        row2: { type: "collapsible-row", settings: {} },
+        row3: { type: "collapsible-row", settings: {} },
+        row4: { type: "collapsible-row", settings: {} },
+      },
+      block_order: ["row1", "row2", "row3", "row4"],
+    };
+    const fixed: FixedSection[] = [
+      {
+        id: "main",
+        type: "main-product",
+        schema: { id: "main-product", label: "Main Product", fixed_blocks: true, settings: {} },
+        seed,
+      },
+    ];
+    const description = describeFixedSections(fixed, [collapsibleRow]);
+    expect(occurrences(description, "Block schema: collapsible-row")).toBe(1);
+    for (const id of ["row1", "row2", "row3", "row4"]) {
+      expect(description).toContain(`block id "${id}"`);
+    }
+    expect(description).toContain("blocks (fixed");
+  });
+
+  it("gives different section types separate schema entries", () => {
+    const mainProduct: FixedSection = {
+      id: "main",
+      type: "main-product",
+      schema: { id: "main-product", label: "Main Product", fixed_blocks: true, settings: {} },
+      seed: { type: "main-product", settings: {}, blocks: {}, block_order: [] },
+    };
+    const fixed: FixedSection[] = [
+      { id: "promo-1", type: "image-with-text", schema: imageWithText, seed: emptySeed },
+      mainProduct,
+    ];
+    const description = describeFixedSections(fixed, [headingBlock]);
+    expect(occurrences(description, "Section schema: image-with-text")).toBe(1);
+    expect(occurrences(description, "Section schema: main-product")).toBe(1);
+  });
+
+  it("preserves every instance's id, type and order across multiple distinct sections", () => {
+    const fixed: FixedSection[] = [
+      { id: "promo-1", type: "image-with-text", schema: imageWithText, seed: emptySeed },
+      { id: "promo-2", type: "image-with-text", schema: imageWithText, seed: emptySeed },
+      {
+        id: "usp",
+        type: "custom-columns-new",
+        schema: { id: "custom-columns-new", label: "USP columns", settings: {}, allowed_blocks: ["column"] },
+        seed: { type: "custom-columns-new", settings: {}, blocks: {}, block_order: [] },
+      },
+    ];
+    const description = describeFixedSections(fixed, [headingBlock]);
+    const iPromo1 = description.indexOf('id "promo-1"');
+    const iPromo2 = description.indexOf('id "promo-2"');
+    const iUsp = description.indexOf('id "usp"');
+    expect(iPromo1).toBeGreaterThanOrEqual(0);
+    expect(iPromo1).toBeLessThan(iPromo2);
+    expect(iPromo2).toBeLessThan(iUsp);
   });
 });

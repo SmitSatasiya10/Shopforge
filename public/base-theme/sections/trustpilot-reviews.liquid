@@ -7,7 +7,13 @@
   {% render 'custome-colorscheme' %}
 {%- endstyle -%}
 
-<div class="color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} gradient content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}">
+<div
+  class="color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} gradient content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}"
+  {% if section.settings.color_scheme == 'custom' and section.settings.custom_image_background != blank %}
+    data-sf-setting="custom_image_background"
+    data-sf-editable="image"
+  {% endif %}
+>
   {%- liquid
     assign has_mobile_slider = false
     assign has_desktop_slider = false
@@ -150,11 +156,13 @@
                     <div class="testimonial-card__author-container">
                       {%- if block.settings.author_avatar != blank -%}
                         <div class="testimonial-card__avatar">
-                          {{
-                            block.settings.author_avatar
-                            | image_url: width: 150
-                            | image_tag: loading: 'lazy', width: 100
-                          }}
+                          <span data-sf-setting="author_avatar" data-sf-editable="image" style="display: contents;">
+                            {{
+                              block.settings.author_avatar
+                              | image_url: width: 150
+                              | image_tag: loading: 'lazy', width: 100
+                            }}
+                          </span>
                         </div>
                       {%- endif -%}
                       {%- if block.settings.author != blank -%}

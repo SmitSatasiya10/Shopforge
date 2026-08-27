@@ -382,31 +382,59 @@ export function PreviewFrame({
     };
 
     const handleClick = (e: MouseEvent) => {
-      let node = e.target as HTMLElement | null;
-      while (node && node !== doc.body) {
-        const settingId = node.getAttribute("data-sf-setting");
-        const sectionEl = node.closest("[data-sf-section-id]") as HTMLElement | null;
-        if (settingId && sectionEl) {
-          // A section that opts in with data-sf-setting names the setting itself.
-          const sectionId = sectionEl.getAttribute("data-sf-section-id")!;
-          const editable = node.getAttribute("data-sf-editable");
-          const binding: TextBinding = { blockPath: [], settingId };
-          trackedRef.current = { el: node, text: node.textContent?.trim() ?? null };
-          setFieldSelected(node);
-          onSelect({
-            sectionId,
-            sectionType: sectionEl.getAttribute("data-sf-section-type"),
-            settingId,
-            editable,
-            binding,
-            blockScope: null,
-            rect: toRect(node, iframeOffset(iframe)),
-          });
-          if (editable === "text" || editable === "richtext") {
-            enableInlineEdit(node, sectionId, binding);
+      const target = e.target as HTMLElement | null;
+
+      // A data-sf-setting ancestor takes priority regardless of how deep the click landed
+      // inside it (e.g. an <img> nested in a wrapper span that carries the marker, used for
+      // image_picker settings rendered via a filter that can't take a custom attribute) — find
+      // the NEAREST one first, rather than only checking the exact clicked node.
+      const settingNode = target?.closest("[data-sf-setting]") as HTMLElement | null;
+      const settingSectionEl = settingNode?.closest("[data-sf-section-id]") as HTMLElement | null;
+      if (settingNode && settingSectionEl) {
+        const sectionId = settingSectionEl.getAttribute("data-sf-section-id")!;
+        const settingId = settingNode.getAttribute("data-sf-setting")!;
+        const editable = settingNode.getAttribute("data-sf-editable");
+        const binding: TextBinding = { blockPath: [], settingId };
+        // The setting node may live inside a block's own markup (e.g. a hotspot's
+        // block.settings.image) — walk up to the nearest data-shopify-editor-block ancestor,
+        // same as the fallback branch below, so an image click carries its block path instead
+        // of always being (wrongly) written to the section's own settings.
+        const settingBlockEl = settingNode.closest("[data-shopify-editor-block]") as HTMLElement | null;
+        const settingBlockPath: string[] = [];
+        if (settingBlockEl && settingSectionEl.contains(settingBlockEl)) {
+          let n: HTMLElement | null = settingBlockEl;
+          while (n && n !== settingSectionEl) {
+            const id = n.getAttribute("data-shopify-editor-block");
+            if (id) settingBlockPath.unshift(id);
+            n = n.parentElement;
           }
-          return;
         }
+        // The marker element itself may not be the visible one (e.g. a display:contents
+        // wrapper around an image_tag filter's output) — track/highlight/position off the
+        // actual clicked element instead, so the rect isn't a zero-size wrapper box.
+        trackedRef.current = { el: target!, text: target!.textContent?.trim() ?? null };
+        setFieldSelected(target);
+        onSelect({
+          sectionId,
+          sectionType: settingSectionEl.getAttribute("data-sf-section-type"),
+          settingId,
+          editable,
+          // An image setting isn't a text binding — keeping it null here stops the inline
+          // text toolbar from popping up for an image click (it renders on binding alone).
+          binding: editable === "image" ? null : binding,
+          // Only carried for image settings — text keeps the section-root scope it always had.
+          blockScope: editable === "image" && settingBlockPath.length > 0 ? settingBlockPath : null,
+          rect: toRect(target!, iframeOffset(iframe)),
+        });
+        if (editable === "text" || editable === "richtext") {
+          enableInlineEdit(target!, sectionId, binding);
+        }
+        return;
+      }
+
+      let node = target;
+      while (node && node !== doc.body) {
+        const sectionEl = node.closest("[data-sf-section-id]") as HTMLElement | null;
         if (sectionEl) {
           const sectionId = sectionEl.getAttribute("data-sf-section-id")!;
           const sectionType = sectionEl.getAttribute("data-sf-section-type");

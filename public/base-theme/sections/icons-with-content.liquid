@@ -12,7 +12,13 @@
   {% endif %}
 {%- endstyle -%}
 
-<div class="color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} gradient content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}">
+<div
+  class="color-scheme-{{ section.id }} color-{{ section.settings.color_scheme }} gradient content-for-grouping animate-section animate--hidden {{ section.settings.visibility }}"
+  {% if section.settings.background_image != blank %}
+    data-sf-setting="background_image"
+    data-sf-editable="image"
+  {% endif %}
+>
   <div class="icons-with-content page-width section-{{ section.id }}-padding">
     <div class="icon-with-content__grid section-group__container__child-grid{% if section.settings.layout == 'text_first' %} icon-with-content__grid--desktop-reverse{% endif %}{% if section.settings.mobile_layout == 'text_first' %} icon-with-content__mobile-grid--reverse{% endif %}">
       <div
@@ -35,6 +41,8 @@
                         height="auto"
                         width="auto"
                         loading="lazy"
+                        data-sf-setting="image"
+                        data-sf-editable="image"
                       >
                     {%- elsif block.settings.icon != 'none' -%}
                       {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon %}
@@ -56,6 +64,8 @@
                             height="auto"
                             width="auto"
                             loading="lazy"
+                            data-sf-setting="image"
+                            data-sf-editable="image"
                           >
                         {%- elsif block.settings.icon != 'none' -%}
                           {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon %}
@@ -117,11 +127,13 @@
                   (min-width: {{ settings.page_width }}px) {{ settings.page_width | minus: 100 | divided_by: 2 }}px,
                   (min-width: 750px) calc((100vw - 130px) / 2), calc((100vw - 30px) / 2)
                 {%- endcapture -%}
-                {{
-                  block.settings.image
-                  | image_url: width: 1500
-                  | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1500'
-                }}
+                <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+                  {{
+                    block.settings.image
+                    | image_url: width: 1500
+                    | image_tag: loading: 'lazy', sizes: sizes, widths: '165, 360, 535, 750, 1070, 1500'
+                  }}
+                </span>
               </div>
             {% when 'video' %}
               <div class="icons-with-content__image">

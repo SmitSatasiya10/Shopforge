@@ -204,7 +204,7 @@ Environment (`.env`):
 
 ```
 OPENROUTER_API_KEY=...
-OPENROUTER_MODEL=anthropic/claude-sonnet-4.5
+OPENROUTER_MODEL=google/gemini-3.7-flash
 SHOPFORGE_GENERATE_IMAGES=false
 ```
 

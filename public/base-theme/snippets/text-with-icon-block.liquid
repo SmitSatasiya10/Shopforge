@@ -112,6 +112,7 @@
           assign custom_icon = block.settings.custom_icon_6
           assign filled_icon = block.settings.filled_icon_6
       endcase
+      assign custom_icon_setting_id = 'custom_icon_' | append: i
     %}
     {% if text != blank %}
       <p
@@ -125,6 +126,8 @@
             width="auto"
             height="auto"
             loading="lazy"
+            data-sf-setting="{{ custom_icon_setting_id }}"
+            data-sf-editable="image"
           >
         {% elsif icon != blank %}
           {% render 'material-icon', icon: icon, filled: filled_icon %}

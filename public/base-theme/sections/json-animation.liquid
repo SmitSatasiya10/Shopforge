@@ -70,7 +70,13 @@
   {% endif %}
 {%- endstyle -%}
 
-<div class="json-animation json-animation-{{ section.id }} color-{{ section.settings.color_scheme }} color-scheme-{{ section.id }} gradient">
+<div
+  class="json-animation json-animation-{{ section.id }} color-{{ section.settings.color_scheme }} color-scheme-{{ section.id }} gradient"
+  {% if section.settings.color_scheme == 'custom' and section.settings.custom_image_background != blank %}
+    data-sf-setting="custom_image_background"
+    data-sf-editable="image"
+  {% endif %}
+>
   <div
     id="PageWidth-{{ section.id }}"
     class="
@@ -120,6 +126,8 @@
             loading="lazy"
             width="{{ section.settings.fallback_image.width }}"
             height="{{ section.settings.fallback_image.height }}"
+            data-sf-setting="fallback_image"
+            data-sf-editable="image"
           >
         {% endif %}
       </json-animation>

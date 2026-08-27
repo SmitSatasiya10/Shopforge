@@ -215,11 +215,62 @@ export function applyScopedRewrite(
 }
 
 /**
- * The full message list sent for a whole-section rewrite (no scope). Exported so tests can
- * verify the project's customer language reaches the rewrite prompt, exactly like generation.
- * Scoped rewrites (one setting or one block) use the much smaller `buildScopedSettingMessages`/
- * `buildScopedBlockMessages` below instead — see the comment on `tryScopedRewrite`.
+ * The section as shown to the model in CURRENT SECTION JSON: settings limited to what the
+ * catalog schema actually declares — a section setting not in `schema.settings`, or a block
+ * setting not in that block type's own schema, is stripped before the model ever sees it.
+ *
+ * This cannot change the final rewritten section: `sanitizeRewrittenSection`'s `clampSettings`
+ * already discards the model's returned value for any such key and falls back to the ORIGINAL
+ * section's value regardless of what the model echoed (or didn't echo) for it. Omitting them
+ * here only stops the model from spending tokens reading — and possibly drifting — copy it was
+ * never allowed to change in the first place. Block structure (ids, types, block_order) and
+ * nested blocks are left exactly as they are; only settings VALUES are filtered. Exported for
+ * tests.
  */
+export function filterSectionForPrompt(
+  section: ShopifySection,
+  schema: SectionSchema,
+  blocks: BlockSchema[],
+): ShopifySection {
+  const blockById = new Map(blocks.map((b) => [b.id, b]));
+
+  const filterSettings = (
+    settings: Record<string, unknown> | undefined,
+    allowedKeys: Set<string>,
+  ): Record<string, unknown> => {
+    const kept: Record<string, unknown> = {};
+    for (const [id, value] of Object.entries(settings ?? {})) {
+      if (allowedKeys.has(id)) kept[id] = value;
+    }
+    return kept;
+  };
+
+  const filterBlocks = (
+    current: Record<string, BlockShape> | undefined,
+  ): Record<string, BlockShape> | undefined => {
+    if (!current) return current;
+    return Object.fromEntries(
+      Object.entries(current).map(([id, block]) => {
+        const blockKeys = new Set(Object.keys(blockById.get(block.type)?.settings ?? {}));
+        return [
+          id,
+          {
+            ...block,
+            settings: filterSettings(block.settings, blockKeys),
+            ...(block.blocks ? { blocks: filterBlocks(block.blocks) } : {}),
+          },
+        ];
+      }),
+    );
+  };
+
+  return {
+    ...section,
+    settings: filterSettings(section.settings, new Set(Object.keys(schema.settings ?? {}))),
+    blocks: filterBlocks(section.blocks),
+  };
+}
+
 /** The same message content as `buildRewriteMessages`, decomposed into labeled parts for audit-log breakdown. Exported for tests and for the caller to pass into `chat()`'s `promptBreakdown`. */
 export function buildRewritePromptParts(
   options: RewriteSectionOptions,
@@ -243,12 +294,18 @@ export function buildRewritePromptParts(
       "existing_content",
       "Existing section content",
       `CURRENT SECTION JSON (id "${options.sectionId}"):`,
-      JSON.stringify(options.section, null, 2),
+      JSON.stringify(filterSectionForPrompt(options.section, schema, blocks), null, 2),
     ),
     part("user_instruction", "Instruction", `INSTRUCTION:`, options.instruction),
   ];
 }
 
+/**
+ * The full message list sent for a whole-section rewrite (no scope). Exported so tests can
+ * verify the project's customer language reaches the rewrite prompt, exactly like generation.
+ * Scoped rewrites (one setting or one block) use the much smaller `buildScopedSettingMessages`/
+ * `buildScopedBlockMessages` below instead — see the comment on `tryScopedRewrite`.
+ */
 export function buildRewriteMessages(
   options: RewriteSectionOptions,
   schema: SectionSchema,
@@ -575,6 +632,16 @@ async function rewriteScopedSectionSettings(
 }
 
 /**
+ * Below this many top-level blocks, a whole-section rewrite uses ONE model call instead of
+ * `rewriteWholeSectionParallel`'s one-call-per-block fan-out: the fan-out's per-call system
+ * prompt/product/language/persona/angle boilerplate is resent whole on every call, so for a
+ * small section that duplication costs more tokens than the fan-out's speed is worth. Compared
+ * against the section's actual top-level block count, never the catalog's menu of allowed
+ * block types. Exported so tests reference the same threshold rather than a bare literal.
+ */
+export const SMALL_SECTION_BLOCK_THRESHOLD = 4;
+
+/**
  * The default path for a no-scope "rewrite this section" (docs/EDITOR-TOOLBARS.md): instead of
  * one model call reading and re-emitting every block's JSON in sequence — which for a section
  * with many blocks (e.g. main-product's ~19) can take the better part of a minute, almost all
@@ -586,10 +653,9 @@ async function rewriteScopedSectionSettings(
  * Trade-off, and the reason this isn't just always used in place of the single-call path: it
  * can only ever rewrite settings on blocks that already exist — unlike the single-call path, it
  * cannot add or remove a block, since each call only ever sees and returns one block in
- * isolation. `rewriteSection` therefore keeps this path scoped strictly to `!options.scope`, and
- * keeps the original single-call path (below) for the scope-fallback case, so that capability
- * isn't silently lost everywhere — only traded away specifically for the common, hot "rewrite
- * the whole section" action this optimizes. Exported for tests.
+ * isolation. `rewriteSection` only takes this path when the section has more than
+ * `SMALL_SECTION_BLOCK_THRESHOLD` top-level blocks — below that, `rewriteWholeSectionSingleCall`
+ * costs fewer total tokens for the same result. Exported for tests.
  */
 export async function rewriteWholeSectionParallel(
   options: RewriteSectionOptions,
@@ -661,26 +727,19 @@ async function rewriteBlockTree(
   return { ...block, settings, ...(rewrittenBlocks ? { blocks: rewrittenBlocks } : {}) };
 }
 
-/** Rewrites one section against its own catalog schema. Throws SectionNotRewritableError for types outside the catalog. */
-export async function rewriteSection(options: RewriteSectionOptions): Promise<RewriteSectionResult> {
-  const config = loadAiConfig(options.config);
-  const { sections, blocks } = await loadCatalog();
-
-  const schema = sections.find((s) => s.id === options.section.type);
-  if (!schema) throw new SectionNotRewritableError(options.section.type);
-
-  if (options.scope) {
-    const fast = await tryScopedRewrite(options, schema, blocks, config);
-    if (fast) return fast;
-    // Scope requested but not resolvable via the fast path (a setting the catalog doesn't
-    // describe) — fall through to the single-call whole-section pass below, then extract just
-    // the scoped slice from it via applyScopedRewrite, exactly as before scoping existed.
-  } else {
-    // No scope: "rewrite the whole section" — the common, hot path this optimizes. See the
-    // comment on rewriteWholeSectionParallel for what it trades away to get there.
-    return rewriteWholeSectionParallel(options, schema, blocks, config);
-  }
-
+/**
+ * One model call for the whole section (settings + every block, `buildRewriteMessages`'s
+ * response shape already covers both), sanitized against the catalog exactly like every other
+ * rewrite path. Used both for a small no-scope whole-section rewrite and — followed by
+ * `applyScopedRewrite` — as `rewriteSection`'s scope-fallback when a scoped setting/block isn't
+ * catalog-resolvable via the fast path. Exported for tests.
+ */
+export async function rewriteWholeSectionSingleCall(
+  options: RewriteSectionOptions,
+  schema: SectionSchema,
+  blocks: BlockSchema[],
+  config: AiConfig,
+): Promise<RewriteSectionResult> {
   const raw = await chat({
     config,
     json: true,
@@ -702,9 +761,37 @@ export async function rewriteSection(options: RewriteSectionOptions): Promise<Re
     options.product,
   );
 
-  // Reachable only via the scope-fallback path above, so options.scope is always set here.
-  return {
-    section: applyScopedRewrite(options.section, section, options.scope!),
-    model: config.model,
-  };
+  return { section, model: config.model };
+}
+
+/** Rewrites one section against its own catalog schema. Throws SectionNotRewritableError for types outside the catalog. */
+export async function rewriteSection(options: RewriteSectionOptions): Promise<RewriteSectionResult> {
+  const config = loadAiConfig(options.config);
+  const { sections, blocks } = await loadCatalog();
+
+  const schema = sections.find((s) => s.id === options.section.type);
+  if (!schema) throw new SectionNotRewritableError(options.section.type);
+
+  if (options.scope) {
+    const fast = await tryScopedRewrite(options, schema, blocks, config);
+    if (fast) return fast;
+    // Scope requested but not resolvable via the fast path (a setting the catalog doesn't
+    // describe) — fall through to the single-call whole-section pass, then extract just the
+    // scoped slice from it via applyScopedRewrite, exactly as before scoping existed.
+    const result = await rewriteWholeSectionSingleCall(options, schema, blocks, config);
+    return {
+      section: applyScopedRewrite(options.section, result.section, options.scope),
+      model: result.model,
+    };
+  }
+
+  // No scope: "rewrite the whole section." A small section (few enough top-level blocks that
+  // the fan-out's per-call boilerplate would cost more tokens than it saves in latency) gets
+  // ONE call; a large one keeps the concurrent fan-out — see the comments on
+  // rewriteWholeSectionSingleCall/rewriteWholeSectionParallel for what each trades off.
+  const blockCount = Object.keys(options.section.blocks ?? {}).length;
+  if (blockCount <= SMALL_SECTION_BLOCK_THRESHOLD) {
+    return rewriteWholeSectionSingleCall(options, schema, blocks, config);
+  }
+  return rewriteWholeSectionParallel(options, schema, blocks, config);
 }

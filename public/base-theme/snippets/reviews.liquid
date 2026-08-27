@@ -101,6 +101,7 @@
         assign image = block.settings.image_3
         assign text = block.settings.text_3
       endif
+      assign image_setting_id = 'image_' | append: i
     %}
       {% if show_slider %}
         <li class="splide__slide">
@@ -115,6 +116,8 @@
                   width="auto"
                   height="auto"
                   loading="lazy"
+                  data-sf-setting="{{ image_setting_id }}"
+                  data-sf-editable="image"
                 >
               </div>
             {%- endunless -%}

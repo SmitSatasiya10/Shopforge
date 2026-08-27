@@ -5,11 +5,13 @@ import { useParams } from "next/navigation";
 import { AlertCircle, Monitor, Redo2, Smartphone, Undo2 } from "lucide-react";
 import { PreviewFrame, SelectInfo, SelectionRect } from "@/components/PreviewFrame";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { MediaPanel } from "@/components/MediaPanel";
 import { AiRewritePopover } from "@/components/AiRewritePopover";
 import { SectionToolbar } from "@/components/SectionToolbar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { InlineTextToolbar } from "@/components/InlineTextToolbar";
+import { ImageChangeButton } from "@/components/ImageChangeButton";
 import { renderTemplate } from "@/lib/preview/template-renderer";
 import { createFetchTemplateReader, createFetchBinaryReader } from "@/lib/preview/template-loader";
 import {
@@ -64,6 +66,13 @@ export default function EditorPage() {
   const [html, setHtml] = useState("");
   const [selection, setSelection] = useState<SelectInfo | null>(null);
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
+  // The image_picker setting currently targeted by "Browse media" (MediaPanel) — cleared
+  // whenever the selected section changes so a stale target can't be written to. blockPath is
+  // set when the setting lives inside a block (e.g. a hotspot's own image), empty for a
+  // section-level setting, so the picked url lands on the right node either way.
+  const [mediaPickerTarget, setMediaPickerTarget] = useState<{ settingId: string; blockPath: string[] } | null>(
+    null,
+  );
   const [schema, setSchema] = useState<{ type: string; schema: ShopifySectionSchema | null } | null>(null);
   const [boundDefs, setBoundDefs] = useState<{ key: string; defs: ShopifySettingDef[] } | null>(null);
   const [schemaLocale, setSchemaLocale] = useState<Record<string, unknown>>({});
@@ -99,6 +108,7 @@ export default function EditorPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<{ storeUrl: string } | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const readTemplate = useMemo(() => createFetchTemplateReader(), []);
   const readBinary = useMemo(() => createFetchBinaryReader(), []);
@@ -269,6 +279,9 @@ export default function EditorPage() {
   // Set only when the click landed inside a block but didn't resolve to one text setting —
   // narrows a rewrite to that block instead of the whole section (docs/EDITOR-TOOLBARS.md).
   const blockScope = !binding ? (selection?.blockScope ?? null) : null;
+  // A direct click on an image_picker-backed <img> (data-sf-editable="image") — shows
+  // ImageChangeButton instead of the text toolbar.
+  const imageSettingId = !binding && selection?.editable === "image" ? selection.settingId : null;
   const scopedBlockType =
     selectedSection && blockScope ? (getBlockAt(selectedSection, blockScope) as { type?: string } | undefined)?.type ?? null : null;
   // Product-name text binds to the Product record, not a template setting — the schema
@@ -445,11 +458,11 @@ export default function EditorPage() {
   );
 
   const updateSetting = useCallback(
-    (sectionId: string, settingId: string, value: unknown) => {
+    (sectionId: string, settingId: string, value: unknown, blockPath: string[] = []) => {
       updateTemplate((template) => {
         const section = template.sections[sectionId];
         if (!section) return template;
-        return replaceSection(template, sectionId, setSettingAtPath(section, [], settingId, value));
+        return replaceSection(template, sectionId, setSettingAtPath(section, blockPath, settingId, value));
       });
     },
     [updateTemplate],
@@ -503,6 +516,27 @@ export default function EditorPage() {
       setPublishing(false);
     }
   }, [projectId]);
+
+  // Purges the stored connection (lib/shopify/publish.ts's disconnect route deletes the
+  // ShopifyStore row outright rather than marking it inactive) so a different store can be
+  // connected in its place. Local state clears immediately rather than reloading, since the
+  // server side is already done by the time this resolves.
+  const disconnectStore = useCallback(async () => {
+    if (!shopifyShopDomain) return;
+    setDisconnecting(true);
+    try {
+      await fetch("/api/shopify/disconnect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ shop: shopifyShopDomain }),
+      });
+      setShopifyShopDomain(null);
+      setPublishResult(null);
+      setPublishError(null);
+    } finally {
+      setDisconnecting(false);
+    }
+  }, [shopifyShopDomain]);
 
   // One section, one instruction — the server replaces just that section in the stored
   // configuration and returns the whole updated project (docs/SECTION-AI-EDITING.md).
@@ -671,6 +705,7 @@ export default function EditorPage() {
     setSelection(info);
     setSelectionRect(info.rect);
     setShowRewrite(false);
+    setMediaPickerTarget(null);
   }, []);
   const handleRectChange = useCallback((rect: SelectionRect | null) => setSelectionRect(rect), []);
   const handleTextCommit = useCallback(
@@ -794,6 +829,14 @@ export default function EditorPage() {
             {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}
           </span>
 
+          <a
+            href={`/api/project/${projectId}/export-zip`}
+            title="Download the theme this project would publish to Shopify, as a zip"
+            className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+          >
+            Download zip
+          </a>
+
           <div className="h-4 w-px bg-neutral-200" aria-hidden="true" />
 
           {shopifyShopDomain ? (
@@ -819,6 +862,14 @@ export default function EditorPage() {
                 </a>
               )}
               {publishError && <span className="text-xs text-red-600">{publishError}</span>}
+              <button
+                onClick={disconnectStore}
+                disabled={disconnecting}
+                title="Disconnect this store so a different one can be connected"
+                className="rounded border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+              >
+                {disconnecting ? "Disconnecting…" : "Disconnect"}
+              </button>
             </div>
           ) : (
             <form
@@ -917,6 +968,13 @@ export default function EditorPage() {
             />
           ) : null}
 
+          {imageSettingId && selectionRect && !showRewrite ? (
+            <ImageChangeButton
+              rect={selectionRect}
+              onClick={() => setMediaPickerTarget({ settingId: imageSettingId, blockPath: blockScope ?? [] })}
+            />
+          ) : null}
+
           {selection?.sectionId && showRewrite ? (
             <AiRewritePopover
               sectionLabel={
@@ -962,7 +1020,11 @@ export default function EditorPage() {
             onChange={(settingId, value) =>
               selection?.sectionId && updateSetting(selection.sectionId, settingId, value)
             }
-            onClose={() => setSelection(null)}
+            onBrowseMedia={(settingId) => setMediaPickerTarget({ settingId, blockPath: [] })}
+            onClose={() => {
+              setSelection(null);
+              setMediaPickerTarget(null);
+            }}
             onCollapse={() => setPanelOpen(false)}
           />
         ) : (
@@ -977,6 +1039,18 @@ export default function EditorPage() {
           </button>
         )}
       </div>
+
+      <MediaPanel
+        open={mediaPickerTarget !== null}
+        images={product?.images ?? []}
+        onSelect={(url) => {
+          if (mediaPickerTarget && selection?.sectionId) {
+            updateSetting(selection.sectionId, mediaPickerTarget.settingId, url, mediaPickerTarget.blockPath);
+          }
+          setMediaPickerTarget(null);
+        }}
+        onClose={() => setMediaPickerTarget(null)}
+      />
 
       {confirmDelete ? (
         <ConfirmDialog

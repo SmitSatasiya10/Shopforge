@@ -145,31 +145,35 @@
                 assign main_image_class = ''
               endif
             %}
-            {{
-              block.settings.image
-              | image_url: width: 3840
-              | image_tag:
-                loading: 'lazy',
-                height: height,
-                sizes: '100vw',
-                class: main_image_class,
-                widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840'
-            }}
-            {% if block.settings.mobile_image != blank %}
-              {% assign height = block.settings.mobile_image.width
-                | divided_by: block.settings.mobile_image.aspect_ratio
-                | round
-              %}
+            <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
               {{
-                block.settings.mobile_image
+                block.settings.image
                 | image_url: width: 3840
                 | image_tag:
                   loading: 'lazy',
                   height: height,
                   sizes: '100vw',
-                  class: 'desktop-hidden',
+                  class: main_image_class,
                   widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840'
               }}
+            </span>
+            {% if block.settings.mobile_image != blank %}
+              {% assign height = block.settings.mobile_image.width
+                | divided_by: block.settings.mobile_image.aspect_ratio
+                | round
+              %}
+              <span data-sf-setting="mobile_image" data-sf-editable="image" style="display: contents;">
+                {{
+                  block.settings.mobile_image
+                  | image_url: width: 3840
+                  | image_tag:
+                    loading: 'lazy',
+                    height: height,
+                    sizes: '100vw',
+                    class: 'desktop-hidden',
+                    widths: '375, 550, 750, 1100, 1500, 1780, 2000, 3000, 3840'
+                }}
+              </span>
             {% endif %}
           {%- else -%}
             {{ 'lifestyle-2' | placeholder_svg_tag: 'placeholder-svg' }}
