@@ -1,0 +1,2926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jenni Theme Builder — AI Shopify Theme Editor Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Playfair+Display:wght@500;700&family=Poppins:wght@400;500;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ============ RESET ============ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:var(--ink);background:var(--app-bg);-webkit-font-smoothing:antialiased;overflow:hidden}
+img{max-width:100%;display:block}
+button{font:inherit;cursor:pointer;background:none;border:none;color:inherit}
+input,textarea,select{font:inherit;color:inherit}
+a{color:inherit;text-decoration:none}
+ul{list-style:none}
+svg{display:block}
+::selection{background:rgba(91,79,233,.25)}
+
+/* ============ APP CHROME TOKENS ============ */
+:root{
+  --app-bg:#f4f3ef;
+  --app-surface:#ffffff;
+  --app-surface-2:#faf9f6;
+  --app-border:rgba(20,20,18,.09);
+  --app-border-strong:rgba(20,20,18,.15);
+  --ink:#15140f;
+  --ink-2:#6b695f;
+  --ink-3:#9a988c;
+  --accent:#5b4fe9;
+  --accent-ink:#ffffff;
+  --accent-soft:#efecfd;
+  --accent-soft-2:#e2ddfb;
+  --danger:#d03b3b;
+  --danger-soft:#fbeceb;
+  --success:#0ca30c;
+  --success-soft:#e9f8e9;
+  --warning:#c98500;
+  --warning-soft:#fdf3e0;
+  --radius-sm:8px;
+  --radius-md:12px;
+  --radius-lg:20px;
+  --radius-xl:28px;
+  --shadow-xs:0 1px 2px rgba(20,20,18,.05);
+  --shadow-sm:0 2px 8px rgba(20,20,18,.07);
+  --shadow-md:0 12px 32px -12px rgba(20,20,18,.22);
+  --shadow-lg:0 30px 70px -20px rgba(20,20,18,.32);
+  --ease:cubic-bezier(.2,.7,.3,1);
+  /* dataviz roles (light) */
+  --viz-surface:#fcfcfb;
+  --viz-ink:#0b0b0b;
+  --viz-ink-2:#52514e;
+  --viz-muted:#898781;
+  --viz-grid:#e1e0d9;
+  --viz-baseline:#c3c2b7;
+  --viz-1:#2a78d6;
+  --viz-2:#eb6834;
+  --viz-3:#1baf7a;
+  --viz-4:#eda100;
+  --viz-5:#e87ba4;
+  --viz-good:#0ca30c;
+}
+
+/* ============ STOREFRONT (EDITABLE DESIGN) TOKENS ============ */
+#storefront{
+  --s-primary:#c1502e;
+  --s-primary-ink:#ffffff;
+  --s-secondary:#21201b;
+  --s-ink:#211f1a;
+  --s-ink-2:#6b6558;
+  --s-bg:#faf7f2;
+  --s-surface:#ffffff;
+  --s-border:rgba(33,31,26,.1);
+  --s-radius:10px;
+  --s-btn-radius:8px;
+  --s-img-radius:14px;
+  --s-shadow:0 1px 3px rgba(33,31,26,.08);
+  --s-heading-font:'Fraunces',serif;
+  --s-body-font:'Inter',sans-serif;
+  --s-heading-weight:600;
+  --s-space:1;
+  --s-base-size:16px;
+}
+
+/* ============ SHELL LAYOUT ============ */
+#appShell{height:100vh;display:flex;background:var(--app-bg)}
+
+/* left icon rail */
+.rail{width:68px;flex:none;background:var(--app-surface);border-right:1px solid var(--app-border);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:4px;z-index:40}
+.rail-logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#5b4fe9,#8f7bff);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
+.rail-group{display:flex;flex-direction:column;gap:2px;width:100%;align-items:center}
+.rail-spacer{flex:1}
+.rail-btn{width:48px;height:48px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--ink-3);transition:background .15s var(--ease),color .15s var(--ease);position:relative}
+.rail-btn svg{width:19px;height:19px}
+.rail-btn span{font-size:9.5px;font-weight:600;letter-spacing:.01em}
+.rail-btn:hover{background:var(--app-surface-2);color:var(--ink)}
+.rail-btn.active{background:var(--accent-soft);color:var(--accent)}
+.rail-btn.active::before{content:'';position:absolute;left:-14px;top:50%;transform:translateY(-50%);width:3px;height:20px;border-radius:3px;background:var(--accent)}
+.rail-tip{position:fixed;left:74px;background:#15140f;color:#fff;font-size:12px;font-weight:500;padding:6px 10px;border-radius:7px;white-space:nowrap;pointer-events:none;opacity:0;transform:translateX(-4px);transition:opacity .12s,transform .12s;z-index:200}
+.rail-tip.show{opacity:1;transform:translateX(0)}
+
+/* main column */
+.main-col{flex:1;display:flex;flex-direction:column;min-width:0}
+
+/* topbar */
+.topbar{height:60px;flex:none;background:var(--app-surface);border-bottom:1px solid var(--app-border);display:flex;align-items:center;padding:0 18px;gap:16px;z-index:30}
+.tb-group{display:flex;align-items:center;gap:6px}
+.tb-divider{width:1px;height:24px;background:var(--app-border);margin:0 6px}
+.proj-name{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:8px}
+.proj-name .dot{width:6px;height:6px;border-radius:50%;background:var(--ink-3)}
+.icon-btn{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--ink-2);transition:background .15s,color .15s}
+.icon-btn svg{width:17px;height:17px}
+.icon-btn:hover:not(:disabled){background:var(--app-surface-2);color:var(--ink)}
+.icon-btn:disabled{opacity:.32;cursor:default}
+.device-switch{display:flex;background:var(--app-surface-2);border-radius:10px;padding:3px;gap:2px}
+.device-switch button{width:32px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--ink-3)}
+.device-switch button svg{width:15px;height:15px}
+.device-switch button.active{background:#fff;color:var(--ink);box-shadow:var(--shadow-xs)}
+.save-status{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2);font-weight:500}
+.save-status .pulse{width:7px;height:7px;border-radius:50%;background:var(--success);position:relative}
+.save-status .pulse.saving{background:var(--warning);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:9px;font-size:13.5px;font-weight:600;transition:all .15s var(--ease);white-space:nowrap}
+.btn svg{width:15px;height:15px}
+.btn-primary{background:var(--ink);color:#fff}
+.btn-primary:hover{background:#000}
+.btn-accent{background:var(--accent);color:#fff;box-shadow:0 1px 0 rgba(0,0,0,.05), 0 6px 16px -6px rgba(91,79,233,.55)}
+.btn-accent:hover{background:#4d41d6}
+.btn-ghost{background:transparent;color:var(--ink-2);border:1px solid var(--app-border-strong)}
+.btn-ghost:hover{background:var(--app-surface-2);color:var(--ink)}
+.btn-soft{background:var(--app-surface-2);color:var(--ink)}
+.btn-soft:hover{background:#eeece6}
+.btn-danger{background:var(--danger-soft);color:var(--danger)}
+.btn-danger:hover{background:#f7dcda}
+.btn-sm{padding:6px 11px;font-size:12.5px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:default;pointer-events:none}
+.btn-block{width:100%;justify-content:center}
+
+/* view container */
+.view-container{flex:1;min-height:0;position:relative;background:var(--app-bg)}
+.view{position:absolute;inset:0;display:none;overflow:auto}
+.view.active{display:block}
+
+/* ============ EDITOR VIEW ============ */
+.editor-shell{position:absolute;inset:0;display:flex}
+.canvas-wrap{flex:1;overflow:auto;padding:36px 36px 120px;display:flex;justify-content:center;scroll-behavior:smooth}
+.device-frame{width:100%;max-width:1180px;background:var(--s-bg,#faf7f2);border-radius:14px;box-shadow:var(--shadow-lg);overflow:hidden;transition:max-width .35s var(--ease),border-radius .35s var(--ease);position:relative}
+.device-frame[data-device="tablet"]{max-width:768px}
+.device-frame[data-device="mobile"]{max-width:390px}
+.canvas-wrap[data-device="tablet"],.canvas-wrap[data-device="mobile"]{padding-top:52px}
+.device-chrome{display:none;position:absolute;top:-40px;left:0;right:0;height:32px;align-items:center;justify-content:center;gap:6px;color:var(--ink-3)}
+.canvas-wrap[data-device="tablet"] .device-chrome,.canvas-wrap[data-device="mobile"] .device-chrome{display:flex}
+.device-chrome .notch{width:60px;height:6px;border-radius:4px;background:var(--app-border-strong)}
+
+/* right contextual panel */
+.side-panel{width:0;flex:none;background:var(--app-surface);border-left:1px solid var(--app-border);overflow:hidden;transition:width .28s var(--ease);display:flex;flex-direction:column}
+.side-panel.open{width:328px}
+.sp-head{padding:16px 18px;border-bottom:1px solid var(--app-border);display:flex;align-items:center;gap:10px;flex:none}
+.sp-head .sp-icon{width:30px;height:30px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;flex:none}
+.sp-head .sp-icon svg{width:15px;height:15px}
+.sp-head-text{flex:1;min-width:0}
+.sp-head-text .t{font-weight:700;font-size:13.5px}
+.sp-head-text .s{font-size:11.5px;color:var(--ink-3)}
+.sp-body{flex:1;overflow-y:auto;padding:16px 18px 30px;display:flex;flex-direction:column;gap:20px}
+.sp-section{display:flex;flex-direction:column;gap:10px}
+.sp-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12px;font-weight:600;color:var(--ink-2)}
+.field input[type=text],.field input[type=url],.field input[type=email],.field input[type=password],.field textarea,.field select{width:100%;border:1px solid var(--app-border-strong);background:var(--app-surface-2);border-radius:8px;padding:8px 10px;font-size:13px;transition:border-color .15s}
+.field textarea{resize:vertical;min-height:64px;font-family:inherit}
+.field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent);background:#fff}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.swatch-row{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{width:30px;height:30px;border-radius:8px;border:1px solid var(--app-border-strong);cursor:pointer;position:relative;flex:none}
+.swatch.active::after{content:'';position:absolute;inset:-4px;border:2px solid var(--accent);border-radius:11px}
+.color-input-wrap{display:flex;align-items:center;gap:8px}
+.color-input-wrap input[type=color]{width:34px;height:34px;border:1px solid var(--app-border-strong);border-radius:8px;padding:2px;background:#fff}
+.color-input-wrap .hex{font-size:12px;color:var(--ink-2);font-family:ui-monospace,monospace}
+.seg{display:flex;background:var(--app-surface-2);border-radius:8px;padding:3px;gap:2px}
+.seg button{flex:1;padding:6px 8px;border-radius:6px;font-size:12px;font-weight:600;color:var(--ink-2)}
+.seg button.active{background:#fff;color:var(--ink);box-shadow:var(--shadow-xs)}
+.slider-row{display:flex;flex-direction:column;gap:6px}
+.slider-row .top{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-2);font-weight:600}
+input[type=range]{width:100%;accent-color:var(--accent);height:4px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.toggle-row .tt{font-size:12.5px;font-weight:600}
+.toggle-row .ts{font-size:11px;color:var(--ink-3)}
+.switch{width:36px;height:21px;border-radius:20px;background:var(--app-border-strong);position:relative;flex:none;transition:background .15s}
+.switch::after{content:'';position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:var(--shadow-xs);transition:transform .15s var(--ease)}
+.switch.on{background:var(--accent)}
+.switch.on::after{transform:translateX(15px)}
+.accordion-item{border:1px solid var(--app-border);border-radius:10px;overflow:hidden}
+.accordion-head{padding:12px 14px;display:flex;align-items:center;justify-content:between;gap:8px;cursor:pointer;font-size:13px;font-weight:700}
+.accordion-head svg{width:14px;height:14px;margin-left:auto;transition:transform .2s}
+.accordion-item.open .accordion-head svg{transform:rotate(180deg)}
+.accordion-body{max-height:0;overflow:hidden;transition:max-height .25s var(--ease)}
+.accordion-item.open .accordion-body{max-height:600px}
+.accordion-body-in{padding:0 14px 16px;display:flex;flex-direction:column;gap:14px}
+
+/* ============ STOREFRONT RENDER ============ */
+#storefront{font-family:var(--s-body-font);color:var(--s-ink);background:var(--s-bg);font-size:var(--s-base-size)}
+#storefront img{border-radius:var(--s-img-radius)}
+.sf-section{position:relative;transition:outline-color .15s}
+.sf-section:hover{outline:1.5px dashed rgba(91,79,233,.4);outline-offset:-1.5px}
+.sf-section.is-selected{outline:1.5px solid var(--accent);outline-offset:-1.5px}
+.sf-section.flash{animation:flash 1s var(--ease)}
+@keyframes flash{0%{background:rgba(91,79,233,.12)}100%{background:transparent}}
+.sf-label{position:absolute;top:-1px;left:-1px;background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:0 0 8px 0;opacity:0;transform:translateY(-4px);transition:opacity .15s,transform .15s;z-index:15;pointer-events:none;letter-spacing:.02em}
+.sf-section:hover .sf-label,.sf-section.is-selected .sf-label{opacity:1;transform:translateY(0)}
+.sec-ctrls{position:absolute;top:8px;right:8px;display:flex;gap:2px;background:#15140f;padding:3px;border-radius:9px;box-shadow:var(--shadow-md);opacity:0;transform:translateY(-4px);transition:opacity .15s,transform .15s;z-index:20}
+.sf-section.is-selected .sec-ctrls{opacity:1;transform:translateY(0);pointer-events:auto}
+.sec-ctrls button{width:28px;height:28px;border-radius:6px;color:#cfceea;display:flex;align-items:center;justify-content:center}
+.sec-ctrls button svg{width:14px;height:14px}
+.sec-ctrls button:hover{background:rgba(255,255,255,.14);color:#fff}
+.sec-ctrls button.danger:hover{background:rgba(208,59,59,.35);color:#ff9d9d}
+.sec-ctrls .sep{width:1px;background:rgba(255,255,255,.16);margin:4px 2px}
+
+[data-editable]{outline-offset:2px;border-radius:4px;cursor:text;transition:outline-color .12s}
+[data-editable]:hover{outline:1.5px dashed rgba(91,79,233,.55)}
+[data-editable].is-selected{outline:1.5px solid var(--accent)}
+[data-editable][contenteditable="true"]{outline:1.5px solid var(--accent);background:rgba(91,79,233,.05)}
+[data-image]{cursor:pointer;position:relative}
+[data-image]:hover::after{content:'';position:absolute;inset:0;background:rgba(21,20,15,.15);border-radius:inherit}
+[data-image].is-selected::after{content:'';position:absolute;inset:0;outline:2px solid var(--accent);outline-offset:-2px;border-radius:inherit}
+[data-image] .img-hint{position:absolute;bottom:10px;left:50%;transform:translate(-50%,6px);background:#fff;color:var(--ink);font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:20px;box-shadow:var(--shadow-md);opacity:0;transition:opacity .15s,transform .15s;display:flex;align-items:center;gap:5px;white-space:nowrap}
+[data-image] .img-hint svg{width:12px;height:12px}
+[data-image]:hover .img-hint{opacity:1;transform:translate(-50%,0)}
+
+/* add-zone between sections */
+.add-zone{height:10px;position:relative;display:flex;align-items:center;justify-content:center;z-index:18;transition:height .18s var(--ease)}
+.add-zone:hover{height:38px}
+.add-zone::before{content:'';position:absolute;left:24px;right:24px;top:50%;height:1px;background:var(--app-border-strong);opacity:0;transition:opacity .18s}
+.add-zone:hover::before{opacity:1}
+.add-zone-btn{opacity:0;transform:scale(.85);transition:opacity .15s,transform .15s;display:flex;align-items:center;gap:6px;background:var(--ink);color:#fff;font-size:12px;font-weight:700;padding:6px 13px;border-radius:20px;box-shadow:var(--shadow-md);position:relative;z-index:2}
+.add-zone-btn svg{width:13px;height:13px}
+.add-zone:hover .add-zone-btn{opacity:1;transform:scale(1)}
+
+/* floating text toolbar */
+.float-toolbar{position:fixed;display:none;align-items:center;gap:1px;background:#15140f;padding:4px;border-radius:11px;box-shadow:var(--shadow-lg);z-index:120}
+.float-toolbar.show{display:flex}
+.ft-btn{height:32px;padding:0 9px;border-radius:7px;color:#d8d7ee;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;white-space:nowrap}
+.ft-btn svg{width:14px;height:14px}
+.ft-btn:hover{background:rgba(255,255,255,.12);color:#fff}
+.ft-btn.active{background:var(--accent);color:#fff}
+.ft-btn.ai{background:linear-gradient(135deg,#5b4fe9,#8f7bff);color:#fff}
+.ft-btn.ai:hover{filter:brightness(1.08)}
+.ft-sep{width:1px;height:20px;background:rgba(255,255,255,.15);margin:0 3px}
+
+/* popovers (AI edit, color, image) */
+.popover{position:fixed;display:none;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);border:1px solid var(--app-border);z-index:130;overflow:hidden}
+.popover.show{display:block}
+.popover.w-ai{width:320px}
+.pop-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--app-border)}
+.pop-head .ic{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#5b4fe9,#8f7bff);display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
+.pop-head .ic svg{width:13px;height:13px}
+.pop-head .tt{font-size:12.5px;font-weight:700;flex:1}
+.pop-head .close{width:22px;height:22px;border-radius:6px;color:var(--ink-3);display:flex;align-items:center;justify-content:center}
+.pop-head .close:hover{background:var(--app-surface-2);color:var(--ink)}
+.pop-head .close svg{width:13px;height:13px}
+.pop-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px}
+.pop-body textarea{width:100%;min-height:58px;border:1px solid var(--app-border-strong);border-radius:9px;padding:9px 10px;font-size:12.5px;font-family:inherit;resize:none;background:var(--app-surface-2)}
+.pop-body textarea:focus{outline:none;border-color:var(--accent);background:#fff}
+.pop-chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:5px 10px;border-radius:20px;background:var(--app-surface-2);font-size:11.5px;font-weight:600;color:var(--ink-2);border:1px solid transparent}
+.chip:hover{background:var(--accent-soft);color:var(--accent)}
+.chip.active{background:var(--accent);color:#fff}
+.ai-loading{display:flex;align-items:center;gap:9px;padding:6px 2px;font-size:12.5px;color:var(--ink-2);font-weight:600}
+.spinner{width:15px;height:15px;border-radius:50%;border:2px solid var(--accent-soft);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* color popover */
+.popover.w-color{width:200px}
+.color-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;padding:12px}
+.color-grid .sw{width:26px;height:26px;border-radius:7px;border:1px solid var(--app-border-strong);position:relative}
+.color-grid .sw.active::after{content:'';position:absolute;inset:-3px;border:2px solid var(--accent);border-radius:9px}
+
+/* image popover */
+.popover.w-image{width:236px}
+.img-action-list{display:flex;flex-direction:column;padding:6px}
+.img-action{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;font-size:12.5px;font-weight:600;text-align:left}
+.img-action:hover{background:var(--app-surface-2)}
+.img-action .ic{width:28px;height:28px;border-radius:8px;background:var(--app-surface-2);display:flex;align-items:center;justify-content:center;color:var(--ink-2);flex:none}
+.img-action .ic svg{width:14px;height:14px}
+.img-action:hover .ic{background:#fff}
+
+/* generic modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(15,14,10,.5);backdrop-filter:blur(2px);z-index:150;display:none;align-items:center;justify-content:center;padding:30px}
+.modal-backdrop.show{display:flex}
+.modal{background:#fff;border-radius:20px;box-shadow:var(--shadow-lg);max-width:920px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden}
+.modal.sm{max-width:460px}
+.modal.md{max-width:600px}
+.modal-head{padding:20px 24px;border-bottom:1px solid var(--app-border);display:flex;align-items:center;gap:12px;flex:none}
+.modal-head .tt{font-size:17px;font-weight:800;flex:1}
+.modal-head .st{font-size:12.5px;color:var(--ink-3);margin-top:2px}
+.modal-close{width:32px;height:32px;border-radius:9px;color:var(--ink-3);display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--app-surface-2);color:var(--ink)}
+.modal-close svg{width:16px;height:16px}
+.modal-body{flex:1;overflow-y:auto;padding:22px 24px}
+.modal-foot{padding:16px 24px;border-top:1px solid var(--app-border);display:flex;align-items:center;gap:10px;justify-content:flex-end;flex:none}
+
+/* section library grid */
+.lib-ai-card{border-radius:16px;padding:18px;background:linear-gradient(135deg,#5b4fe9,#7a6ef2);color:#fff;display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+.lib-ai-card .tt{font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px}
+.lib-ai-card .tt svg{width:17px;height:17px}
+.lib-ai-card .st{font-size:12.5px;opacity:.85;line-height:1.5}
+.lib-ai-row{display:flex;gap:8px}
+.lib-ai-row textarea{flex:1;border:none;border-radius:10px;padding:10px 12px;font-size:12.5px;font-family:inherit;resize:none;min-height:40px}
+.lib-ai-row textarea:focus{outline:none}
+.lib-ai-row button{background:#15140f;color:#fff;border-radius:10px;padding:0 16px;font-weight:700;font-size:12.5px;flex:none}
+.lib-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.lib-card{border:1px solid var(--app-border);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s}
+.lib-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:var(--shadow-sm)}
+.lib-thumb{height:82px;background:var(--app-surface-2);display:flex;align-items:center;justify-content:center;padding:12px;gap:3px}
+.lib-thumb .bar{background:linear-gradient(135deg,#c9c6f5,#a79cf0);border-radius:3px}
+.lib-card .lc-name{padding:9px 12px 11px;font-size:12.5px;font-weight:700}
+
+/* image gen grid */
+.imggen-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.imggen-item{position:relative;border-radius:12px;overflow:hidden;aspect-ratio:3/4;background:var(--app-surface-2);cursor:pointer;border:2px solid transparent}
+.imggen-item img{width:100%;height:100%;object-fit:cover}
+.imggen-item:hover{border-color:var(--accent)}
+.imggen-item .use-btn{position:absolute;bottom:8px;left:8px;right:8px;background:#fff;color:var(--ink);font-size:11px;font-weight:700;text-align:center;padding:7px 0;border-radius:8px;opacity:0;transform:translateY(4px);transition:opacity .15s,transform .15s}
+.imggen-item:hover .use-btn{opacity:1;transform:translateY(0)}
+.imggen-skel{aspect-ratio:3/4;border-radius:12px;background:linear-gradient(100deg,#eeece6 30%,#f7f6f2 50%,#eeece6 70%);background-size:200% 100%;animation:shimmer 1.3s infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+
+/* toasts */
+#toasts{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:300;align-items:center}
+.toast{background:#15140f;color:#fff;font-size:13px;font-weight:600;padding:11px 18px;border-radius:11px;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:9px;animation:toastIn .25s var(--ease)}
+.toast svg{width:15px;height:15px;color:#8ce08c;flex:none}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+.toast.leave{animation:toastOut .2s ease forwards}
+@keyframes toastOut{to{opacity:0;transform:translateY(6px) scale(.97)}}
+
+/* ============ STOREFRONT CONTENT ============ */
+.sf-btn{display:inline-flex;align-items:center;gap:8px;background:var(--s-primary);color:var(--s-primary-ink);padding:13px 26px;border-radius:var(--s-btn-radius);font-weight:700;font-size:14px;transition:filter .15s,transform .15s}
+.sf-btn:hover{filter:brightness(1.08)}
+.sf-btn.outline{background:transparent;color:var(--s-ink);border:1.5px solid var(--s-ink)}
+.sf-btn.sm{padding:9px 18px;font-size:12.5px}
+.sf-h{font-family:var(--s-heading-font);font-weight:var(--s-heading-weight);color:var(--s-ink);line-height:1.15;letter-spacing:-.01em}
+.sf-p{color:var(--s-ink-2);line-height:1.65}
+.sf-eyebrow{font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--s-primary)}
+
+/* announcement */
+.sf-announce{background:var(--s-secondary);color:#fff;text-align:center;padding:9px 40px;font-size:12.5px;font-weight:600;letter-spacing:.02em}
+
+/* header */
+.sf-header{display:flex;align-items:center;padding:18px calc(40px * var(--s-space));background:var(--s-surface);border-bottom:1px solid var(--s-border)}
+.sf-logo{font-family:var(--s-heading-font);font-weight:700;font-size:21px;letter-spacing:.02em}
+.sf-nav{display:flex;gap:28px;margin:0 auto;font-size:13.5px;font-weight:600}
+.sf-nav a{opacity:.85}
+.sf-header-icons{display:flex;align-items:center;gap:18px;color:var(--s-ink)}
+.sf-header-icons svg{width:18px;height:18px}
+.sf-cart-badge{position:relative}
+.sf-cart-badge b{position:absolute;top:-7px;right:-8px;background:var(--s-primary);color:#fff;font-size:9px;width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800}
+@media(max-width:820px){.sf-nav{display:none}}
+
+/* hero */
+.sf-hero{display:grid;grid-template-columns:1.05fr 1fr;align-items:stretch;background:var(--s-bg)}
+.sf-hero-copy{padding:calc(60px*var(--s-space)) calc(56px*var(--s-space));display:flex;flex-direction:column;justify-content:center;gap:18px}
+.sf-hero-copy .sf-h{font-size:44px}
+.sf-hero-copy .sf-p{font-size:16px;max-width:420px}
+.sf-hero-cta{display:flex;align-items:center;gap:20px;margin-top:6px}
+.sf-hero-cta .watch{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px}
+.sf-hero-cta .watch .pc{width:32px;height:32px;border-radius:50%;background:var(--s-surface);border:1px solid var(--s-border);display:flex;align-items:center;justify-content:center}
+.sf-hero-cta .watch svg{width:11px;height:11px;color:var(--s-primary)}
+.sf-hero-img{position:relative;overflow:hidden}
+.sf-hero-img img{width:100%;height:100%;object-fit:cover;border-radius:0}
+.sf-hero-price-card{position:absolute;bottom:22px;left:22px;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);padding:12px 16px;border-radius:14px;box-shadow:var(--shadow-md);display:flex;align-items:center;gap:10px}
+.sf-hero-price-card .p{font-family:var(--s-heading-font);font-weight:700;font-size:18px}
+.sf-hero-price-card .stars{color:#f2a93b;font-size:11px}
+@media(max-width:820px){.sf-hero{grid-template-columns:1fr}.sf-hero-copy{padding:40px 24px;order:2}.sf-hero-img{height:280px;order:1}.sf-hero-copy .sf-h{font-size:30px}}
+
+/* section shell + heading */
+.sf-sec-pad{padding:calc(74px*var(--s-space)) calc(48px*var(--s-space))}
+.sf-sec-head{text-align:center;max-width:620px;margin:0 auto 44px}
+.sf-sec-head .sf-h{font-size:32px;margin-top:8px}
+.sf-sec-head .sf-p{margin-top:10px}
+
+/* features */
+.sf-feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
+.sf-feat-card{background:var(--s-surface);border:1px solid var(--s-border);border-radius:var(--s-radius);padding:26px 22px;box-shadow:var(--s-shadow)}
+.sf-feat-icon{width:42px;height:42px;border-radius:11px;background:color-mix(in srgb, var(--s-primary) 14%, transparent);color:var(--s-primary);display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+.sf-feat-icon svg{width:20px;height:20px}
+.sf-feat-card .ft{font-family:var(--s-heading-font);font-weight:600;font-size:16.5px;margin-bottom:8px}
+.sf-feat-card .fd{font-size:13.5px;color:var(--s-ink-2);line-height:1.6}
+@media(max-width:820px){.sf-feat-grid{grid-template-columns:1fr 1fr}}
+
+/* product card block (part of features section) */
+.sf-product{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-top:60px}
+.sf-product-gallery{display:grid;grid-template-columns:70px 1fr;gap:12px}
+.sf-product-thumbs{display:flex;flex-direction:column;gap:10px}
+.sf-product-thumbs img{aspect-ratio:1;object-fit:cover;border:1.5px solid var(--s-border);cursor:pointer}
+.sf-product-thumbs img.active{border-color:var(--s-primary)}
+.sf-product-main img{width:100%;aspect-ratio:1;object-fit:cover}
+.sf-product-info{display:flex;flex-direction:column;gap:14px}
+.sf-product-info .name{font-family:var(--s-heading-font);font-size:28px;font-weight:600}
+.sf-rating{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--s-ink-2)}
+.sf-rating .stars{color:#f2a93b;letter-spacing:1px}
+.sf-price{font-size:24px;font-weight:800;font-family:var(--s-heading-font)}
+.sf-colors{display:flex;gap:8px;align-items:center}
+.sf-colors .c{width:26px;height:26px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1.5px var(--s-border);cursor:pointer}
+.sf-colors .c.active{box-shadow:0 0 0 2px var(--s-primary)}
+.sf-product-actions{display:flex;gap:10px;margin-top:6px}
+.sf-trust{display:flex;gap:18px;margin-top:8px;font-size:11.5px;color:var(--s-ink-2)}
+.sf-trust span{display:flex;align-items:center;gap:6px}
+.sf-trust svg{width:14px;height:14px;color:var(--s-primary)}
+@media(max-width:820px){.sf-product{grid-template-columns:1fr}}
+
+/* benefits */
+.sf-benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
+.sf-benefit-card{border-radius:var(--s-radius);overflow:hidden;background:var(--s-surface);border:1px solid var(--s-border)}
+.sf-benefit-card img{width:100%;height:190px;object-fit:cover;border-radius:0}
+.sf-benefit-card .bc-body{padding:20px}
+.sf-benefit-card .bt{font-family:var(--s-heading-font);font-weight:600;font-size:16.5px;margin-bottom:6px}
+.sf-benefit-card .bd{font-size:13px;color:var(--s-ink-2);line-height:1.6}
+@media(max-width:820px){.sf-benefit-grid{grid-template-columns:1fr}}
+
+/* reviews */
+.sf-review-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.sf-review-card{background:var(--s-surface);border:1px solid var(--s-border);border-radius:var(--s-radius);padding:24px;box-shadow:var(--s-shadow)}
+.sf-review-card .stars{color:#f2a93b;font-size:13px;margin-bottom:12px}
+.sf-review-card .quote{font-size:14px;line-height:1.65;color:var(--s-ink);margin-bottom:18px}
+.sf-review-person{display:flex;align-items:center;gap:10px}
+.sf-review-person img{width:36px;height:36px;border-radius:50%;object-fit:cover}
+.sf-review-person .n{font-size:13px;font-weight:700}
+.sf-review-person .r{font-size:11.5px;color:var(--s-ink-2)}
+@media(max-width:820px){.sf-review-grid{grid-template-columns:1fr}}
+
+/* faq */
+.sf-faq-list{max-width:700px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.sf-faq-item{border:1px solid var(--s-border);border-radius:var(--s-radius);overflow:hidden;background:var(--s-surface)}
+.sf-faq-q{padding:18px 20px;display:flex;align-items:center;gap:12px;cursor:pointer;font-weight:600;font-size:14.5px}
+.sf-faq-q svg{width:15px;height:15px;margin-left:auto;flex:none;transition:transform .2s;color:var(--s-primary)}
+.sf-faq-item.open .sf-faq-q svg{transform:rotate(45deg)}
+.sf-faq-a{max-height:0;overflow:hidden;transition:max-height .25s var(--ease)}
+.sf-faq-item.open .sf-faq-a{max-height:200px}
+.sf-faq-a-in{padding:0 20px 18px;font-size:13.5px;color:var(--s-ink-2);line-height:1.65}
+
+/* newsletter */
+.sf-newsletter{background:var(--s-secondary);color:#fff;text-align:center;padding:calc(70px*var(--s-space)) 30px}
+.sf-newsletter .sf-h{color:#fff;font-size:30px}
+.sf-newsletter .sf-p{color:rgba(255,255,255,.7);margin-top:10px}
+.sf-nl-form{display:flex;gap:10px;max-width:400px;margin:26px auto 0}
+.sf-nl-form input{flex:1;padding:13px 16px;border-radius:var(--s-btn-radius);border:none;font-size:13.5px}
+.sf-nl-form input:focus{outline:none}
+.sf-nl-form button{background:var(--s-primary);color:#fff;padding:13px 20px;border-radius:var(--s-btn-radius);font-weight:700;font-size:13.5px;white-space:nowrap}
+
+/* footer */
+.sf-footer{background:#171612;color:rgba(255,255,255,.65);padding:56px 48px 26px}
+.sf-footer-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:32px;max-width:1100px;margin:0 auto}
+.sf-footer .flogo{font-family:var(--s-heading-font);color:#fff;font-size:20px;font-weight:700;margin-bottom:10px}
+.sf-footer-grid .fcol h5{color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
+.sf-footer-grid .fcol a{display:block;font-size:13px;margin-bottom:10px}
+.sf-foot-bottom{max-width:1100px;margin:36px auto 0;padding-top:20px;border-top:1px solid rgba(255,255,255,.1);display:flex;justify-content:space-between;font-size:12px}
+@media(max-width:820px){.sf-footer-grid{grid-template-columns:1fr 1fr}}
+
+/* how it works */
+.sf-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:0;position:relative}
+.sf-step{text-align:center;padding:0 24px;position:relative}
+.sf-step::before{content:'';position:absolute;top:26px;left:-50%;width:100%;height:1.5px;background:var(--s-border);z-index:0}
+.sf-step:first-child::before{display:none}
+.sf-step-num{width:52px;height:52px;border-radius:50%;background:var(--s-primary);color:#fff;font-family:var(--s-heading-font);font-size:19px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;position:relative;z-index:1}
+.sf-step .ft{font-family:var(--s-heading-font);font-weight:600;font-size:16.5px;margin-bottom:8px}
+.sf-step .fd{font-size:13px;color:var(--s-ink-2);line-height:1.6;max-width:230px;margin:0 auto}
+@media(max-width:820px){.sf-steps{grid-template-columns:1fr}.sf-step::before{display:none}}
+
+/* comparison */
+.sf-compare{max-width:640px;margin:0 auto;border:1px solid var(--s-border);border-radius:var(--s-radius);overflow:hidden;background:var(--s-surface)}
+.sf-compare-row{display:grid;grid-template-columns:1.4fr 1fr 1fr;align-items:center}
+.sf-compare-row.head{background:var(--s-secondary);color:#fff;font-weight:700;font-size:12.5px}
+.sf-compare-row.head div{padding:14px 16px}
+.sf-compare-row:not(.head){border-top:1px solid var(--s-border);font-size:13px}
+.sf-compare-row:not(.head) div{padding:13px 16px;display:flex;align-items:center;justify-content:center;text-align:center}
+.sf-compare-row div:first-child{justify-content:flex-start;text-align:left;font-weight:600}
+.sf-compare-row svg{width:16px;height:16px}
+.sf-compare-row .yes{color:var(--s-primary)}
+.sf-compare-row .no{color:var(--s-ink-2);opacity:.4}
+
+/* countdown */
+.sf-countdown{background:var(--s-secondary);color:#fff;text-align:center;padding:56px 30px}
+.sf-cd-timer{display:flex;justify-content:center;gap:14px;margin:22px 0 26px}
+.sf-cd-timer .u{background:rgba(255,255,255,.1);border-radius:12px;padding:14px 18px;min-width:74px}
+.sf-cd-timer .u .n{font-family:var(--s-heading-font);font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.sf-cd-timer .u .l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.6;margin-top:4px}
+
+/* gallery */
+.sf-gallery-grid{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:150px;gap:12px}
+.sf-gallery-grid .g0{grid-column:span 2;grid-row:span 2}
+.sf-gallery-grid img{width:100%;height:100%;object-fit:cover;transition:transform .3s var(--ease)}
+.sf-gallery-grid a{overflow:hidden;display:block;border-radius:var(--s-img-radius);height:100%}
+.sf-gallery-grid a>[data-image]{height:100%}
+.sf-gallery-grid a:hover img{transform:scale(1.06)}
+
+/* banner */
+.sf-banner{position:relative;min-height:280px;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden}
+.sf-banner img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.sf-banner::before{content:'';position:absolute;inset:0;background:linear-gradient(0deg,rgba(10,9,6,.55),rgba(10,9,6,.25))}
+.sf-banner-in{position:relative;z-index:2;color:#fff;display:flex;flex-direction:column;align-items:center;gap:14px}
+.sf-banner-in .sf-h{color:#fff;font-size:34px}
+.sf-banner-in .sf-eyebrow{color:#f0d9c9}
+
+/* custom AI section */
+.sf-custom{text-align:center;max-width:640px;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:16px}
+.sf-custom .sf-h{font-size:32px}
+
+/* ============ SECONDARY VIEWS (shared) ============ */
+.pv-wrap{max-width:1040px;margin:0 auto;padding:44px 40px 100px}
+.pv-head{margin-bottom:32px}
+.pv-head h1{font-size:25px;font-weight:800;letter-spacing:-.01em}
+.pv-head p{color:var(--ink-2);font-size:13.5px;margin-top:6px;max-width:560px}
+.card{background:var(--app-surface);border:1px solid var(--app-border);border-radius:16px;box-shadow:var(--shadow-xs)}
+.card-pad{padding:26px}
+
+/* Analyze view */
+.analyze-input-row{display:flex;gap:10px}
+.analyze-input-row input{flex:1;border:1px solid var(--app-border-strong);border-radius:10px;padding:13px 16px;font-size:14px;background:var(--app-surface-2)}
+.analyze-input-row input:focus{outline:none;border-color:var(--accent);background:#fff}
+.progress-steps{display:flex;flex-direction:column;gap:14px;margin-top:26px}
+.pstep{display:flex;align-items:center;gap:12px;font-size:13.5px;font-weight:600;color:var(--ink-3)}
+.pstep .dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--app-border-strong);display:flex;align-items:center;justify-content:center;flex:none;transition:all .2s}
+.pstep .dot svg{width:11px;height:11px;color:#fff;opacity:0}
+.pstep.active{color:var(--ink)}
+.pstep.active .dot{border-color:var(--accent);background:var(--accent-soft)}
+.pstep.done .dot{border-color:var(--success);background:var(--success)}
+.pstep.done .dot svg{opacity:1}
+.pstep.done{color:var(--ink)}
+.score-ring-wrap{display:flex;align-items:center;gap:34px;padding:8px 4px}
+.score-ring{position:relative;width:150px;height:150px;flex:none}
+.score-ring svg{transform:rotate(-90deg)}
+.score-ring .num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.score-ring .num b{font-size:34px;font-weight:800;font-family:'Fraunces',serif}
+.score-ring .num span{font-size:11px;color:var(--ink-3);font-weight:600}
+.score-bars{flex:1;display:flex;flex-direction:column;gap:12px}
+.sbar-row{display:flex;align-items:center;gap:12px}
+.sbar-row .l{width:150px;font-size:12.5px;font-weight:600;color:var(--ink-2);flex:none}
+.sbar-track{flex:1;height:7px;border-radius:6px;background:var(--app-surface-2);overflow:hidden}
+.sbar-fill{height:100%;border-radius:6px;background:var(--viz-1)}
+.sbar-row .v{width:32px;font-size:12px;font-weight:700;text-align:right;flex:none}
+.suggest-list{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.suggest-item{display:flex;gap:12px;padding:13px 14px;border-radius:11px;background:var(--app-surface-2)}
+.suggest-item svg{width:16px;height:16px;color:var(--warning);flex:none;margin-top:1px}
+.suggest-item .t{font-size:13px;font-weight:600}
+.suggest-item .d{font-size:12px;color:var(--ink-2);margin-top:2px}
+
+/* Persona view */
+.persona-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.persona-card{padding:22px;display:flex;flex-direction:column;gap:12px;cursor:pointer;transition:border-color .15s,transform .15s}
+.persona-card:hover{transform:translateY(-2px)}
+.persona-card.selected{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.persona-avatar{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.persona-card .pn{font-weight:800;font-size:15px}
+.persona-card .pd{font-size:12px;color:var(--ink-3)}
+.persona-tags{display:flex;flex-wrap:wrap;gap:6px}
+.persona-tags span{background:var(--app-surface-2);padding:4px 9px;border-radius:20px;font-size:11px;font-weight:600;color:var(--ink-2)}
+.persona-angle{background:var(--accent-soft);color:var(--accent);border-radius:10px;padding:10px 12px;font-size:12px;font-weight:600;line-height:1.5}
+.angle-chip-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.angle-chip{padding:12px 16px;border-radius:12px;border:1px solid var(--app-border-strong);font-size:13px;font-weight:600;cursor:pointer}
+.angle-chip:hover{border-color:var(--accent)}
+.angle-chip.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+
+/* Generate progress view */
+.gen-wrap{max-width:560px;margin:60px auto;text-align:center}
+.gen-orb{width:84px;height:84px;border-radius:26px;background:linear-gradient(135deg,#5b4fe9,#8f7bff);margin:0 auto 26px;display:flex;align-items:center;justify-content:center;box-shadow:0 20px 50px -14px rgba(91,79,233,.55);animation:orbPulse 2s ease-in-out infinite}
+@keyframes orbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.gen-orb svg{width:38px;height:38px;color:#fff}
+.gen-wrap h1{font-size:22px;font-weight:800;margin-bottom:8px}
+.gen-wrap>p{color:var(--ink-2);font-size:13.5px;margin-bottom:34px}
+.gen-track{height:6px;background:var(--app-surface-2);border-radius:6px;overflow:hidden;margin-bottom:30px}
+.gen-fill{height:100%;background:linear-gradient(90deg,#5b4fe9,#8f7bff);border-radius:6px;width:0%;transition:width .5s var(--ease)}
+.gen-list{display:flex;flex-direction:column;gap:2px;text-align:left}
+
+/* Image library */
+.img-tabs{display:flex;gap:6px;margin-bottom:20px}
+.img-tabs button{padding:8px 15px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink-2)}
+.img-tabs button.active{background:var(--ink);color:#fff}
+.img-tabs button:not(.active):hover{background:var(--app-surface-2)}
+.imglib-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.imglib-item{position:relative;border-radius:13px;overflow:hidden;aspect-ratio:1;background:var(--app-surface-2)}
+.imglib-item img{width:100%;height:100%;object-fit:cover}
+.imglib-tag{position:absolute;top:8px;left:8px;background:rgba(255,255,255,.92);font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px}
+.imglib-actions{position:absolute;inset:0;background:rgba(15,14,10,.45);display:flex;align-items:center;justify-content:center;gap:8px;opacity:0;transition:opacity .15s}
+.imglib-item:hover .imglib-actions{opacity:1}
+.imglib-actions button{width:32px;height:32px;border-radius:9px;background:#fff;color:var(--ink);display:flex;align-items:center;justify-content:center}
+.imglib-actions button svg{width:14px;height:14px}
+
+/* History */
+.hist-list{display:flex;flex-direction:column}
+.hist-item{display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--app-border)}
+.hist-item:last-child{border-bottom:none}
+.hist-ic{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none}
+.hist-ic svg{width:16px;height:16px}
+.hist-body{flex:1;min-width:0}
+.hist-body .t{font-weight:700;font-size:13.5px}
+.hist-body .t2{font-size:12px;color:var(--ink-3);margin-top:2px}
+
+/* Share */
+.share-link-row{display:flex;gap:8px}
+.share-link-row input{flex:1;border:1px solid var(--app-border-strong);border-radius:10px;padding:11px 14px;font-size:13px;background:var(--app-surface-2);font-family:ui-monospace,monospace}
+.collab-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--app-border)}
+.collab-row:last-child{border-bottom:none}
+.collab-row img{width:32px;height:32px;border-radius:50%}
+.collab-row .n{font-size:13px;font-weight:700}
+.collab-row .e{font-size:11.5px;color:var(--ink-3)}
+.collab-row select{margin-left:auto;border:1px solid var(--app-border-strong);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;background:var(--app-surface-2)}
+
+/* Publish */
+.pub-stepper{display:flex;align-items:center;gap:0;margin-bottom:34px;max-width:520px}
+.pub-step{display:flex;align-items:center;gap:9px;flex:1}
+.pub-step .c{width:26px;height:26px;border-radius:50%;background:var(--app-surface-2);color:var(--ink-3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none}
+.pub-step.active .c{background:var(--accent);color:#fff}
+.pub-step.done .c{background:var(--success);color:#fff}
+.pub-step .lb{font-size:12px;font-weight:700;color:var(--ink-3);white-space:nowrap}
+.pub-step.active .lb,.pub-step.done .lb{color:var(--ink)}
+.pub-step .ln{flex:1;height:2px;background:var(--app-border-strong);margin:0 8px}
+.pub-step.done .ln{background:var(--success)}
+.pub-panel{max-width:520px}
+.publish-checklist{display:flex;flex-direction:column;gap:10px}
+.pcheck-item{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;background:var(--app-surface-2);font-size:13px;font-weight:600}
+.pcheck-item svg{width:15px;height:15px;color:var(--success)}
+.radio-card{display:flex;gap:12px;padding:14px;border:1.5px solid var(--app-border-strong);border-radius:12px;cursor:pointer}
+.radio-card.active{border-color:var(--accent);background:var(--accent-soft)}
+.radio-card .dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--app-border-strong);flex:none;margin-top:1px;position:relative}
+.radio-card.active .dot{border-color:var(--accent)}
+.radio-card.active .dot::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--accent)}
+.radio-card .rt{font-weight:700;font-size:13.5px}
+.radio-card .rd{font-size:12px;color:var(--ink-2);margin-top:2px}
+.warn-callout{display:flex;gap:10px;background:var(--warning-soft);color:#7a5200;padding:12px 14px;border-radius:10px;font-size:12.5px;font-weight:600;line-height:1.5}
+.warn-callout svg{width:16px;height:16px;flex:none;margin-top:1px}
+.success-check{width:78px;height:78px;border-radius:50%;background:var(--success-soft);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;animation:popIn .4s var(--ease)}
+.success-check svg{width:34px;height:34px;color:var(--success)}
+@keyframes popIn{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* Analytics */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+.stat-tile{padding:20px}
+.stat-tile .lbl{font-size:12px;color:var(--ink-3);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.stat-tile .val{font-size:26px;font-weight:800;font-family:'Fraunces',serif;margin:8px 0 6px}
+.stat-tile .delta{font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px}
+.stat-tile .delta svg{width:11px;height:11px}
+.delta.good{color:var(--viz-good)}
+.delta.bad{color:var(--danger)}
+.spark{margin-top:10px}
+.chart-card{padding:24px;margin-bottom:18px}
+.chart-card .ch-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.chart-card .ch-head h3{font-size:14.5px;font-weight:800}
+.chart-legend{display:flex;gap:14px;font-size:11.5px;color:var(--ink-2);font-weight:600}
+.chart-legend span{display:flex;align-items:center;gap:6px}
+.chart-legend i{width:9px;height:9px;border-radius:2px}
+.tooltip-box{position:absolute;background:#15140f;color:#fff;font-size:11.5px;font-weight:600;padding:6px 10px;border-radius:8px;pointer-events:none;opacity:0;transition:opacity .1s;white-space:nowrap;z-index:5}
+.two-col-charts{display:grid;grid-template-columns:1.3fr 1fr;gap:18px}
+.hbar-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.hbar-row .l{width:110px;font-size:12.5px;font-weight:600;color:var(--ink-2);flex:none}
+.hbar-track{flex:1;height:20px;border-radius:5px;background:var(--app-surface-2);overflow:hidden}
+.hbar-fill{height:100%;border-radius:5px;background:var(--viz-1)}
+.hbar-row .v{width:38px;font-size:12px;font-weight:700;text-align:right}
+.donut-wrap{display:flex;align-items:center;gap:20px}
+.donut-legend{display:flex;flex-direction:column;gap:9px}
+.donut-legend .r{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.donut-legend i{width:9px;height:9px;border-radius:2px;flex:none}
+.donut-legend .lv{font-weight:700;margin-left:auto;padding-left:16px}
+
+@media(max-width:1100px){.lib-grid,.persona-grid,.stat-grid{grid-template-columns:repeat(2,1fr)}.two-col-charts{grid-template-columns:1fr}}
+@media(max-width:820px){.sf-hide-mobile{display:none}}
+</style>
+</head>
+<body>
+<div id="appShell">
+
+  <!-- ============ LEFT RAIL ============ -->
+  <nav class="rail" id="rail">
+    <div class="rail-logo">J</div>
+    <div class="rail-group">
+      <button class="rail-btn active" data-view="editor" data-tip="Editor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+        <span>Editor</span>
+      </button>
+      <button class="rail-btn" data-view="analyze" data-tip="Product Analysis">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span>Analyze</span>
+      </button>
+      <button class="rail-btn" data-view="persona" data-tip="Buyer Persona">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Persona</span>
+      </button>
+      <button class="rail-btn" data-view="generate" data-tip="AI Generation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>
+        <span>Generate</span>
+      </button>
+      <button class="rail-btn" data-view="images" data-tip="Image Library">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        <span>Images</span>
+      </button>
+      <button class="rail-btn" data-view="history" data-tip="History">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/></svg>
+        <span>History</span>
+      </button>
+      <button class="rail-btn" data-view="analytics" data-tip="Analytics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
+        <span>Analytics</span>
+      </button>
+    </div>
+    <div class="rail-spacer"></div>
+    <div class="rail-group">
+      <button class="rail-btn" id="designRailBtn" data-tip="Design">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.4-.3-.4-.5-.9-.5-1.4 0-1.1.9-2 2-2h2.4c2.3 0 4.1-1.8 4.1-4.1C21.5 6 17.2 2 12 2z"/></svg>
+        <span>Design</span>
+      </button>
+    </div>
+  </nav>
+  <div class="rail-tip" id="railTip"></div>
+
+  <!-- ============ MAIN COLUMN ============ -->
+  <div class="main-col">
+
+    <!-- topbar (editor only) -->
+    <header class="topbar" id="topbar">
+      <div class="proj-name">Jenni Travel Co. <span class="dot"></span> <span style="font-weight:500;color:var(--ink-3)">Home theme</span></div>
+      <div class="tb-divider"></div>
+      <div class="tb-group">
+        <button class="icon-btn" id="undoBtn" title="Undo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+        </button>
+        <button class="icon-btn" id="redoBtn" title="Redo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg>
+        </button>
+      </div>
+      <div class="tb-divider"></div>
+      <div class="device-switch" id="deviceSwitch">
+        <button class="active" data-device="desktop" title="Desktop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></button>
+        <button data-device="tablet" title="Tablet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M12 18h.01"/></svg></button>
+        <button data-device="mobile" title="Mobile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 18h.01"/></svg></button>
+      </div>
+      <div class="tb-divider"></div>
+      <div class="save-status" id="saveStatus"><span class="pulse"></span><span id="saveStatusText">Saved</span></div>
+      <div class="tb-right">
+        <button class="btn btn-ghost btn-sm" id="shareTopBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+          Share
+        </button>
+        <button class="btn btn-accent btn-sm" id="publishTopBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg>
+          Publish
+        </button>
+      </div>
+    </header>
+
+    <div class="view-container" id="viewContainer">
+
+      <!-- ============ EDITOR VIEW ============ -->
+      <section class="view active" id="view-editor">
+        <div class="editor-shell">
+          <div class="canvas-wrap" id="canvasWrap" data-device="desktop">
+            <div class="device-frame" id="deviceFrame" data-device="desktop">
+              <div class="device-chrome"><div class="notch"></div></div>
+              <div id="storefront"></div>
+            </div>
+          </div>
+          <aside class="side-panel" id="sidePanel">
+            <div class="sp-head" id="spHead"></div>
+            <div class="sp-body" id="spBody"></div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============ OTHER VIEWS (populated below) ============ -->
+      <section class="view" id="view-analyze"></section>
+      <section class="view" id="view-persona"></section>
+      <section class="view" id="view-generate"></section>
+      <section class="view" id="view-images"></section>
+      <section class="view" id="view-history"></section>
+      <section class="view" id="view-analytics"></section>
+
+    </div>
+  </div>
+</div>
+
+<!-- floating text toolbar -->
+<div class="float-toolbar" id="floatToolbar"></div>
+
+<!-- popovers -->
+<div class="popover w-ai" id="aiPopover"></div>
+<div class="popover w-color" id="colorPopover"></div>
+<div class="popover w-image" id="imagePopover"></div>
+
+<!-- modals -->
+<div class="modal-backdrop" id="sectionLibModal"><div class="modal" id="sectionLibModalInner"></div></div>
+<div class="modal-backdrop" id="imageGenModal"><div class="modal" id="imageGenModalInner"></div></div>
+<div class="modal-backdrop" id="imagePickModal"><div class="modal" id="imagePickModalInner"></div></div>
+<div class="modal-backdrop" id="imageEditModal"><div class="modal sm" id="imageEditModalInner"></div></div>
+<div class="modal-backdrop" id="repositionModal"><div class="modal sm" id="repositionModalInner"></div></div>
+<div class="modal-backdrop" id="publishModal"><div class="modal sm" id="publishModalInner"></div></div>
+<div class="modal-backdrop" id="shareModal"><div class="modal sm" id="shareModalInner"></div></div>
+<div class="modal-backdrop" id="confirmModal"><div class="modal sm" id="confirmModalInner"></div></div>
+
+<!-- toasts -->
+<div id="toasts"></div>
+
+<script>
+'use strict';
+/* ============================================================
+   IMAGE POOLS
+   ============================================================ */
+const IMG = (id,w,h)=>`https://images.unsplash.com/photo-${id}?w=${w}&q=78&auto=format&fit=crop${h?`&h=${h}`:''}`;
+const POOL = {
+  hero:'1553062407-98eeb64c6a62',
+  product:['1553062407-98eeb64c6a62','1591561954557-26941169b49e','1553440569-bcc63803a83d','1566150905458-1bf1fc113f0d'],
+  lifestyle:['1436491865332-7a61a109cc05','1571401835393-8c5f35328320','1465101162946-4377e57745c3','1491637639811-60e2756cc1c7','1500530855697-b586d89ba3ee','1521335629791-ce4aec67dd15'],
+  gallery:['1524758631624-e2822e304c36','1522199755839-a2bacb67c546','1502680390469-be75c86b636f','1441984904996-e0b6ba687e04','1499591934245-40b55745b905','1530268729831-4b0b9e170218','1520975954732-35dd22299614','1487222477894-8943e31ef7b2'],
+  misc:['1509631179647-0177331693ae','1503602642458-232111445657','1449824913935-59a10b8d2000','1517841905240-472988babdf9','1607522370275-f14206abe5d3','1548036328-c9fa89d128fa','1585386959984-a4155224a1ad']
+};
+const ALL_IMGS = [POOL.hero,...POOL.product,...POOL.lifestyle,...POOL.gallery,...POOL.misc];
+const AVATAR = n=>`https://i.pravatar.cc/150?img=${n}`;
+
+/* ============================================================
+   STORE STATE
+   ============================================================ */
+function defaultSections(){
+  return [
+    {id:'announcement',type:'announcement',text:'Free shipping on orders over $75 · Lifetime warranty on every bag'},
+    {id:'header',type:'header',logo:'JENNI',nav:['Shop','Bags','About','Journal']},
+    {id:'hero',type:'hero',
+      heading:'Travel Light. Arrive Ready.',
+      sub:'The Jenni Travel Bag is thoughtfully engineered from full-grain leather to carry everything you need — and nothing you don’t.',
+      cta:'Shop the Jenni Bag',
+      image:IMG(POOL.hero,1200,1400)},
+    {id:'features',type:'features',
+      eyebrow:'The Jenni Bag',
+      heading:'Designed for the Way You Actually Travel',
+      sub:'Every detail earns its place — nothing extra, nothing missing.',
+      items:[
+        {icon:'bag',title:'20L of Smart Storage',desc:'A dedicated laptop sleeve, quick-access pocket, and expandable base.'},
+        {icon:'leaf',title:'Full-Grain Leather',desc:'Sourced from a family-run tannery, built to age beautifully for decades.'},
+        {icon:'plane',title:'Airport-Ready',desc:'Slides onto your suitcase handle and clears security in seconds.'},
+        {icon:'shield',title:'Lifetime Warranty',desc:'We repair or replace it — no questions, no receipts, no expiration.'}
+      ],
+      product:{
+        name:'Jenni Travel Bag',
+        price:'$89',
+        rating:'4.9',
+        reviews:'2,148',
+        colors:['#3a2b22','#8a7460','#21201b'],
+        images:[IMG(POOL.product[0],700,700),IMG(POOL.product[1],700,700),IMG(POOL.product[2],700,700),IMG(POOL.product[3],700,700)]
+      }},
+    {id:'benefits',type:'benefits',
+      eyebrow:'Why Jenni',
+      heading:'Small Details. Bigger Trips.',
+      sub:'',
+      items:[
+        {title:'Ethically Made',desc:'Handcrafted in small batches by artisans paid fair-trade wages.',img:IMG(POOL.lifestyle[0],700,500)},
+        {title:'Weatherproof Lining',desc:'A waterproof canvas interior keeps your gear dry, rain or shine.',img:IMG(POOL.lifestyle[1],700,500)},
+        {title:'Carry-On Approved',desc:'Sized to fit every major airline’s carry-on requirements.',img:IMG(POOL.lifestyle[2],700,500)}
+      ]},
+    {id:'reviews',type:'reviews',
+      eyebrow:'Reviews',
+      heading:'Loved by 12,000+ Travelers',
+      sub:'',
+      items:[
+        {name:'Avery M.',role:'Verified Buyer',quote:'I’ve used this bag on 40+ flights. It still looks brand new — the leather just keeps getting better.',avatar:AVATAR(12)},
+        {name:'Priya K.',role:'Verified Buyer',quote:'Finally a travel bag that doesn’t scream “backpack.” Elegant, functional, and endlessly complimented.',avatar:AVATAR(47)},
+        {name:'Marcus T.',role:'Verified Buyer',quote:'The laptop sleeve alone is worth it. Zero scratches after a year of weekly travel.',avatar:AVATAR(33)}
+      ]},
+    {id:'faq',type:'faq',
+      eyebrow:'FAQ',
+      heading:'Questions, Answered',
+      sub:'',
+      items:[
+        {q:'What’s the return policy?',a:'Free returns within 30 days, no questions asked. We’ll cover the shipping label.'},
+        {q:'Is it carry-on compliant?',a:'Yes — the Jenni Bag fits under most airline seats and in overhead bins on every major carrier.'},
+        {q:'How long does shipping take?',a:'3–5 business days within the US, and 7–14 business days internationally.'},
+        {q:'What’s covered under warranty?',a:'Every Jenni Bag ships with a lifetime warranty against manufacturing defects — free repair or replacement.'}
+      ]},
+    {id:'newsletter',type:'newsletter',
+      heading:'Get 10% Off Your First Order',
+      sub:'Join 50,000+ travelers on our list for early access and travel tips.',
+      cta:'Subscribe'},
+    {id:'footer',type:'footer'}
+  ];
+}
+let storeState = { sections: defaultSections() };
+let designTokens = {
+  primary:'#c1502e', secondary:'#21201b', bg:'#faf7f2', surface:'#ffffff', ink:'#211f1a',
+  headingFont:"'Fraunces',serif", bodyFont:"'Inter',sans-serif", headingWeight:'600',
+  radius:'10', btnStyle:'rounded', imgRadius:'14', shadow:'on', spacing:'1', baseSize:'16'
+};
+const INITIAL_SNAPSHOT = deepClone({sections:storeState.sections, design:designTokens});
+
+function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+function getPath(obj, path){ return path.split('.').reduce((o,k)=>o&&o[k], obj); }
+function setPath(obj, path, val){
+  const parts = path.split('.'); const last = parts.pop();
+  const target = parts.reduce((o,k)=>o[k], obj);
+  target[last] = val;
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   ICONS
+   ============================================================ */
+const ICONS = {
+  bag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>',
+  leaf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13V7a1 1 0 0 1 1-1h6a7 7 0 0 1 7 7 7 7 0 0 1-7 7z"/><path d="M4 13c4-1 8-3 11-7"/></svg>',
+  plane:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l19-9-7 19-3-8-9-2z"/></svg>',
+  shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+  truck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="7" width="14" height="10"/><path d="M15 10h4l3 3v4h-7z"/><circle cx="6" cy="19" r="2"/><circle cx="17.5" cy="19" r="2"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>'
+};
+function stars(n){ const full=Math.round(n); return '★★★★★☆☆☆☆☆'.slice(5-full,10-full).padEnd(5,'☆'); }
+function starRow(n){ let s=''; for(let i=1;i<=5;i++) s+= i<=Math.round(n)?'★':'☆'; return s; }
+
+/* ============================================================
+   SECTION RENDERERS -> return inner HTML for a .sf-section wrapper
+   ============================================================ */
+const SEC_LABELS = {announcement:'Announcement Bar',header:'Header',hero:'Hero',features:'Features & Product',
+  benefits:'Benefits',reviews:'Reviews',testimonials:'Testimonials',faq:'FAQ',newsletter:'Newsletter',footer:'Footer',
+  howitworks:'How It Works',comparison:'Comparison',countdown:'Countdown',gallery:'Gallery',banner:'Banner',custom:'AI Section'};
+
+function ed(path, cls, tag='span'){ return {open:`<${tag} class="${cls||''}" data-editable data-edit="${path}">`, close:`</${tag}>`}; }
+function E(path, content, cls, tag='span'){ const e=ed(path,cls,tag); return `${e.open}${content}${e.close}`; }
+
+function renderSection(sec, idx){
+  let body = '';
+  switch(sec.type){
+    case 'announcement': body = renderAnnouncement(sec, idx); break;
+    case 'header': body = renderHeader(sec, idx); break;
+    case 'hero': body = renderHero(sec, idx); break;
+    case 'features': body = renderFeatures(sec, idx); break;
+    case 'benefits': body = renderBenefits(sec, idx); break;
+    case 'reviews': case 'testimonials': body = renderReviews(sec, idx); break;
+    case 'faq': body = renderFaq(sec, idx); break;
+    case 'newsletter': body = renderNewsletter(sec, idx); break;
+    case 'footer': body = renderFooter(sec, idx); break;
+    case 'howitworks': body = renderHowItWorks(sec, idx); break;
+    case 'comparison': body = renderComparison(sec, idx); break;
+    case 'countdown': body = renderCountdown(sec, idx); break;
+    case 'gallery': body = renderGallery(sec, idx); break;
+    case 'banner': body = renderBanner(sec, idx); break;
+    case 'custom': body = renderCustom(sec, idx); break;
+    default: body = '';
+  }
+  const bgMap = {surface:'var(--s-surface)', secondary:'var(--s-secondary)', white:'#ffffff'};
+  const styleAttr = sec.styleBg && bgMap[sec.styleBg] ? ` style="background:${bgMap[sec.styleBg]}"` : '';
+  const hideCls = sec.hideMobile ? ' sf-hide-mobile' : '';
+  return `<div class="sf-section${hideCls}" data-section-idx="${idx}" data-section-id="${sec.id}"${styleAttr}>
+    <span class="sf-label">${SEC_LABELS[sec.type]||sec.type}</span>
+    ${sectionControlsHTML()}
+    ${body}
+  </div>`;
+}
+
+function sectionControlsHTML(){
+  return `<div class="sec-ctrls">
+    <button data-act="edit" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+    <button data-act="ai" title="AI"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg></button>
+    <button data-act="settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.32.44.55.8.6.36.05.7-.03 1-.24"/></svg></button>
+    <div class="sep"></div>
+    <button data-act="up" title="Move up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+    <button data-act="down" title="Move down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg></button>
+    <button data-act="dup" title="Duplicate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button>
+    <button data-act="del" class="danger" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>
+  </div>`;
+}
+
+function imgBlock(path, src, extraClass, hint){
+  return `<div class="${extraClass||''}" data-image data-edit="${path}">
+    <img src="${src}" alt="">
+    <span class="img-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>${hint||'Edit image'}</span>
+  </div>`;
+}
+</script>
+<script>
+'use strict';
+function renderAnnouncement(sec, i){
+  return `<div class="sf-announce">${E(`sections.${i}.text`, sec.text)}</div>`;
+}
+
+function renderHeader(sec, i){
+  return `<div class="sf-header">
+    <div class="sf-logo">${E(`sections.${i}.logo`, sec.logo)}</div>
+    <nav class="sf-nav">${sec.nav.map(n=>`<a href="#">${n}</a>`).join('')}</nav>
+    <div class="sf-header-icons">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+      <span class="sf-cart-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg><b>1</b></span>
+    </div>
+  </div>`;
+}
+
+function renderHero(sec, i){
+  return `<div class="sf-hero">
+    <div class="sf-hero-copy">
+      ${E(`sections.${i}.heading`, sec.heading, 'sf-h', 'h1')}
+      ${E(`sections.${i}.sub`, sec.sub, 'sf-p', 'p')}
+      <div class="sf-hero-cta">
+        <button class="sf-btn" data-editable data-edit="sections.${i}.cta" data-btn="1">${sec.cta}</button>
+        <div class="watch"><span class="pc"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span> Watch the Story</div>
+      </div>
+    </div>
+    <div class="sf-hero-img">
+      ${imgBlock(`sections.${i}.image`, sec.image, '', 'Change hero image')}
+      <div class="sf-hero-price-card"><div><div class="p">$89</div><div class="stars">${starRow(5)} <span style="color:var(--s-ink-2);font-weight:600">4.9</span></div></div></div>
+    </div>
+  </div>`;
+}
+
+function renderFeatures(sec, i){
+  const p = sec.product;
+  return `<div class="sf-sec-pad">
+    <div class="sf-sec-head">
+      <div class="sf-eyebrow">${E(`sections.${i}.eyebrow`, sec.eyebrow)}</div>
+      ${E(`sections.${i}.heading`, sec.heading, 'sf-h', 'h2')}
+      ${E(`sections.${i}.sub`, sec.sub, 'sf-p', 'p')}
+    </div>
+    <div class="sf-feat-grid">
+      ${sec.items.map((it,fi)=>`<div class="sf-feat-card">
+        <div class="sf-feat-icon">${ICONS[it.icon]||ICONS.bag}</div>
+        ${E(`sections.${i}.items.${fi}.title`, it.title, 'ft', 'div')}
+        ${E(`sections.${i}.items.${fi}.desc`, it.desc, 'fd', 'div')}
+      </div>`).join('')}
+    </div>
+    <div class="sf-product">
+      <div class="sf-product-gallery">
+        <div class="sf-product-thumbs">
+          ${p.images.map((im,ii)=>`<img src="${im}" class="${ii===0?'active':''}">`).join('')}
+        </div>
+        ${imgBlock(`sections.${i}.product.images.0`, p.images[0], 'sf-product-main', 'Change product photo')}
+      </div>
+      <div class="sf-product-info">
+        ${E(`sections.${i}.product.name`, p.name, 'name', 'div')}
+        <div class="sf-rating"><span class="stars">${starRow(5)}</span> ${E(`sections.${i}.product.rating`,p.rating)} · ${E(`sections.${i}.product.reviews`,p.reviews)} reviews</div>
+        <div class="sf-price">${E(`sections.${i}.product.price`, p.price)}</div>
+        <div class="sf-colors">${p.colors.map((c,ci)=>`<span class="c ${ci===0?'active':''}" style="background:${c}"></span>`).join('')}</div>
+        <div class="sf-product-actions">
+          <button class="sf-btn" data-editable data-edit="add-to-cart">Add to Cart</button>
+          <button class="sf-btn outline" data-editable data-edit="buy-now">Buy Now</button>
+        </div>
+        <div class="sf-trust">
+          <span>${ICONS.truck}Free shipping</span>
+          <span>${ICONS.shield}Lifetime warranty</span>
+          <span>${ICONS.lock}Secure checkout</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderBenefits(sec, i){
+  return `<div class="sf-sec-pad" style="background:var(--s-surface)">
+    <div class="sf-sec-head">
+      <div class="sf-eyebrow">${E(`sections.${i}.eyebrow`, sec.eyebrow)}</div>
+      ${E(`sections.${i}.heading`, sec.heading, 'sf-h', 'h2')}
+    </div>
+    <div class="sf-benefit-grid">
+      ${sec.items.map((it,bi)=>`<div class="sf-benefit-card">
+        ${imgBlock(`sections.${i}.items.${bi}.img`, it.img, '', 'Change image')}
+        <div class="bc-body">
+          ${E(`sections.${i}.items.${bi}.title`, it.title, 'bt', 'div')}
+          ${E(`sections.${i}.items.${bi}.desc`, it.desc, 'bd', 'div')}
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderReviews(sec, i){
+  return `<div class="sf-sec-pad">
+    <div class="sf-sec-head">
+      <div class="sf-eyebrow">${E(`sections.${i}.eyebrow`, sec.eyebrow)}</div>
+      ${E(`sections.${i}.heading`, sec.heading, 'sf-h', 'h2')}
+    </div>
+    <div class="sf-review-grid">
+      ${sec.items.map((it,ri)=>`<div class="sf-review-card">
+        <div class="stars">${starRow(5)}</div>
+        ${E(`sections.${i}.items.${ri}.quote`, '“'+it.quote+'”', 'quote', 'div')}
+        <div class="sf-review-person"><img src="${it.avatar}"><div><div class="n">${E(`sections.${i}.items.${ri}.name`, it.name)}</div><div class="r">${it.role}</div></div></div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderFaq(sec, i){
+  return `<div class="sf-sec-pad" style="background:var(--s-surface)">
+    <div class="sf-sec-head">
+      <div class="sf-eyebrow">${E(`sections.${i}.eyebrow`, sec.eyebrow)}</div>
+      ${E(`sections.${i}.heading`, sec.heading, 'sf-h', 'h2')}
+    </div>
+    <div class="sf-faq-list">
+      ${sec.items.map((it,qi)=>`<div class="sf-faq-item" data-faq="${qi}">
+        <div class="sf-faq-q">${E(`sections.${i}.items.${qi}.q`, it.q)}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div>
+        <div class="sf-faq-a"><div class="sf-faq-a-in">${E(`sections.${i}.items.${qi}.a`, it.a)}</div></div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderNewsletter(sec, i){
+  return `<div class="sf-newsletter">
+    ${E(`sections.${i}.heading`, sec.heading, 'sf-h', 'h2')}
+    ${E(`sections.${i}.sub`, sec.sub, 'sf-p', 'p')}
+    <div class="sf-nl-form"><input type="email" placeholder="you@email.com" disabled><button data-editable data-edit="sections.${i}.cta">${sec.cta}</button></div>
+  </div>`;
+}
+
+function renderFooter(sec, i){
+  return `<div class="sf-footer">
+    <div class="sf-footer-grid">
+      <div class="fcol"><div class="flogo">JENNI</div><p style="font-size:12.5px;line-height:1.6;max-width:220px">Thoughtfully engineered travel goods, built to last a lifetime.</p></div>
+      <div class="fcol"><h5>Shop</h5><a href="#">Travel Bag</a><a href="#">Accessories</a><a href="#">Gift Cards</a></div>
+      <div class="fcol"><h5>Company</h5><a href="#">About</a><a href="#">Journal</a><a href="#">Careers</a></div>
+      <div class="fcol"><h5>Support</h5><a href="#">Contact</a><a href="#">Shipping</a><a href="#">Warranty</a></div>
+    </div>
+    <div class="sf-foot-bottom"><span>© 2026 Jenni Travel Co.</span><span>Privacy · Terms</span></div>
+  </div>`;
+}
+</script>
+<script>
+'use strict';
+function renderHowItWorks(sec, i){
+  return `<div class="sf-sec-pad" style="background:var(--s-surface)">
+    <div class="sf-sec-head"><div class="sf-eyebrow">${E(`sections.${i}.eyebrow`,sec.eyebrow)}</div>${E(`sections.${i}.heading`,sec.heading,'sf-h','h2')}</div>
+    <div class="sf-steps">
+      ${sec.items.map((it,si)=>`<div class="sf-step"><div class="sf-step-num">${si+1}</div>
+        ${E(`sections.${i}.items.${si}.title`, it.title, 'ft', 'div')}
+        ${E(`sections.${i}.items.${si}.desc`, it.desc, 'fd', 'div')}
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderComparison(sec, i){
+  return `<div class="sf-sec-pad">
+    <div class="sf-sec-head">${E(`sections.${i}.heading`,sec.heading,'sf-h','h2')}</div>
+    <div class="sf-compare">
+      <div class="sf-compare-row head"><div></div><div>Jenni</div><div>Ordinary Bags</div></div>
+      ${sec.rows.map((r,ri)=>`<div class="sf-compare-row">
+        <div>${E(`sections.${i}.rows.${ri}.label`, r.label)}</div>
+        <div class="yes">${ICONS.check}</div>
+        <div class="no">${r.them?ICONS.check:ICONS.x}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderCountdown(sec, i){
+  return `<div class="sf-countdown">
+    <div class="sf-eyebrow" style="color:#f0d9c9">${E(`sections.${i}.eyebrow`,sec.eyebrow)}</div>
+    ${E(`sections.${i}.heading`,sec.heading,'sf-h','h2')}
+    <div class="sf-cd-timer" data-countdown="${i}">
+      <div class="u"><div class="n" data-u="h">23</div><div class="l">Hours</div></div>
+      <div class="u"><div class="n" data-u="m">59</div><div class="l">Minutes</div></div>
+      <div class="u"><div class="n" data-u="s">42</div><div class="l">Seconds</div></div>
+    </div>
+    <button class="sf-btn" data-editable data-edit="sections.${i}.cta">${sec.cta}</button>
+  </div>`;
+}
+
+function renderGallery(sec, i){
+  return `<div class="sf-sec-pad" style="background:var(--s-surface)">
+    <div class="sf-sec-head">${E(`sections.${i}.heading`,sec.heading,'sf-h','h2')}</div>
+    <div class="sf-gallery-grid">
+      ${sec.items.map((im,gi)=>`<a class="${gi===0?'g0':''}">${imgBlock(`sections.${i}.items.${gi}`, im, '', 'Change')}</a>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderBanner(sec, i){
+  return `<div class="sf-banner">
+    ${imgBlock(`sections.${i}.image`, sec.image, '', 'Change banner image')}
+    <div class="sf-banner-in">
+      <div class="sf-eyebrow">${E(`sections.${i}.eyebrow`,sec.eyebrow)}</div>
+      ${E(`sections.${i}.heading`,sec.heading,'sf-h','h2')}
+      <button class="sf-btn" data-editable data-edit="sections.${i}.cta">${sec.cta}</button>
+    </div>
+  </div>`;
+}
+
+function renderCustom(sec, i){
+  return `<div class="sf-sec-pad">
+    <div class="sf-custom">
+      <div class="sf-eyebrow">${E(`sections.${i}.eyebrow`,sec.eyebrow)}</div>
+      ${E(`sections.${i}.heading`,sec.heading,'sf-h','h2')}
+      ${E(`sections.${i}.sub`,sec.sub,'sf-p','p')}
+      <button class="sf-btn" data-editable data-edit="sections.${i}.cta">${sec.cta}</button>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   MAIN RENDER
+   ============================================================ */
+function renderStorefront(){
+  const root = document.getElementById('storefront');
+  let html = addZoneHTML(0);
+  storeState.sections.forEach((sec, i)=>{
+    html += renderSection(sec, i);
+    html += addZoneHTML(i+1);
+  });
+  root.innerHTML = html;
+  applyDesignTokens();
+  bindFaqToggles();
+  startCountdowns();
+  if(typeof applyImgMaps==='function') applyImgMaps();
+  if(currentSelection) reapplySelectionClass();
+}
+
+function addZoneHTML(insertIdx){
+  return `<div class="add-zone" data-add-idx="${insertIdx}"><button class="add-zone-btn" data-add-idx="${insertIdx}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add section</button></div>`;
+}
+
+function bindFaqToggles(){
+  document.querySelectorAll('.sf-faq-q').forEach(q=>{
+    q.addEventListener('click', (e)=>{
+      if(e.target.closest('[contenteditable="true"]')) return;
+      q.parentElement.classList.toggle('open');
+    });
+  });
+}
+
+function startCountdowns(){
+  document.querySelectorAll('[data-countdown]').forEach(box=>{
+    let h=23,m=59,s=42;
+    const tick=()=>{
+      s--; if(s<0){s=59;m--;} if(m<0){m=59;h--;} if(h<0){h=23;m=59;s=59;}
+      box.querySelector('[data-u="h"]').textContent=String(h).padStart(2,'0');
+      box.querySelector('[data-u="m"]').textContent=String(m).padStart(2,'0');
+      box.querySelector('[data-u="s"]').textContent=String(s).padStart(2,'0');
+    };
+    if(box._timer) clearInterval(box._timer);
+    box._timer=setInterval(tick,1000);
+  });
+}
+
+function applyDesignTokens(){
+  const sf = document.getElementById('storefront');
+  const d = designTokens;
+  sf.style.setProperty('--s-primary', d.primary);
+  sf.style.setProperty('--s-secondary', d.secondary);
+  sf.style.setProperty('--s-bg', d.bg);
+  sf.style.setProperty('--s-surface', d.surface);
+  sf.style.setProperty('--s-ink', d.ink);
+  sf.style.setProperty('--s-heading-font', d.headingFont);
+  sf.style.setProperty('--s-body-font', d.bodyFont);
+  sf.style.setProperty('--s-heading-weight', d.headingWeight);
+  sf.style.setProperty('--s-radius', d.radius+'px');
+  sf.style.setProperty('--s-img-radius', d.imgRadius+'px');
+  sf.style.setProperty('--s-space', d.spacing);
+  sf.style.setProperty('--s-base-size', d.baseSize+'px');
+  sf.style.setProperty('--s-btn-radius', d.btnStyle==='pill'?'999px':d.btnStyle==='square'?'2px':'8px');
+  sf.style.setProperty('--s-shadow', d.shadow==='on' ? '0 1px 3px rgba(33,31,26,.08)' : 'none');
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   TOASTS
+   ============================================================ */
+function toast(msg, icon){
+  const box = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className='toast';
+  el.innerHTML = `${icon||'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg>'}<span>${msg}</span>`;
+  box.appendChild(el);
+  setTimeout(()=>{ el.classList.add('leave'); setTimeout(()=>el.remove(),220); }, 2600);
+}
+
+/* ============================================================
+   HISTORY / UNDO-REDO / CHANGE LOG
+   ============================================================ */
+let undoStack = [deepClone({sections:storeState.sections, design:designTokens})];
+let undoPos = 0;
+let changeLog = [
+  {label:'AI generated your store', icon:'gen', time:'3 hours ago'},
+  {label:'Design change: primary color', icon:'design', time:'2 hours ago'},
+  {label:'Section added: Reviews', icon:'section', time:'2 hours ago'},
+  {label:'Auto-saved', icon:'save', time:'58 minutes ago'},
+];
+
+function commitChange(label, icon){
+  undoPos++;
+  undoStack = undoStack.slice(0, undoPos);
+  undoStack.push(deepClone({sections:storeState.sections, design:designTokens}));
+  changeLog.unshift({label, icon: icon||'edit', time:'Just now'});
+  updateUndoRedoButtons();
+  flashSaving();
+  if(document.getElementById('view-history').classList.contains('active')) renderHistoryView();
+}
+
+function applySnapshot(snap){
+  storeState.sections = deepClone(snap.sections);
+  designTokens = deepClone(snap.design);
+  clearSelection();
+  renderStorefront();
+  if(document.getElementById('sidePanel').dataset.mode==='design') openDesignPanel();
+}
+
+function undo(){
+  if(undoPos<=0) return;
+  undoPos--;
+  applySnapshot(undoStack[undoPos]);
+  updateUndoRedoButtons();
+  flashSaving();
+  toast('Undid last change');
+}
+function redo(){
+  if(undoPos>=undoStack.length-1) return;
+  undoPos++;
+  applySnapshot(undoStack[undoPos]);
+  updateUndoRedoButtons();
+  flashSaving();
+  toast('Redid change');
+}
+function updateUndoRedoButtons(){
+  document.getElementById('undoBtn').disabled = undoPos<=0;
+  document.getElementById('redoBtn').disabled = undoPos>=undoStack.length-1;
+}
+
+let saveTimer=null;
+function flashSaving(){
+  const dot = document.querySelector('#saveStatus .pulse');
+  const txt = document.getElementById('saveStatusText');
+  dot.classList.add('saving'); txt.textContent='Saving…';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{ dot.classList.remove('saving'); txt.textContent='Saved just now'; }, 700);
+}
+
+const HIST_ICON = {
+  gen:{bg:'var(--accent-soft)',color:'var(--accent)',svg:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/>'},
+  design:{bg:'#fdf3e0',color:'#c98500',svg:'<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.4-.3-.4-.5-.9-.5-1.4 0-1.1.9-2 2-2h2.4c2.3 0 4.1-1.8 4.1-4.1C21.5 6 17.2 2 12 2z"/>'},
+  section:{bg:'#e9f8e9',color:'#0ca30c',svg:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>'},
+  save:{bg:'var(--app-surface-2)',color:'var(--ink-3)',svg:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/>'},
+  edit:{bg:'var(--accent-soft)',color:'var(--accent)',svg:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>'},
+  publish:{bg:'#e9f8e9',color:'#0ca30c',svg:'<path d="M4 12l6 6L20 6"/>'}
+};
+</script>
+<script>
+'use strict';
+/* ============================================================
+   SELECTION + FLOATING TEXT TOOLBAR
+   ============================================================ */
+let currentSelection = null; // {el, path, kind:'text'|'image'|'section', sectionIdx}
+let currentDevice = 'desktop';
+
+function clearSelection(){
+  document.querySelectorAll('.is-selected').forEach(el=>el.classList.remove('is-selected'));
+  document.querySelectorAll('[contenteditable="true"]').forEach(el=>el.setAttribute('contenteditable','false'));
+  document.getElementById('floatToolbar').classList.remove('show');
+  closeSidePanel();
+  currentSelection = null;
+}
+
+function reapplySelectionClass(){
+  if(!currentSelection) return;
+  const sel = currentSelection;
+  const el = document.querySelector(`[data-edit="${CSS.escape(sel.path)}"]`);
+  if(el) el.classList.add('is-selected');
+}
+
+const canvasWrap = ()=>document.getElementById('canvasWrap');
+
+document.addEventListener('click', (e)=>{
+  const wrap = document.getElementById('canvasWrap');
+  if(!wrap.contains(e.target)){
+    if(!e.target.closest('.float-toolbar, .popover, .modal, .side-panel, .sec-ctrls')) {
+      clearSelection();
+    }
+    return;
+  }
+  const editEl = e.target.closest('[data-editable]');
+  const imgEl = e.target.closest('[data-image]');
+  const ctrlBtn = e.target.closest('.sec-ctrls button');
+  const secEl = e.target.closest('.sf-section');
+  const addBtn = e.target.closest('.add-zone-btn');
+
+  if(addBtn){ openSectionLibrary(parseInt(addBtn.dataset.addIdx)); return; }
+  if(ctrlBtn){ handleSectionControl(ctrlBtn.dataset.act, secEl); return; }
+  if(imgEl){ selectImage(imgEl); return; }
+  if(editEl){ selectText(editEl); return; }
+  if(secEl){ selectSection(secEl); return; }
+});
+
+function selectText(el){
+  if(currentSelection && currentSelection.kind==='text' && currentSelection.el===el) return;
+  clearSelection();
+  const path = el.dataset.edit;
+  currentSelection = {el, path, kind:'text'};
+  el.classList.add('is-selected');
+  el.setAttribute('contenteditable','true');
+  el.focus();
+  placeCaretAtEnd(el);
+  positionFloatToolbar(el);
+  renderFloatToolbar(el);
+  document.getElementById('floatToolbar').classList.add('show');
+}
+
+function placeCaretAtEnd(el){
+  const range = document.createRange(); range.selectNodeContents(el); range.collapse(false);
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+}
+
+function commitTextEdit(el){
+  const path = el.dataset.edit;
+  if(!path.startsWith('sections.')) return;
+  const newVal = el.innerText;
+  const old = getPath(storeState, path);
+  if(old===newVal) return;
+  setPath(storeState, path, newVal);
+  commitChange('Edited text', 'edit');
+}
+
+document.addEventListener('focusout', (e)=>{
+  const el = e.target.closest && e.target.closest('[data-editable][contenteditable="true"]');
+  if(el) commitTextEdit(el);
+}, true);
+
+function positionFloatToolbar(el){
+  const tb = document.getElementById('floatToolbar');
+  const r = el.getBoundingClientRect();
+  requestAnimationFrame(()=>{
+    const tbR = tb.getBoundingClientRect();
+    let top = r.top - tbR.height - 10;
+    let left = r.left + r.width/2 - tbR.width/2;
+    if(top < 8) top = r.bottom + 10;
+    left = Math.max(8, Math.min(left, window.innerWidth - tbR.width - 8));
+    tb.style.top = top+'px'; tb.style.left = left+'px';
+  });
+}
+
+function renderFloatToolbar(el){
+  const tb = document.getElementById('floatToolbar');
+  const isBtn = el.dataset.btn==='1';
+  tb.innerHTML = `
+    <button class="ft-btn ai" data-ft="rewrite" title="One-click AI rewrite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>Rewrite</button>
+    <button class="ft-btn" data-ft="aiedit" title="AI Edit with instructions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/></svg>AI Edit</button>
+    <div class="ft-sep"></div>
+    <button class="ft-btn" data-ft="align" title="Align"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h12M3 18h18"/></svg></button>
+    <button class="ft-btn" data-ft="size" title="Font size"><span style="font-weight:800;font-size:13px">A</span></button>
+    <button class="ft-btn ${el.classList.contains('fw-bold')?'active':''}" data-ft="bold" title="Bold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h7a3.5 3.5 0 0 1 0 7H6zM6 11h8a3.5 3.5 0 0 1 0 7H6z"/></svg></button>
+    <button class="ft-btn" data-ft="color" title="Color"><span style="width:13px;height:13px;border-radius:50%;background:${el.style.color||'currentColor'};border:1px solid rgba(255,255,255,.4);display:block"></span></button>
+    <div class="ft-sep"></div>
+    <button class="ft-btn" data-ft="more" title="More"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+  `;
+}
+
+document.getElementById('floatToolbar').addEventListener('mousedown', (e)=>{
+  // prevent losing contentEditable focus/selection when clicking toolbar buttons
+  if(e.target.closest('.ft-btn')) e.preventDefault();
+});
+
+document.getElementById('floatToolbar').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.ft-btn'); if(!btn || !currentSelection) return;
+  const el = currentSelection.el; const act = btn.dataset.ft;
+  if(act==='rewrite'){ doInlineAiRewrite(el, null); }
+  else if(act==='aiedit'){ openAiPopover(el, btn); }
+  else if(act==='align'){ cycleAlign(el); }
+  else if(act==='size'){ cycleFontSize(el); }
+  else if(act==='bold'){ el.classList.toggle('fw-bold'); el.style.fontWeight = el.classList.contains('fw-bold')?'800':''; commitChange('Formatted text','edit'); }
+  else if(act==='color'){ openColorPopover(el, btn); }
+  else if(act==='more'){ openMoreMenu(el, btn); }
+});
+
+function cycleAlign(el){
+  const order=['left','center','right']; let cur = el.style.textAlign || 'left';
+  let next = order[(order.indexOf(cur)+1)%order.length];
+  el.style.textAlign = next; el.style.display = 'block';
+  commitChange('Changed alignment','edit');
+  positionFloatToolbar(el);
+}
+function cycleFontSize(el){
+  const order=['','1.15em','1.4em','1.7em'];
+  let idx = order.indexOf(el.dataset.fsz||'');
+  idx = (idx+1)%order.length;
+  el.dataset.fsz = order[idx];
+  el.style.fontSize = order[idx] || '';
+  commitChange('Changed font size','edit');
+  positionFloatToolbar(el);
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   AI SIMULATION ENGINE
+   ============================================================ */
+const AI_POOL = {
+  heading:{
+    default:['Travel Light. Arrive Ready.','Built for the Journey Ahead.','Everything You Need. Nothing You Don’t.','Made for Movement.'],
+    premium:'Considered Travel, Refined.',
+    concise:'Travel, Simplified.',
+    playful:'Pack Smart. Wander Far. ✈️',
+    bold:'Your Next Trip Starts Here.',
+    warm:'A Bag That Feels Like Home, Anywhere.'
+  },
+  paragraph:{
+    default:['Thoughtfully engineered from full-grain leather to carry everything you need — and nothing you don’t.','Every stitch, strap, and pocket is designed around how people actually travel.','Crafted in small batches from materials built to outlast the trip — and the next hundred.','Considered details, honest materials, and a fit that works for real itineraries.'],
+    premium:'Hand-finished in full-grain leather, engineered with quiet, uncompromising precision.',
+    concise:'Full-grain leather. Smart storage. Built to last.',
+    playful:'Your new travel bestie — it holds everything, judges nothing.',
+    bold:'The last travel bag you’ll ever need to buy. Period.',
+    warm:'Designed with care, so every trip feels a little more like home.'
+  },
+  cta:{
+    default:['Shop the Jenni Bag','Discover the Bag','Explore Jenni','Get Yours Today'],
+    premium:'Shop the Collection',
+    concise:'Shop Now',
+    playful:'Let’s Pack! 🎒',
+    bold:'Claim Yours Now',
+    warm:'Find Your Jenni Bag'
+  }
+};
+let aiCycle = {};
+function categorize(el){
+  if(el.tagName==='BUTTON') return 'cta';
+  if(el.tagName==='H1'||el.tagName==='H2') return 'heading';
+  return 'paragraph';
+}
+function detectTone(instr){
+  if(!instr) return null;
+  const t = instr.toLowerCase();
+  if(/premium|luxur|elevat|refined|sophisticat/.test(t)) return 'premium';
+  if(/concise|short|shorter|tight|brief|punchy/.test(t)) return 'concise';
+  if(/fun|playful|casual|quirky|witty/.test(t)) return 'playful';
+  if(/bold|urgent|sale|exciting|energetic|strong/.test(t)) return 'bold';
+  if(/warm|friendly|invit|cozy|welcom/.test(t)) return 'warm';
+  return null;
+}
+function aiGenerate(el, instr){
+  const cat = categorize(el);
+  const pool = AI_POOL[cat] || AI_POOL.paragraph;
+  const tone = detectTone(instr);
+  const path = el.dataset.edit;
+  aiCycle[path] = (aiCycle[path]||0);
+  if(tone && pool[tone] && pool[tone] !== el.innerText.trim()){
+    return pool[tone];
+  }
+  const arr = pool.default;
+  aiCycle[path] = (aiCycle[path]+1) % arr.length;
+  let candidate = arr[aiCycle[path]];
+  if(candidate === el.innerText.trim()){ aiCycle[path]=(aiCycle[path]+1)%arr.length; candidate = arr[aiCycle[path]]; }
+  return candidate;
+}
+
+function doInlineAiRewrite(el, instr){
+  el.style.opacity='.35';
+  const tb = document.getElementById('floatToolbar');
+  tb.style.pointerEvents='none';
+  setTimeout(()=>{
+    const newText = aiGenerate(el, instr);
+    el.innerText = newText;
+    el.style.opacity='1';
+    tb.style.pointerEvents='auto';
+    const path = el.dataset.edit;
+    if(path.startsWith('sections.')) setPath(storeState, path, newText);
+    commitChange('AI rewrite', 'gen');
+    flashGreen(el);
+    toast('Updated with AI');
+    if(currentSelection && currentSelection.el===el) positionFloatToolbar(el);
+  }, 950);
+}
+function flashGreen(el){
+  el.style.transition='background .6s ease';
+  el.style.background='rgba(12,163,12,.14)';
+  setTimeout(()=>{ el.style.background=''; }, 700);
+}
+
+/* ---- AI Edit popover (element-level, custom instruction) ---- */
+function openAiPopover(el, anchorBtn){
+  const pop = document.getElementById('aiPopover');
+  const r = anchorBtn.getBoundingClientRect();
+  pop.innerHTML = `
+    <div class="pop-head"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg></span><span class="tt">AI Edit</span><button class="close" id="aiPopClose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+    <div class="pop-body">
+      <textarea id="aiPopInput" placeholder="e.g. Make this heading more premium and concise">${categorize(el)==='heading'?'Make this heading more premium and concise':''}</textarea>
+      <div class="pop-chips">
+        <button class="chip" data-p="premium">Premium</button>
+        <button class="chip" data-p="concise">Concise</button>
+        <button class="chip" data-p="playful">Playful</button>
+        <button class="chip" data-p="bold">Bold</button>
+        <button class="chip" data-p="warm">Warm</button>
+      </div>
+      <div id="aiPopAction"><button class="btn btn-accent btn-block" id="aiPopGenerate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>Generate</button></div>
+    </div>`;
+  pop.style.top = (r.bottom+8)+'px'; pop.style.left = Math.max(8, Math.min(r.left-90, window.innerWidth-336))+'px';
+  pop.classList.add('show');
+  document.getElementById('aiPopClose').onclick = ()=>pop.classList.remove('show');
+  pop.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    pop.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+    c.classList.add('active');
+    const ta = document.getElementById('aiPopInput');
+    ta.value = `Make this ${c.dataset.p==='premium'?'more premium':c.dataset.p==='concise'?'more concise':c.dataset.p==='playful'?'more playful':c.dataset.p==='bold'?'bolder':'warmer'}`;
+  });
+  document.getElementById('aiPopGenerate').onclick = ()=>{
+    const instr = document.getElementById('aiPopInput').value;
+    document.getElementById('aiPopAction').innerHTML = `<div class="ai-loading"><span class="spinner"></span>Generating with AI…</div>`;
+    setTimeout(()=>{
+      doInlineAiRewrite(el, instr);
+      pop.classList.remove('show');
+    }, 1000);
+  };
+}
+
+/* ---- Color popover ---- */
+const TEXT_COLORS = ['#211f1a','#c1502e','#6b6558','#ffffff','#0ca30c','#2a78d6','#e87ba4','#eda100','#21201b','#898781','#d03b3b','#5b4fe9'];
+function openColorPopover(el, anchorBtn){
+  const pop = document.getElementById('colorPopover');
+  const r = anchorBtn.getBoundingClientRect();
+  pop.innerHTML = `<div class="color-grid">${TEXT_COLORS.map(c=>`<span class="sw ${el.style.color===c?'active':''}" style="background:${c}" data-c="${c}"></span>`).join('')}</div>`;
+  pop.style.top=(r.bottom+8)+'px'; pop.style.left=Math.max(8,Math.min(r.left-80,window.innerWidth-216))+'px';
+  pop.classList.add('show');
+  pop.querySelectorAll('.sw').forEach(sw=>sw.onclick=()=>{
+    el.style.color = sw.dataset.c;
+    pop.classList.remove('show');
+    commitChange('Changed text color','edit');
+    renderFloatToolbar(el); positionFloatToolbar(el);
+    document.getElementById('floatToolbar').classList.add('show');
+  });
+}
+
+/* ---- More menu ---- */
+function openMoreMenu(el, anchorBtn){
+  const pop = document.getElementById('colorPopover');
+  const r = anchorBtn.getBoundingClientRect();
+  pop.innerHTML = `<div class="img-action-list">
+    <button class="img-action" id="moreClear"><span class="ic">${ICONS.x}</span>Clear formatting</button>
+    <button class="img-action" id="moreCopy"><span class="ic">${ICONS.check}</span>Copy text</button>
+  </div>`;
+  pop.style.top=(r.bottom+8)+'px'; pop.style.left=Math.max(8,Math.min(r.left-140,window.innerWidth-244))+'px';
+  pop.classList.add('show');
+  document.getElementById('moreClear').onclick=()=>{
+    el.style.color=''; el.style.fontWeight=''; el.style.textAlign=''; el.classList.remove('fw-bold'); el.dataset.fsz=''; el.style.fontSize='';
+    pop.classList.remove('show'); commitChange('Cleared formatting','edit'); renderFloatToolbar(el); positionFloatToolbar(el);
+  };
+  document.getElementById('moreCopy').onclick=()=>{
+    try{ navigator.clipboard.writeText(el.innerText); }catch(e){}
+    pop.classList.remove('show'); toast('Text copied');
+  };
+}
+
+document.addEventListener('mousedown', (e)=>{
+  ['aiPopover','colorPopover','imagePopover'].forEach(id=>{
+    const pop = document.getElementById(id);
+    if(pop.classList.contains('show') && !pop.contains(e.target) && !e.target.closest('.ft-btn') && !e.target.closest('.img-hint') && !e.target.closest('[data-image]')){
+      pop.classList.remove('show');
+    }
+  });
+});
+</script>
+<script>
+'use strict';
+/* ============================================================
+   MODAL HELPERS
+   ============================================================ */
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal-backdrop').forEach(bd=>{
+  bd.addEventListener('mousedown', (e)=>{ if(e.target===bd) closeModal(bd.id); });
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key==='Escape'){
+    document.querySelectorAll('.modal-backdrop.show').forEach(bd=>closeModal(bd.id));
+    document.getElementById('aiPopover').classList.remove('show');
+    document.getElementById('colorPopover').classList.remove('show');
+    document.getElementById('imagePopover').classList.remove('show');
+  }
+});
+
+/* ============================================================
+   IMAGE SELECTION + ACTION POPOVER
+   ============================================================ */
+let imgFilterMap = {};
+let imgPosMap = {};
+
+function selectImage(el){
+  clearSelection();
+  currentSelection = {el, path: el.dataset.edit, kind:'image'};
+  el.classList.add('is-selected');
+  openImagePopover(el);
+}
+
+function openImagePopover(el){
+  const pop = document.getElementById('imagePopover');
+  const r = el.getBoundingClientRect();
+  pop.innerHTML = `<div class="img-action-list">
+    <button class="img-action" data-ia="change"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>Change Image</button>
+    <button class="img-action" data-ia="generate"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg></span>Generate Image</button>
+    <button class="img-action" data-ia="edit"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></span>Edit Image</button>
+    <button class="img-action" data-ia="replace"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></span>Replace</button>
+    <button class="img-action" data-ia="reposition"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></span>Reposition</button>
+  </div>`;
+  pop.style.top=(r.top+r.height/2-100)+'px'; pop.style.left=Math.min(r.right+10, window.innerWidth-250)+'px';
+  if(r.right+250>window.innerWidth) pop.style.left=(r.left-246)+'px';
+  pop.classList.add('show');
+  pop.querySelectorAll('.img-action').forEach(b=>b.onclick=()=>{
+    pop.classList.remove('show');
+    const act = b.dataset.ia;
+    if(act==='change') openImagePickModal(el);
+    else if(act==='generate') openImageGenModal(el);
+    else if(act==='edit') openImageEditModal(el);
+    else if(act==='replace') openReplaceModal(el);
+    else if(act==='reposition') openRepositionModal(el);
+  });
+}
+
+function applyNewImage(el, src, label){
+  el.querySelector('img').src = src;
+  const path = el.dataset.edit;
+  if(path.startsWith('sections.')) setPath(storeState, path, src);
+  commitChange(label||'Changed image','edit');
+  flashGreen(el);
+  toast(label||'Image updated');
+}
+
+/* ---- Change Image (pick from library) ---- */
+function openImagePickModal(el){
+  const inner = document.getElementById('imagePickModalInner');
+  inner.innerHTML = `
+    <div class="modal-head"><div><div class="tt">Choose an Image</div><div class="st">Pick from your image library</div></div><button class="modal-close" data-close="imagePickModal">${ICONS.x}</button></div>
+    <div class="modal-body"><div class="lib-grid" style="grid-template-columns:repeat(5,1fr)">${ALL_IMGS.map(id=>`<div class="lib-card" data-src="${IMG(id,500,500)}"><div style="height:110px;overflow:hidden"><img src="${IMG(id,300,300)}" style="width:100%;height:100%;object-fit:cover"></div></div>`).join('')}</div></div>`;
+  bindModalClose(inner);
+  inner.querySelectorAll('.lib-card').forEach(c=>c.onclick=()=>{ applyNewImage(el, c.dataset.src, 'Image changed'); closeModal('imagePickModal'); });
+  openModal('imagePickModal');
+}
+
+/* ---- Generate Image (AI mock) ---- */
+function openImageGenModal(el){
+  const inner = document.getElementById('imageGenModalInner');
+  inner.innerHTML = `
+    <div class="modal-head"><div><div class="tt">Generate Image with AI</div><div class="st">Describe what you want to see</div></div><button class="modal-close" data-close="imageGenModal">${ICONS.x}</button></div>
+    <div class="modal-body">
+      <div class="lib-ai-row" style="margin-bottom:16px">
+        <textarea id="imgGenPrompt" placeholder="e.g. Leather travel bag on a wooden bench at a sunlit airport gate" style="background:var(--app-surface-2);color:var(--ink)"></textarea>
+        <button id="imgGenGo" class="btn btn-accent">Generate</button>
+      </div>
+      <div class="pop-chips" style="margin-bottom:18px" id="imgGenStyles">
+        <button class="chip active" data-s="Studio">Studio</button>
+        <button class="chip" data-s="Lifestyle">Lifestyle</button>
+        <button class="chip" data-s="Outdoor">Outdoor</button>
+        <button class="chip" data-s="Minimal">Minimal</button>
+      </div>
+      <div class="imggen-grid" id="imgGenResults"></div>
+    </div>`;
+  document.getElementById('imgGenStyles').querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    document.getElementById('imgGenStyles').querySelectorAll('.chip').forEach(x=>x.classList.remove('active')); c.classList.add('active');
+  });
+  bindModalClose(inner);
+  document.getElementById('imgGenGo').onclick = ()=>{
+    const grid = document.getElementById('imgGenResults');
+    grid.innerHTML = Array(4).fill('<div class="imggen-skel"></div>').join('');
+    setTimeout(()=>{
+      const picks = shuffle(ALL_IMGS.slice()).slice(0,4);
+      grid.innerHTML = picks.map(id=>`<div class="imggen-item" data-src="${IMG(id,600,800)}"><img src="${IMG(id,300,400)}"><span class="use-btn">Use this image</span></div>`).join('');
+      grid.querySelectorAll('.imggen-item').forEach(it=>it.onclick=()=>{
+        applyNewImage(el, it.dataset.src, 'Image generated with AI');
+        closeModal('imageGenModal');
+      });
+    }, 1300);
+  };
+  openModal('imageGenModal');
+}
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(((i*9301+49297)%233280)/233280*(i+1))||0; [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+
+/* ---- Edit Image (filters) ---- */
+function openImageEditModal(el){
+  const inner = document.getElementById('imageEditModalInner');
+  const path = el.dataset.edit;
+  const cur = imgFilterMap[path] || {b:100,c:100,s:100};
+  inner.innerHTML = `
+    <div class="modal-head"><div class="tt">Edit Image</div><button class="modal-close" data-close="imageEditModal">${ICONS.x}</button></div>
+    <div class="modal-body">
+      <div style="border-radius:12px;overflow:hidden;margin-bottom:18px"><img id="editPreviewImg" src="${el.querySelector('img').src}" style="width:100%;height:220px;object-fit:cover;filter:brightness(${cur.b}%) contrast(${cur.c}%) saturate(${cur.s}%)"></div>
+      <div class="slider-row" style="margin-bottom:14px"><div class="top"><span>Brightness</span><span id="bV">${cur.b}%</span></div><input type="range" id="bR" min="60" max="140" value="${cur.b}"></div>
+      <div class="slider-row" style="margin-bottom:14px"><div class="top"><span>Contrast</span><span id="cV">${cur.c}%</span></div><input type="range" id="cR" min="60" max="140" value="${cur.c}"></div>
+      <div class="slider-row"><div class="top"><span>Saturation</span><span id="sV">${cur.s}%</span></div><input type="range" id="sR" min="0" max="180" value="${cur.s}"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close="imageEditModal">Cancel</button><button class="btn btn-primary" id="applyImgEdit">Apply</button></div>`;
+  bindModalClose(inner);
+  const updatePreview = ()=>{
+    const b=inner.querySelector('#bR').value, c=inner.querySelector('#cR').value, s=inner.querySelector('#sR').value;
+    inner.querySelector('#bV').textContent=b+'%'; inner.querySelector('#cV').textContent=c+'%'; inner.querySelector('#sV').textContent=s+'%';
+    inner.querySelector('#editPreviewImg').style.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+  };
+  ['bR','cR','sR'].forEach(id=>inner.querySelector('#'+id).addEventListener('input', updatePreview));
+  document.getElementById('applyImgEdit').onclick = ()=>{
+    const b=inner.querySelector('#bR').value, c=inner.querySelector('#cR').value, s=inner.querySelector('#sR').value;
+    imgFilterMap[path] = {b,c,s};
+    el.querySelector('img').style.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+    commitChange('Edited image', 'edit');
+    toast('Image edits applied');
+    closeModal('imageEditModal');
+  };
+  openModal('imageEditModal');
+}
+
+/* ---- Replace (upload mock) ---- */
+function openReplaceModal(el){
+  const inner = document.getElementById('imageEditModalInner');
+  inner.innerHTML = `
+    <div class="modal-head"><div class="tt">Replace Image</div><button class="modal-close" data-close="imageEditModal">${ICONS.x}</button></div>
+    <div class="modal-body">
+      <div id="dropZone" style="border:2px dashed var(--app-border-strong);border-radius:14px;padding:40px 20px;text-align:center;cursor:pointer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:34px;height:34px;color:var(--ink-3);margin:0 auto 12px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+        <div style="font-weight:700;font-size:13.5px;margin-bottom:4px">Drop an image, or click to browse</div>
+        <div style="font-size:12px;color:var(--ink-3)">PNG, JPG up to 10MB</div>
+      </div>
+      <div id="uploadProgWrap" style="display:none;margin-top:16px">
+        <div class="gen-track"><div class="gen-fill" id="uploadFill"></div></div>
+        <div style="font-size:12px;color:var(--ink-2);margin-top:8px;font-weight:600" id="uploadTxt">Uploading…</div>
+      </div>
+    </div>`;
+  bindModalClose(inner);
+  inner.querySelector('#dropZone').onclick = ()=>{
+    inner.querySelector('#dropZone').style.display='none';
+    inner.querySelector('#uploadProgWrap').style.display='block';
+    const fill = inner.querySelector('#uploadFill');
+    let p=0; const t=setInterval(()=>{ p+=Math.random()*30+15; if(p>=100){p=100; clearInterval(t); inner.querySelector('#uploadTxt').textContent='Upload complete';
+        setTimeout(()=>{ const pick = shuffle(ALL_IMGS.slice())[0]; applyNewImage(el, IMG(pick,900,900), 'Image replaced'); closeModal('imageEditModal'); }, 450);
+      } fill.style.width=p+'%';
+    }, 220);
+  };
+  openModal('imageEditModal');
+}
+
+/* ---- Reposition (focal point) ---- */
+function openRepositionModal(el){
+  const inner = document.getElementById('repositionModalInner');
+  const path = el.dataset.edit;
+  let pos = imgPosMap[path] || {x:50,y:50};
+  inner.innerHTML = `
+    <div class="modal-head"><div><div class="tt">Reposition Image</div><div class="st">Drag the point to set the focal area</div></div><button class="modal-close" data-close="repositionModal">${ICONS.x}</button></div>
+    <div class="modal-body">
+      <div id="repoBox" style="position:relative;border-radius:12px;overflow:hidden;cursor:crosshair;user-select:none">
+        <img id="repoImg" src="${el.querySelector('img').src}" style="width:100%;height:260px;object-fit:cover;object-position:${pos.x}% ${pos.y}%">
+        <div id="repoDot" style="position:absolute;width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.3);left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);pointer-events:none"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close="repositionModal">Cancel</button><button class="btn btn-primary" id="applyRepo">Apply</button></div>`;
+  bindModalClose(inner);
+  const box = inner.querySelector('#repoBox'), dot = inner.querySelector('#repoDot'), img = inner.querySelector('#repoImg');
+  let dragging=false;
+  const setFromEvent = (e)=>{
+    const r = box.getBoundingClientRect();
+    const cx = (e.touches? e.touches[0].clientX : e.clientX) - r.left;
+    const cy = (e.touches? e.touches[0].clientY : e.clientY) - r.top;
+    pos.x = Math.max(0,Math.min(100, cx/r.width*100));
+    pos.y = Math.max(0,Math.min(100, cy/r.height*100));
+    dot.style.left=pos.x+'%'; dot.style.top=pos.y+'%';
+    img.style.objectPosition = pos.x+'% '+pos.y+'%';
+  };
+  box.addEventListener('mousedown', e=>{ dragging=true; setFromEvent(e); });
+  window.addEventListener('mousemove', e=>{ if(dragging) setFromEvent(e); });
+  window.addEventListener('mouseup', ()=>dragging=false);
+  document.getElementById('applyRepo').onclick = ()=>{
+    imgPosMap[path]=pos;
+    el.querySelector('img').style.objectPosition = pos.x+'% '+pos.y+'%';
+    commitChange('Repositioned image','edit');
+    toast('Image repositioned');
+    closeModal('repositionModal');
+  };
+  openModal('repositionModal');
+}
+
+function bindModalClose(inner){
+  inner.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
+}
+</script>
+<script>
+'use strict';
+function applyImgMaps(){
+  document.querySelectorAll('[data-image]').forEach(box=>{
+    const path = box.dataset.edit; const img = box.querySelector('img');
+    if(imgFilterMap[path]){ const f=imgFilterMap[path]; img.style.filter=`brightness(${f.b}%) contrast(${f.c}%) saturate(${f.s}%)`; }
+    if(imgPosMap[path]){ const p=imgPosMap[path]; img.style.objectPosition = p.x+'% '+p.y+'%'; }
+  });
+}
+
+/* ============================================================
+   SECTION SELECTION + CONTROLS
+   ============================================================ */
+function selectSection(secEl){
+  clearSelection();
+  const idx = parseInt(secEl.dataset.sectionIdx);
+  currentSelection = {el:secEl, kind:'section', sectionIdx: idx};
+  secEl.classList.add('is-selected');
+}
+
+function handleSectionControl(act, secEl){
+  const idx = parseInt(secEl.dataset.sectionIdx);
+  selectSection(secEl);
+  if(act==='edit') openSectionPanel(idx, 'content');
+  else if(act==='settings') openSectionPanel(idx, 'settings');
+  else if(act==='ai') openSectionAiPopover(idx, secEl);
+  else if(act==='up') moveSection(idx, -1);
+  else if(act==='down') moveSection(idx, 1);
+  else if(act==='dup') duplicateSection(idx);
+  else if(act==='del') confirmDeleteSection(idx);
+}
+
+function moveSection(idx, dir){
+  const arr = storeState.sections; const j = idx+dir;
+  if(j<0 || j>=arr.length) return;
+  [arr[idx], arr[j]] = [arr[j], arr[idx]];
+  commitChange('Reordered sections','section');
+  renderStorefront();
+  const el = document.querySelector(`[data-section-idx="${j}"]`);
+  if(el){ selectSection(el); flashSection(el); el.scrollIntoView({behavior:'smooth', block:'center'}); }
+}
+
+function duplicateSection(idx){
+  const clone = deepClone(storeState.sections[idx]);
+  clone.id = clone.id+'-copy-'+Math.floor(Math.random()*10000);
+  storeState.sections.splice(idx+1, 0, clone);
+  commitChange('Duplicated section','section');
+  renderStorefront();
+  const el = document.querySelector(`[data-section-idx="${idx+1}"]`);
+  if(el){ selectSection(el); flashSection(el); el.scrollIntoView({behavior:'smooth', block:'center'}); }
+  toast('Section duplicated');
+}
+
+function confirmDeleteSection(idx){
+  const sec = storeState.sections[idx];
+  showConfirm({
+    title:'Delete this section?',
+    body:`“${SEC_LABELS[sec.type]||sec.type}” will be removed from your store. You can undo this any time.`,
+    confirmLabel:'Delete', danger:true,
+    onConfirm:()=>{
+      storeState.sections.splice(idx,1);
+      commitChange('Deleted section','section');
+      clearSelection();
+      renderStorefront();
+      toast('Section deleted');
+    }
+  });
+}
+
+function flashSection(el){ el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'), 1000); }
+function reselectSectionByIdx(idx){
+  const el = document.querySelector(`[data-section-idx="${idx}"]`);
+  if(el){ el.classList.add('is-selected'); currentSelection = {el, kind:'section', sectionIdx: idx}; }
+}
+
+/* ---- generic confirm modal ---- */
+function showConfirm({title, body, confirmLabel, danger, onConfirm}){
+  const inner = document.getElementById('confirmModalInner');
+  inner.innerHTML = `
+    <div class="modal-body" style="padding-top:26px">
+      <div style="width:44px;height:44px;border-radius:12px;background:${danger?'var(--danger-soft)':'var(--accent-soft)'};color:${danger?'var(--danger)':'var(--accent)'};display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      </div>
+      <div style="font-weight:800;font-size:15.5px;margin-bottom:6px">${title}</div>
+      <div style="font-size:13px;color:var(--ink-2);line-height:1.6">${body}</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" id="confCancel">Cancel</button><button class="btn ${danger?'btn-danger':'btn-primary'}" id="confOk">${confirmLabel}</button></div>`;
+  document.getElementById('confCancel').onclick = ()=>closeModal('confirmModal');
+  document.getElementById('confOk').onclick = ()=>{ closeModal('confirmModal'); onConfirm(); };
+  openModal('confirmModal');
+}
+
+/* ---- whole-section AI rewrite ---- */
+const SECTION_AI_FIELDS = {
+  hero:['heading','sub','cta'], features:['heading','sub'], benefits:['heading'], reviews:['heading'],
+  testimonials:['heading'], faq:['heading'], newsletter:['heading','sub','cta'], howitworks:['heading'],
+  comparison:['heading'], countdown:['heading','cta'], gallery:['heading'], banner:['eyebrow','heading','cta'], custom:['heading','sub','cta']
+};
+function openSectionAiPopover(idx, secEl){
+  const sec = storeState.sections[idx];
+  const pop = document.getElementById('aiPopover');
+  const r = secEl.getBoundingClientRect();
+  pop.innerHTML = `
+    <div class="pop-head"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg></span><span class="tt">Rewrite Section with AI</span><button class="close" id="secAiClose">${ICONS.x}</button></div>
+    <div class="pop-body">
+      <textarea id="secAiInput" placeholder="e.g. Make this section punchier and highlight the lifetime warranty"></textarea>
+      <div class="pop-chips">
+        <button class="chip" data-p="premium">Premium</button><button class="chip" data-p="concise">Concise</button>
+        <button class="chip" data-p="playful">Playful</button><button class="chip" data-p="bold">Bold</button>
+      </div>
+      <div id="secAiAction"><button class="btn btn-accent btn-block" id="secAiGo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>Generate</button></div>
+    </div>`;
+  pop.style.top=Math.max(70,r.top+20)+'px'; pop.style.left=Math.min(r.right-330, window.innerWidth-336)+'px';
+  pop.classList.add('show');
+  document.getElementById('secAiClose').onclick = ()=>pop.classList.remove('show');
+  let toneSel=null;
+  pop.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{ pop.querySelectorAll('.chip').forEach(x=>x.classList.remove('active')); c.classList.add('active'); toneSel=c.dataset.p; document.getElementById('secAiInput').value=`Make this section more ${c.dataset.p}`; });
+  document.getElementById('secAiGo').onclick = ()=>{
+    const instr = document.getElementById('secAiInput').value;
+    document.getElementById('secAiAction').innerHTML = `<div class="ai-loading"><span class="spinner"></span>Rewriting section…</div>`;
+    setTimeout(()=>{
+      const fields = SECTION_AI_FIELDS[sec.type]||['heading'];
+      fields.forEach(f=>{
+        const fakeEl = document.createElement(f==='heading'?'H2':(f==='cta'?'BUTTON':'P'));
+        fakeEl.innerText = sec[f]||'';
+        sec[f] = aiGenerate(fakeEl, instr);
+      });
+      commitChange('AI rewrote section','gen');
+      renderStorefront();
+      const el = document.querySelector(`[data-section-idx="${idx}"]`);
+      if(el){ selectSection(el); flashSection(el); }
+      pop.classList.remove('show');
+      toast('Section rewritten with AI');
+    }, 1200);
+  };
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   RIGHT PANEL: SECTION CONTENT / SETTINGS
+   ============================================================ */
+function openSidePanel(){ document.getElementById('sidePanel').classList.add('open'); }
+function closeSidePanel(){ const sp=document.getElementById('sidePanel'); sp.classList.remove('open'); sp.dataset.mode=''; }
+
+function bindTextField(input, path, isTextarea){
+  input.addEventListener('input', ()=>{
+    setPath(storeState, path, input.value);
+    const el = document.querySelector(`[data-edit="${CSS.escape(path)}"]`);
+    if(el && el!==input) el.innerText = input.value;
+  });
+  input.addEventListener('change', ()=>commitChange('Edited content','edit'));
+}
+
+function openSectionPanel(idx, mode){
+  const sec = storeState.sections[idx];
+  const sp = document.getElementById('sidePanel');
+  sp.dataset.mode = mode==='settings' ? 'sectionSettings' : 'sectionContent';
+  sp.dataset.idx = idx;
+  document.getElementById('spHead').innerHTML = `
+    <span class="sp-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${mode==='settings'?'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82"/>':'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>'}</svg></span>
+    <div class="sp-head-text"><div class="t">${SEC_LABELS[sec.type]||sec.type}</div><div class="s">${mode==='settings'?'Section settings':'Edit content'}</div></div>
+    <button class="icon-btn" id="spClose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`;
+  document.getElementById('spClose').onclick = closeSidePanel;
+
+  const body = document.getElementById('spBody');
+  if(mode==='content') body.innerHTML = sectionContentFieldsHTML(sec, idx);
+  else body.innerHTML = sectionSettingsFieldsHTML(sec, idx);
+  openSidePanel();
+
+  if(mode==='content'){
+    body.querySelectorAll('[data-field-path]').forEach(inp=>bindTextField(inp, inp.dataset.fieldPath, inp.tagName==='TEXTAREA'));
+    const imgBtn = body.querySelector('#spChangeImg');
+    if(imgBtn) imgBtn.onclick = ()=>{ const target = document.querySelector(`[data-edit="${CSS.escape(imgBtn.dataset.path)}"]`); if(target) openImagePickModal(target); };
+  } else {
+    body.querySelectorAll('.swatch[data-bg]').forEach(sw=>sw.onclick=()=>{
+      body.querySelectorAll('.swatch[data-bg]').forEach(x=>x.classList.remove('active')); sw.classList.add('active');
+      sec.styleBg = sw.dataset.bg==='none'?null:sw.dataset.bg;
+      commitChange('Section background changed','design'); renderStorefront(); reselectSectionByIdx(idx);
+    });
+    const hideSw = body.querySelector('#hideMobileSwitch');
+    if(hideSw) hideSw.onclick = ()=>{ sec.hideMobile = !sec.hideMobile; hideSw.classList.toggle('on', sec.hideMobile); commitChange('Section visibility changed','design'); renderStorefront(); reselectSectionByIdx(idx); };
+    const delBtn = body.querySelector('#spDeleteSection');
+    if(delBtn) delBtn.onclick = ()=>confirmDeleteSection(idx);
+  }
+}
+
+function fieldRow(label, path, val, textarea){
+  return `<div class="field"><label>${label}</label>${textarea?`<textarea data-field-path="${path}">${val||''}</textarea>`:`<input type="text" data-field-path="${path}" value="${(val||'').replace(/"/g,'&quot;')}">`}</div>`;
+}
+
+function sectionContentFieldsHTML(sec, idx){
+  let html = `<div class="sp-section"><div class="sp-label">Content</div>`;
+  const p = s=>`sections.${idx}.${s}`;
+  if('eyebrow' in sec) html += fieldRow('Eyebrow', p('eyebrow'), sec.eyebrow);
+  if('heading' in sec) html += fieldRow('Heading', p('heading'), sec.heading, true);
+  if('sub' in sec) html += fieldRow('Subheading', p('sub'), sec.sub, true);
+  if('cta' in sec) html += fieldRow('Button text', p('cta'), sec.cta);
+  if(sec.type==='features'){
+    html += fieldRow('Product name', p('product.name'), sec.product.name);
+    html += fieldRow('Price', p('product.price'), sec.product.price);
+  }
+  html += `</div>`;
+  const imgPath = sec.type==='hero' ? p('image') : sec.type==='banner' ? p('image') : sec.type==='features' ? p('product.images.0') : null;
+  if(imgPath){
+    html += `<div class="sp-section"><div class="sp-label">Image</div><button class="btn btn-soft btn-block" id="spChangeImg" data-path="${imgPath}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>Change Image</button></div>`;
+  }
+  if(['features','benefits','reviews','faq','gallery','comparison','howitworks'].includes(sec.type)){
+    html += `<div class="sp-section"><div class="sp-label">Items</div><div style="font-size:12px;color:var(--ink-3);line-height:1.6;background:var(--app-surface-2);padding:10px 12px;border-radius:10px">Click any card, quote, or answer directly in the preview to edit it in place.</div></div>`;
+  }
+  return html;
+}
+
+function sectionSettingsFieldsHTML(sec, idx){
+  const cur = sec.styleBg || 'none';
+  return `
+  <div class="sp-section">
+    <div class="sp-label">Background</div>
+    <div class="swatch-row">
+      <span class="swatch ${cur==='none'?'active':''}" data-bg="none" style="background:repeating-linear-gradient(45deg,#eee,#eee 4px,#fff 4px,#fff 8px)" title="Default"></span>
+      <span class="swatch ${cur==='surface'?'active':''}" data-bg="surface" style="background:var(--s-surface,#fff)" title="Surface"></span>
+      <span class="swatch ${cur==='secondary'?'active':''}" data-bg="secondary" style="background:var(--s-secondary,#21201b)" title="Dark"></span>
+      <span class="swatch ${cur==='white'?'active':''}" data-bg="white" style="background:#fff" title="White"></span>
+    </div>
+  </div>
+  <div class="sp-section">
+    <div class="toggle-row"><div><div class="tt">Hide on mobile</div><div class="ts">Section won't render on small screens</div></div><div class="switch ${sec.hideMobile?'on':''}" id="hideMobileSwitch"></div></div>
+  </div>
+  <div class="sp-section" style="margin-top:8px;padding-top:16px;border-top:1px solid var(--app-border)">
+    <button class="btn btn-danger btn-block" id="spDeleteSection"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>Delete Section</button>
+  </div>`;
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   ADD SECTION: LIBRARY + FACTORY
+   ============================================================ */
+const BAR = (w,h,m)=>`<div class="bar" style="width:${w};height:${h};${m||''}"></div>`;
+const LIB_TYPES = [
+  {type:'hero', name:'Hero', thumb:`<div style="display:flex;gap:6px;width:100%;height:100%;align-items:stretch">${BAR('55%','100%','')}<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:5px">${BAR('90%','9px')}${BAR('65%','9px')}${BAR('45%','14px','margin-top:4px;border-radius:8px;background:#5b4fe9')}</div></div>`},
+  {type:'features', name:'Features', thumb:`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%">${Array(4).fill(`<div style="display:flex;flex-direction:column;gap:4px">${BAR('16px','16px','border-radius:5px')}${BAR('100%','6px')}${BAR('70%','6px')}</div>`).join('')}</div>`},
+  {type:'benefits', name:'Benefits', thumb:`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:100%">${Array(3).fill(`<div style="display:flex;flex-direction:column;gap:4px">${BAR('100%','40px')}${BAR('80%','6px')}</div>`).join('')}</div>`},
+  {type:'howitworks', name:'How It Works', thumb:`<div style="display:flex;justify-content:space-between;width:100%">${Array(3).fill(`<div style="display:flex;flex-direction:column;align-items:center;gap:5px"><div style="width:20px;height:20px;border-radius:50%;background:#c9c6f5"></div>${BAR('44px','6px')}</div>`).join('')}</div>`},
+  {type:'reviews', name:'Reviews', thumb:`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:100%">${Array(3).fill(`<div style="display:flex;flex-direction:column;gap:4px;border:1px solid #ddd;border-radius:6px;padding:6px">${BAR('60%','5px')}${BAR('100%','5px')}${BAR('80%','5px')}</div>`).join('')}</div>`},
+  {type:'testimonials', name:'Testimonials', thumb:`<div style="display:flex;flex-direction:column;gap:6px;width:100%;align-items:center"><div style="width:28px;height:28px;border-radius:50%;background:#c9c6f5"></div>${BAR('70%','7px')}${BAR('50%','6px')}</div>`},
+  {type:'faq', name:'FAQ', thumb:`<div style="display:flex;flex-direction:column;gap:6px;width:100%">${Array(4).fill(`<div style="display:flex;justify-content:space-between;border-bottom:1px solid #e6e4dd;padding-bottom:5px">${BAR('75%','7px')}${BAR('7px','7px','border-radius:50%')}</div>`).join('')}</div>`},
+  {type:'comparison', name:'Comparison', thumb:`<div style="display:flex;flex-direction:column;gap:5px;width:100%">${BAR('100%','12px','border-radius:4px;background:#a79cf0')}${Array(3).fill(BAR('100%','7px')).join('')}</div>`},
+  {type:'countdown', name:'Countdown', thumb:`<div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">${BAR('60%','7px')}<div style="display:flex;gap:5px">${Array(3).fill('<div style="width:16px;height:16px;border-radius:4px;background:#c9c6f5"></div>').join('')}</div></div>`},
+  {type:'gallery', name:'Gallery', thumb:`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;width:100%">${Array(4).fill('<div style="aspect-ratio:1;background:#c9c6f5;border-radius:3px"></div>').join('')}</div>`},
+  {type:'banner', name:'Banner', thumb:`<div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;width:100%;height:100%;background:#c9c6f5;border-radius:6px">${BAR('50%','8px','background:#fff')}${BAR('30%','8px','background:#fff')}</div>`},
+  {type:'newsletter', name:'Newsletter', thumb:`<div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">${BAR('60%','9px')}${BAR('40%','7px')}${BAR('55%','14px','border-radius:8px;background:#5b4fe9;margin-top:2px')}</div>`}
+];
+
+function newSectionContent(type){
+  const base = {id:type+'-'+Math.floor(Math.random()*100000), type};
+  switch(type){
+    case 'hero': return {...base, heading:'Your Next Great Trip Starts Here', sub:'A fresh hero section, ready for your story.', cta:'Shop Now', image:IMG(shuffle(POOL.lifestyle.slice())[0],1200,1400)};
+    case 'features': return {...base, eyebrow:'Features', heading:'Why Travelers Choose Jenni', sub:'Add the details that matter most to your customers.',
+      items:[{icon:'bag',title:'Feature One',desc:'Describe the benefit here.'},{icon:'leaf',title:'Feature Two',desc:'Describe the benefit here.'},{icon:'plane',title:'Feature Three',desc:'Describe the benefit here.'},{icon:'shield',title:'Feature Four',desc:'Describe the benefit here.'}],
+      product:{name:'Jenni Travel Bag',price:'$89',rating:'4.9',reviews:'2,148',colors:['#3a2b22','#8a7460','#21201b'],images:[IMG(shuffle(POOL.product.slice())[0],700,700)]}};
+    case 'benefits': return {...base, eyebrow:'Benefits', heading:'Small Details. Bigger Trips.', sub:'',
+      items:shuffle(POOL.lifestyle.slice()).slice(0,3).map((im,i)=>({title:'Benefit '+(i+1),desc:'Explain why this matters to your customer.',img:IMG(im,700,500)}))};
+    case 'howitworks': return {...base, eyebrow:'Process', heading:'How It Works',
+      items:[{title:'Choose Your Bag',desc:'Pick the size and color that fits your travel style.'},{title:'We Craft It',desc:'Each bag is hand-finished by our artisans.'},{title:'It Arrives',desc:'Free shipping, delivered in 3–5 business days.'}]};
+    case 'reviews': return {...base, eyebrow:'Reviews', heading:'What Travelers Are Saying', sub:'',
+      items:[{name:'Jordan P.',role:'Verified Buyer',quote:'Exceeded every expectation. Worth every dollar.',avatar:AVATAR(20)},{name:'Sam R.',role:'Verified Buyer',quote:'The craftsmanship is obvious the moment you hold it.',avatar:AVATAR(8)},{name:'Lena W.',role:'Verified Buyer',quote:'My go-to bag for every trip since day one.',avatar:AVATAR(15)}]};
+    case 'testimonials': return {...base, eyebrow:'Testimonials', heading:'Loved by Travelers Everywhere', sub:'',
+      items:[{name:'Chris D.',role:'Verified Buyer',quote:'Simply the best travel bag I’ve owned.',avatar:AVATAR(25)},{name:'Nina F.',role:'Verified Buyer',quote:'Compliments every single trip.',avatar:AVATAR(5)},{name:'Theo B.',role:'Verified Buyer',quote:'Built like it’ll outlive me.',avatar:AVATAR(60)}]};
+    case 'faq': return {...base, eyebrow:'FAQ', heading:'Questions, Answered', sub:'',
+      items:[{q:'Add your question here',a:'Add your answer here.'},{q:'Add your question here',a:'Add your answer here.'}]};
+    case 'comparison': return {...base, heading:'Jenni vs. Ordinary Bags', rows:[{label:'Full-grain leather',them:false},{label:'Lifetime warranty',them:false},{label:'Carry-on approved',them:true},{label:'Weatherproof lining',them:false}]};
+    case 'countdown': return {...base, eyebrow:'Limited Time', heading:'Summer Travel Sale Ends Soon', cta:'Shop the Sale'};
+    case 'gallery': return {...base, heading:'From the Road', items:shuffle(POOL.gallery.slice()).slice(0,4).map(im=>IMG(im,700,700))};
+    case 'banner': return {...base, eyebrow:'Limited Time', heading:'20% Off Your First Order', cta:'Shop the Sale', image:IMG(shuffle(POOL.misc.slice())[0],1400,700)};
+    case 'newsletter': return {...base, heading:'Stay In the Loop', sub:'Get early access to new drops and travel tips.', cta:'Subscribe'};
+    default: return {...base};
+  }
+}
+
+function openSectionLibrary(insertIdx){
+  const inner = document.getElementById('sectionLibModalInner');
+  inner.innerHTML = `
+    <div class="modal-head"><div><div class="tt">Add a Section</div><div class="st">Choose a layout, or generate one with AI</div></div><button class="modal-close" data-close="sectionLibModal">${ICONS.x}</button></div>
+    <div class="modal-body">
+      <div class="lib-ai-card">
+        <div class="tt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>Create Section with AI</div>
+        <div class="st">Describe the section you want — layout, content, and copy generated in seconds.</div>
+        <div class="lib-ai-row"><textarea id="libAiPrompt" placeholder="e.g. A bold countdown banner for our Black Friday travel sale"></textarea><button id="libAiGo">Generate</button></div>
+        <div id="libAiStatus"></div>
+      </div>
+      <div class="lib-grid">
+        ${LIB_TYPES.map(l=>`<div class="lib-card" data-type="${l.type}"><div class="lib-thumb">${l.thumb}</div><div class="lc-name">${l.name}</div></div>`).join('')}
+      </div>
+    </div>`;
+  bindModalClose(inner);
+  inner.querySelectorAll('.lib-card').forEach(c=>c.onclick=()=>{
+    insertSection(insertIdx, newSectionContent(c.dataset.type));
+    closeModal('sectionLibModal');
+  });
+  document.getElementById('libAiGo').onclick = ()=>{
+    const prompt = document.getElementById('libAiPrompt').value.trim();
+    if(!prompt){ toast('Describe the section first'); return; }
+    document.getElementById('libAiStatus').innerHTML = `<div class="ai-loading" style="color:rgba(255,255,255,.9);margin-top:10px"><span class="spinner" style="border-color:rgba(255,255,255,.3);border-top-color:#fff"></span>Generating your section…</div>`;
+    setTimeout(()=>{
+      const sec = generateAiSection(prompt);
+      insertSection(insertIdx, sec);
+      closeModal('sectionLibModal');
+    }, 1400);
+  };
+  openModal('sectionLibModal');
+}
+
+function generateAiSection(prompt){
+  const tone = detectTone(prompt) || 'default';
+  const isCountdown = /countdown|sale|deal|limited|urgen/i.test(prompt);
+  const isBanner = /banner|promo/i.test(prompt);
+  const type = isCountdown ? 'countdown' : isBanner ? 'banner' : 'custom';
+  const short = prompt.length>62 ? prompt.slice(0,60)+'…' : prompt;
+  const headingByTone = {
+    premium:'Considered Details, Elevated Travel', concise: short.charAt(0).toUpperCase()+short.slice(1),
+    playful:'Let’s Make This Trip One to Remember 🎒', bold:'Don’t Miss This — Shop Now', warm:'Made With You In Mind',
+    default: short.charAt(0).toUpperCase()+short.slice(1)
+  };
+  if(type==='countdown') return {...newSectionContent('countdown'), heading: headingByTone[tone]};
+  if(type==='banner') return {...newSectionContent('banner'), heading: headingByTone[tone]};
+  return {id:'custom-'+Math.floor(Math.random()*100000), type:'custom', eyebrow:'AI Generated',
+    heading: headingByTone[tone], sub:'Generated from your prompt — edit any line or ask AI to refine it further.', cta:'Learn More'};
+}
+
+function insertSection(idx, secObj){
+  storeState.sections.splice(idx, 0, secObj);
+  commitChange('Added section', 'section');
+  renderStorefront();
+  const el = document.querySelector(`[data-section-idx="${idx}"]`);
+  if(el){ el.scrollIntoView({behavior:'smooth', block:'center'}); flashSection(el); selectSection(el); }
+  toast('Section added');
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   GLOBAL DESIGN PANEL
+   ============================================================ */
+const FONT_OPTIONS = [
+  {v:"'Fraunces',serif", n:'Fraunces'}, {v:"'Playfair Display',serif", n:'Playfair Display'},
+  {v:"'Inter',sans-serif", n:'Inter'}, {v:"'Poppins',sans-serif", n:'Poppins'}, {v:"'DM Sans',sans-serif", n:'DM Sans'}
+];
+const PRESET_PALETTES = [
+  {name:'Terracotta', primary:'#c1502e', secondary:'#21201b', bg:'#faf7f2'},
+  {name:'Forest', primary:'#2f5233', secondary:'#1a1f16', bg:'#f6f5ef'},
+  {name:'Midnight', primary:'#5b4fe9', secondary:'#0f0e1a', bg:'#f6f5fb'},
+  {name:'Sand', primary:'#b8874a', secondary:'#2b241c', bg:'#faf6ee'},
+  {name:'Rose', primary:'#b8546b', secondary:'#241a1d', bg:'#fbf4f4'},
+  {name:'Slate', primary:'#3a6ea5', secondary:'#161c22', bg:'#f4f6f8'}
+];
+
+function openDesignPanel(){
+  goToView('editor');
+  clearSelection();
+  const sp = document.getElementById('sidePanel');
+  sp.dataset.mode = 'design';
+  document.getElementById('spHead').innerHTML = `
+    <span class="sp-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.4-.3-.4-.5-.9-.5-1.4 0-1.1.9-2 2-2h2.4c2.3 0 4.1-1.8 4.1-4.1C21.5 6 17.2 2 12 2z"/></svg></span>
+    <div class="sp-head-text"><div class="t">Design</div><div class="s">Applies to your whole store</div></div>
+    <button class="icon-btn" id="spClose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`;
+  document.getElementById('spClose').onclick = closeSidePanel;
+  document.getElementById('spBody').innerHTML = designAccordionHTML();
+  openSidePanel();
+  bindDesignPanel();
+}
+
+function designAccordionHTML(){
+  const d = designTokens;
+  const items = [
+    {key:'colors', label:'Colors', open:true, body:`
+      <div class="field"><label>Palettes</label><div class="swatch-row">${PRESET_PALETTES.map(p=>`<span class="swatch" data-preset="${p.name}" style="background:${p.primary}" title="${p.name}"></span>`).join('')}</div></div>
+      <div class="field"><label>Primary (buttons, accents)</label><div class="color-input-wrap"><input type="color" id="dcPrimary" value="${d.primary}"><span class="hex" id="dcPrimaryHex">${d.primary}</span></div></div>
+      <div class="field"><label>Secondary (dark sections)</label><div class="color-input-wrap"><input type="color" id="dcSecondary" value="${d.secondary}"><span class="hex" id="dcSecondaryHex">${d.secondary}</span></div></div>
+      <div class="field"><label>Background</label><div class="color-input-wrap"><input type="color" id="dcBg" value="${d.bg}"><span class="hex" id="dcBgHex">${d.bg}</span></div></div>`},
+    {key:'type', label:'Typography', body:`
+      <div class="field"><label>Heading font</label><select id="dcHFont">${FONT_OPTIONS.map(f=>`<option value="${f.v}" ${d.headingFont===f.v?'selected':''}>${f.n}</option>`).join('')}</select></div>
+      <div class="field"><label>Body font</label><select id="dcBFont">${FONT_OPTIONS.map(f=>`<option value="${f.v}" ${d.bodyFont===f.v?'selected':''}>${f.n}</option>`).join('')}</select></div>
+      <div class="field"><label>Heading weight</label><div class="seg" id="dcHWeight">
+        <button data-v="500" class="${d.headingWeight==='500'?'active':''}">Light</button>
+        <button data-v="600" class="${d.headingWeight==='600'?'active':''}">Medium</button>
+        <button data-v="700" class="${d.headingWeight==='700'?'active':''}">Bold</button></div></div>
+      <div class="slider-row"><div class="top"><span>Base text size</span><span id="dcBaseSizeV">${d.baseSize}px</span></div><input type="range" id="dcBaseSize" min="14" max="18" value="${d.baseSize}"></div>`},
+    {key:'buttons', label:'Buttons', body:`
+      <div class="field"><label>Style</label><div class="seg" id="dcBtnStyle">
+        <button data-v="rounded" class="${d.btnStyle==='rounded'?'active':''}">Rounded</button>
+        <button data-v="pill" class="${d.btnStyle==='pill'?'active':''}">Pill</button>
+        <button data-v="square" class="${d.btnStyle==='square'?'active':''}">Square</button></div></div>`},
+    {key:'cards', label:'Cards', body:`
+      <div class="toggle-row"><div><div class="tt">Card shadow</div><div class="ts">Soft elevation on product & review cards</div></div><div class="switch ${d.shadow==='on'?'on':''}" id="dcShadow"></div></div>
+      <div class="slider-row"><div class="top"><span>Corner radius</span><span id="dcRadiusV">${d.radius}px</span></div><input type="range" id="dcRadius" min="0" max="28" value="${d.radius}"></div>`},
+    {key:'images', label:'Images', body:`
+      <div class="slider-row"><div class="top"><span>Image radius</span><span id="dcImgRadiusV">${d.imgRadius}px</span></div><input type="range" id="dcImgRadius" min="0" max="32" value="${d.imgRadius}"></div>`},
+    {key:'spacing', label:'Spacing', body:`
+      <div class="slider-row"><div class="top"><span>Section spacing</span><span id="dcSpacingV">${Math.round(d.spacing*100)}%</span></div><input type="range" id="dcSpacing" min="60" max="140" value="${Math.round(d.spacing*100)}"></div>`}
+  ];
+  return items.map(it=>`<div class="accordion-item ${it.open?'open':''}" data-acc="${it.key}">
+    <div class="accordion-head">${it.label}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>
+    <div class="accordion-body"><div class="accordion-body-in">${it.body}</div></div>
+  </div>`).join('');
+}
+
+function bindDesignPanel(){
+  const body = document.getElementById('spBody');
+  body.querySelectorAll('.accordion-head').forEach(h=>h.onclick=()=>h.parentElement.classList.toggle('open'));
+
+  const commitDesign = (label)=>{ commitChange(label||'Design change','design'); applyDesignTokens(); };
+
+  body.querySelectorAll('.swatch[data-preset]').forEach(sw=>sw.onclick=()=>{
+    const p = PRESET_PALETTES.find(x=>x.name===sw.dataset.preset);
+    designTokens.primary=p.primary; designTokens.secondary=p.secondary; designTokens.bg=p.bg;
+    document.getElementById('dcPrimary').value=p.primary; document.getElementById('dcPrimaryHex').textContent=p.primary;
+    document.getElementById('dcSecondary').value=p.secondary; document.getElementById('dcSecondaryHex').textContent=p.secondary;
+    document.getElementById('dcBg').value=p.bg; document.getElementById('dcBgHex').textContent=p.bg;
+    applyDesignTokens(); commitDesign('Applied "'+p.name+'" palette');
+  });
+  const colorField = (id, key)=>{
+    const inp = document.getElementById(id);
+    if(!inp) return;
+    inp.addEventListener('input', ()=>{ designTokens[key]=inp.value; document.getElementById(id+'Hex').textContent=inp.value; applyDesignTokens(); });
+    inp.addEventListener('change', ()=>commitDesign('Changed '+key+' color'));
+  };
+  colorField('dcPrimary','primary'); colorField('dcSecondary','secondary'); colorField('dcBg','bg');
+
+  const sel = (id, key)=>{ const el=document.getElementById(id); if(!el) return; el.addEventListener('change', ()=>{ designTokens[key]=el.value; applyDesignTokens(); commitDesign('Changed '+key); }); };
+  sel('dcHFont','headingFont'); sel('dcBFont','bodyFont');
+
+  const seg = (id, key)=>{ const el=document.getElementById(id); if(!el) return; el.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    el.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+    designTokens[key]=b.dataset.v; applyDesignTokens(); commitDesign('Changed '+key);
+  }); };
+  seg('dcHWeight','headingWeight'); seg('dcBtnStyle','btnStyle');
+
+  const range = (id, key, suffix, transform)=>{
+    const el = document.getElementById(id); if(!el) return;
+    const label = document.getElementById(id+'V');
+    el.addEventListener('input', ()=>{ const v = transform?transform(el.value):el.value; designTokens[key]=v; if(label) label.textContent=(transform?el.value:v)+(suffix||''); applyDesignTokens(); });
+    el.addEventListener('change', ()=>commitDesign('Adjusted '+key));
+  };
+  range('dcBaseSize','baseSize','px'); range('dcRadius','radius','px'); range('dcImgRadius','imgRadius','px');
+  range('dcSpacing','spacing','%', v=>(v/100).toFixed(2));
+
+  const shadowSw = document.getElementById('dcShadow');
+  if(shadowSw) shadowSw.onclick = ()=>{ designTokens.shadow = designTokens.shadow==='on'?'off':'on'; shadowSw.classList.toggle('on'); applyDesignTokens(); commitDesign('Toggled card shadow'); };
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   VIEW ROUTING
+   ============================================================ */
+const VIEW_INIT = {}; // view name -> init fn, populated later
+function goToView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.rail-btn[data-view]').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  document.getElementById('topbar').style.display = name==='editor' ? 'flex' : 'none';
+  if(name!=='editor') { clearSelection(); }
+  if(VIEW_INIT[name]) VIEW_INIT[name]();
+}
+
+document.querySelectorAll('.rail-btn[data-view]').forEach(btn=>{
+  btn.addEventListener('click', ()=>goToView(btn.dataset.view));
+});
+document.getElementById('designRailBtn').addEventListener('click', openDesignPanel);
+
+/* rail tooltips */
+const railTip = document.getElementById('railTip');
+document.querySelectorAll('.rail-btn').forEach(btn=>{
+  btn.addEventListener('mouseenter', ()=>{
+    const r = btn.getBoundingClientRect();
+    railTip.textContent = btn.dataset.tip || btn.querySelector('span').textContent;
+    railTip.style.top = (r.top + r.height/2 - 12)+'px';
+    railTip.classList.add('show');
+  });
+  btn.addEventListener('mouseleave', ()=>railTip.classList.remove('show'));
+});
+
+/* ============================================================
+   TOPBAR: UNDO/REDO, DEVICE SWITCH, SHARE, PUBLISH
+   ============================================================ */
+document.getElementById('undoBtn').addEventListener('click', undo);
+document.getElementById('redoBtn').addEventListener('click', redo);
+
+document.getElementById('deviceSwitch').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  currentDevice = btn.dataset.device;
+  document.querySelectorAll('#deviceSwitch button').forEach(b=>b.classList.toggle('active', b===btn));
+  document.getElementById('canvasWrap').dataset.device = currentDevice;
+  document.getElementById('deviceFrame').dataset.device = currentDevice;
+  clearSelection();
+});
+
+document.getElementById('shareTopBtn').addEventListener('click', ()=>openShareModal());
+document.getElementById('publishTopBtn').addEventListener('click', ()=>openPublishModal());
+</script>
+<script>
+'use strict';
+/* ============================================================
+   SHARE MODAL
+   ============================================================ */
+let shareState = {
+  linkAccess:true, comments:true, password:false, pw:'',
+  collabs:[{n:'Morgan Lee',e:'morgan@jenni.co',r:'Owner',a:AVATAR(11)},{n:'Priya Shah',e:'priya@jenni.co',r:'Editor',a:AVATAR(9)},{n:'Devon Cole',e:'devon.agency@mail.com',r:'Viewer',a:AVATAR(23)}]
+};
+function openShareModal(){
+  renderShareModal();
+  openModal('shareModal');
+}
+function renderShareModal(){
+  const inner = document.getElementById('shareModalInner');
+  inner.innerHTML = `
+    <div class="modal-head"><div><div class="tt">Share Preview</div><div class="st">Anyone with the link can view your in-progress store</div></div><button class="modal-close" data-close="shareModal">${ICONS.x}</button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:20px">
+      <div class="field"><label>Preview link</label>
+        <div class="share-link-row"><input type="text" readonly value="https://preview.themebuilder.ai/jenni-travel-co-8f3k2"><button class="btn btn-primary btn-sm" id="copyLinkBtn">Copy</button></div>
+      </div>
+      <div class="sp-section" style="gap:14px">
+        <div class="toggle-row"><div><div class="tt">Anyone with the link can view</div><div class="ts">Turn off to restrict to invited people only</div></div><div class="switch ${shareState.linkAccess?'on':''}" id="swLinkAccess"></div></div>
+        <div class="toggle-row"><div><div class="tt">Allow comments</div><div class="ts">Let viewers leave feedback on sections</div></div><div class="switch ${shareState.comments?'on':''}" id="swComments"></div></div>
+        <div class="toggle-row"><div><div class="tt">Password protect</div><div class="ts">Require a password to view</div></div><div class="switch ${shareState.password?'on':''}" id="swPassword"></div></div>
+        <div class="field" id="pwField" style="display:${shareState.password?'flex':'none'}"><input type="password" id="pwInput" placeholder="Set a password" value="${shareState.pw}"></div>
+      </div>
+      <div class="sp-section">
+        <div class="sp-label">People with access</div>
+        <div>${shareState.collabs.map((c,i)=>`<div class="collab-row"><img src="${c.a}"><div><div class="n">${c.n}</div><div class="e">${c.e}</div></div>
+          <select data-ci="${i}"><option ${c.r==='Owner'?'selected':''}>Owner</option><option ${c.r==='Editor'?'selected':''}>Editor</option><option ${c.r==='Viewer'?'selected':''}>Viewer</option></select></div>`).join('')}</div>
+        <div class="share-link-row" style="margin-top:10px"><input type="email" id="inviteEmail" placeholder="Invite by email"><button class="btn btn-soft btn-sm" id="inviteBtn">Invite</button></div>
+      </div>
+    </div>`;
+  bindModalClose(inner);
+  document.getElementById('copyLinkBtn').onclick = ()=>{
+    try{ navigator.clipboard.writeText('https://preview.themebuilder.ai/jenni-travel-co-8f3k2'); }catch(e){}
+    toast('Link copied to clipboard');
+  };
+  document.getElementById('swLinkAccess').onclick = (e)=>{ shareState.linkAccess=!shareState.linkAccess; e.target.classList.toggle('on'); };
+  document.getElementById('swComments').onclick = (e)=>{ shareState.comments=!shareState.comments; e.target.classList.toggle('on'); };
+  document.getElementById('swPassword').onclick = (e)=>{ shareState.password=!shareState.password; e.target.classList.toggle('on'); document.getElementById('pwField').style.display = shareState.password?'flex':'none'; };
+  inner.querySelectorAll('select[data-ci]').forEach(sel=>sel.onchange=()=>{ shareState.collabs[+sel.dataset.ci].r = sel.value; toast('Role updated'); });
+  document.getElementById('inviteBtn').onclick = ()=>{
+    const email = document.getElementById('inviteEmail').value.trim();
+    if(!email || !email.includes('@')){ toast('Enter a valid email'); return; }
+    shareState.collabs.push({n:email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), e:email, r:'Viewer', a:AVATAR(Math.floor(Math.random()*70)+1)});
+    renderShareModal();
+    toast('Invitation sent to '+email);
+  };
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   PUBLISH MODAL (4-step wizard)
+   ============================================================ */
+let pubState = {step:1, connected:false, domain:'', publishMode:'live', reviewed:false};
+function openPublishModal(){
+  pubState = {step:1, connected:false, domain:'', publishMode:'live', reviewed:false};
+  renderPublishModal();
+  openModal('publishModal');
+}
+function pubStepperHTML(){
+  const steps=['Connect','Review','Confirm','Success'];
+  return `<div class="pub-stepper">${steps.map((s,i)=>{
+    const n=i+1; const cls = n<pubState.step?'done':n===pubState.step?'active':'';
+    return `<div class="pub-step ${cls}"><span class="c">${n<pubState.step?'✓':n}</span><span class="lb">${s}</span></div>${i<3?'<span class="ln"></span>':''}`;
+  }).join('')}</div>`;
+}
+function renderPublishModal(){
+  const inner = document.getElementById('publishModalInner');
+  let body='', foot='', title='Publish to Shopify', sub='';
+  if(pubState.step===1){
+    title='Connect Your Store'; sub='Link your Shopify store to publish this theme';
+    body = `<div class="pub-panel">
+      <div class="field"><label>Shopify store domain</label><input type="text" id="shopDomain" placeholder="your-store.myshopify.com" value="${pubState.domain}"></div>
+      <button class="btn btn-primary btn-block" id="connectBtn" style="margin-top:6px">
+        <svg viewBox="0 0 24 24" fill="currentColor" style="width:15px;height:15px"><path d="M12 2l9 4v6c0 5-3.6 9-9 10-5.4-1-9-5-9-10V6l9-4z"/></svg>
+        Connect with Shopify</button>
+      <div id="connStatus" style="margin-top:14px"></div>
+    </div>`;
+    foot = `<button class="btn btn-ghost" data-close="publishModal">Cancel</button><button class="btn btn-primary" id="pubNext" disabled>Continue</button>`;
+  } else if(pubState.step===2){
+    title='Review Changes'; sub='Here’s what will go live';
+    const changed = changeLog.slice(0, Math.min(6, changeLog.length));
+    body = `<div class="pub-panel"><div class="publish-checklist">
+      ${changed.map(c=>`<div class="pcheck-item">${ICONS.check}${c.label}</div>`).join('')}
+      <div class="pcheck-item">${ICONS.check}${storeState.sections.length} sections ready to publish</div>
+    </div></div>`;
+    foot = `<button class="btn btn-ghost" id="pubBack">Back</button><button class="btn btn-primary" id="pubNext">Continue</button>`;
+  } else if(pubState.step===3){
+    title='Confirm & Publish'; sub='Choose how this theme goes live';
+    body = `<div class="pub-panel" style="display:flex;flex-direction:column;gap:10px">
+      <div class="radio-card ${pubState.publishMode==='draft'?'active':''}" data-mode="draft"><div class="dot"></div><div><div class="rt">Publish as draft theme</div><div class="rd">Preview on Shopify without replacing your live theme</div></div></div>
+      <div class="radio-card ${pubState.publishMode==='live'?'active':''}" data-mode="live"><div class="dot"></div><div><div class="rt">Publish live now</div><div class="rd">Immediately replaces your current live theme</div></div></div>
+      <div class="warn-callout" style="display:${pubState.publishMode==='live'?'flex':'none'}" id="liveWarn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>This will replace your current live theme immediately for all customers.</div>
+      <label style="display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;margin-top:4px;cursor:pointer"><input type="checkbox" id="reviewedCheck" ${pubState.reviewed?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)"> I’ve reviewed the changes above</label>
+    </div>`;
+    foot = `<button class="btn btn-ghost" id="pubBack">Back</button><button class="btn btn-accent" id="pubNext" ${pubState.reviewed?'':'disabled'}>Confirm & Publish</button>`;
+  } else if(pubState.step===4){
+    title=''; sub='';
+    body = `<div class="pub-panel" id="publishingBody" style="text-align:center;padding:20px 0">
+      <div class="progress-steps" id="publishSteps" style="align-items:flex-start;max-width:280px;margin:0 auto;text-align:left">
+        ${['Uploading assets','Compiling theme','Running checks','Going live'].map((s,i)=>`<div class="pstep" data-pstep="${i}"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg></span>${s}</div>`).join('')}
+      </div>
+    </div>`;
+    foot='';
+  }
+  inner.innerHTML = `
+    <div class="modal-head">${pubState.step<4?`<div><div class="tt">${title}</div><div class="st">${sub}</div></div><button class="modal-close" data-close="publishModal">${ICONS.x}</button>`:''}</div>
+    <div class="modal-body"><div style="padding:0 2px 4px">${pubStepperHTML()}</div>${body}</div>
+    <div class="modal-foot" style="display:${foot?'flex':'none'}">${foot}</div>`;
+  bindModalClose(inner);
+
+  if(pubState.step===1){
+    document.getElementById('shopDomain').oninput = (e)=>{ pubState.domain = e.target.value; };
+    document.getElementById('connectBtn').onclick = ()=>{
+      if(!pubState.domain.trim()){ toast('Enter your store domain'); return; }
+      document.getElementById('connStatus').innerHTML = `<div class="ai-loading"><span class="spinner"></span>Connecting to Shopify…</div>`;
+      setTimeout(()=>{
+        pubState.connected = true;
+        document.getElementById('connStatus').innerHTML = `<div class="pcheck-item">${ICONS.check}Connected to <b style="margin-left:3px">${pubState.domain||'jenni-travel.myshopify.com'}</b></div>`;
+        document.getElementById('pubNext').disabled = false;
+      }, 1100);
+    };
+  }
+  if(pubState.step===3){
+    inner.querySelectorAll('.radio-card').forEach(rc=>rc.onclick=()=>{
+      pubState.publishMode = rc.dataset.mode;
+      inner.querySelectorAll('.radio-card').forEach(x=>x.classList.remove('active')); rc.classList.add('active');
+      document.getElementById('liveWarn').style.display = pubState.publishMode==='live'?'flex':'none';
+    });
+    document.getElementById('reviewedCheck').onchange = (e)=>{ pubState.reviewed = e.target.checked; document.getElementById('pubNext').disabled = !e.target.checked; };
+  }
+  const backBtn = document.getElementById('pubBack'); if(backBtn) backBtn.onclick = ()=>{ pubState.step--; renderPublishModal(); };
+  const nextBtn = document.getElementById('pubNext');
+  if(nextBtn) nextBtn.onclick = ()=>{
+    if(pubState.step===3){ runPublishAnimation(); }
+    pubState.step++; renderPublishModal();
+  };
+  if(pubState.step===4){
+    setTimeout(runPublishSteps, 200);
+  }
+}
+function runPublishAnimation(){}
+function runPublishSteps(){
+  const steps = document.querySelectorAll('#publishSteps .pstep');
+  let i=0;
+  const next=()=>{
+    if(i>0) steps[i-1].classList.add('done');
+    if(i>=steps.length){ finishPublish(); return; }
+    steps[i].classList.add('active');
+    i++;
+    setTimeout(next, 750);
+  };
+  next();
+}
+function finishPublish(){
+  const inner = document.getElementById('publishModalInner');
+  inner.innerHTML = `
+    <div class="modal-body" style="text-align:center;padding-top:36px">
+      <div class="success-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:34px;height:34px"><path d="M4 12l6 6L20 6"/></svg></div>
+      <div style="font-weight:800;font-size:18px;margin-bottom:6px">Your store is live 🎉</div>
+      <div style="font-size:13px;color:var(--ink-2);max-width:320px;margin:0 auto 26px">Jenni Travel Co. has been published to ${pubState.domain||'jenni-travel.myshopify.com'}</div>
+    </div>
+    <div class="modal-foot" style="justify-content:center">
+      <button class="btn btn-ghost" data-close="publishModal">Back to Editor</button>
+      <button class="btn btn-primary" id="viewLiveBtn">View Store</button>
+    </div>`;
+  bindModalClose(inner);
+  document.getElementById('viewLiveBtn').onclick = ()=>{ toast('Opening live store…'); };
+  commitChange('Published to Shopify', 'publish');
+  document.getElementById('saveStatusText').textContent='Published';
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   VIEW: PRODUCT ANALYSIS
+   ============================================================ */
+function renderAnalyzeView(){
+  document.getElementById('view-analyze').innerHTML = `
+    <div class="pv-wrap">
+      <div class="pv-head"><h1>Product Analysis</h1><p>Paste a product URL and we’ll analyze it — pricing, imagery, trust signals, and copy — to score how ready it is to convert.</p></div>
+      <div class="card card-pad">
+        <div class="analyze-input-row">
+          <input type="text" id="analyzeUrl" value="https://jenni-travel.myshopify.com/products/jenni-travel-bag" placeholder="https://yourstore.com/products/...">
+          <button class="btn btn-accent" id="analyzeBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Analyze</button>
+        </div>
+        <div id="analyzeResults"></div>
+      </div>
+    </div>`;
+  document.getElementById('analyzeBtn').onclick = runAnalysis;
+}
+function runAnalysis(){
+  const box = document.getElementById('analyzeResults');
+  const steps = ['Fetching product page','Extracting product data','Analyzing images & copy','Scoring against 40+ signals'];
+  box.innerHTML = `<div class="progress-steps" id="anSteps">${steps.map((s,i)=>`<div class="pstep" data-i="${i}"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg></span>${s}</div>`).join('')}</div>`;
+  const psteps = document.querySelectorAll('#anSteps .pstep');
+  let i=0;
+  const tick=()=>{
+    if(i>0) psteps[i-1].classList.add('done');
+    if(i>=psteps.length){ showAnalysisResult(); return; }
+    psteps[i].classList.add('active'); i++;
+    setTimeout(tick, 600);
+  };
+  tick();
+}
+function showAnalysisResult(){
+  const box = document.getElementById('analyzeResults');
+  const metrics = [
+    {l:'Title clarity', v:88}, {l:'Image quality', v:92}, {l:'Price positioning', v:74},
+    {l:'Trust signals', v:80}, {l:'Description depth', v:64}
+  ];
+  const score = Math.round(metrics.reduce((a,m)=>a+m.v,0)/metrics.length);
+  const circ = 2*Math.PI*54;
+  box.innerHTML = `
+    <div style="margin-top:26px;padding-top:26px;border-top:1px solid var(--app-border)">
+      <div class="score-ring-wrap">
+        <div class="score-ring">
+          <svg width="150" height="150" viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="54" fill="none" stroke="var(--app-surface-2)" stroke-width="10"/>
+            <circle cx="60" cy="60" r="54" fill="none" stroke="var(--viz-1)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${circ*(1-score/100)}"/>
+          </svg>
+          <div class="num"><b>${score}</b><span>Product Score</span></div>
+        </div>
+        <div class="score-bars">
+          ${metrics.map(m=>`<div class="sbar-row"><span class="l">${m.l}</span><div class="sbar-track"><div class="sbar-fill" style="width:${m.v}%"></div></div><span class="v">${m.v}</span></div>`).join('')}
+        </div>
+      </div>
+      <div class="suggest-list">
+        <div class="suggest-item">${warnIcon()}<div><div class="t">Description reads generic</div><div class="d">Add material sourcing and lifetime-warranty details — buyers of premium goods convert 2.1x more on specificity.</div></div></div>
+        <div class="suggest-item">${warnIcon()}<div><div class="t">Price lacks anchoring</div><div class="d">Show a comparison to full-price competitors or a "value of included features" breakdown near the price.</div></div></div>
+        <div class="suggest-item">${warnIcon()}<div><div class="t">No urgency signal</div><div class="d">Consider a low-stock indicator or limited-time offer on the product page.</div></div></div>
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:22px" id="toPersonaBtn">Continue to Persona & Marketing Angle →</button>
+    </div>`;
+  document.getElementById('toPersonaBtn').onclick = ()=>goToView('persona');
+}
+function warnIcon(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>`; }
+VIEW_INIT.analyze = renderAnalyzeView;
+</script>
+<script>
+'use strict';
+/* ============================================================
+   VIEW: PERSONA & MARKETING ANGLE
+   ============================================================ */
+const PERSONAS = [
+  {emoji:'🧳', bg:'#eef0fd', color:'#5b4fe9', name:'The Weekend Explorer', desc:'25–34 · Urban professional', tags:['Instagram-active','Values design','Spontaneous trips'],
+    angle:'"Never overpack again — a bag that keeps up with your weekend."'},
+  {emoji:'💻', bg:'#fdf0e6', color:'#c1502e', name:'The Digital Nomad', desc:'28–40 · Remote worker', tags:['Laptop-first','Long-haul flyer','Values durability'],
+    angle:'"Your office, your gear, your world — all in one bag built to last."'},
+  {emoji:'🎯', bg:'#eaf7ea', color:'#0ca30c', name:'The Minimalist Commuter', desc:'30–45 · Frequent business travel', tags:['Efficiency-driven','Premium taste','Brand loyal'],
+    angle:'"Less bag. More intention. Travel like you mean it."'}
+];
+let selectedPersonaIdx = 0, selectedAngleIdx = 0;
+function renderPersonaView(){
+  document.getElementById('view-persona').innerHTML = `
+    <div class="pv-wrap">
+      <div class="pv-head"><h1>Buyer Persona & Marketing Angle</h1><p>Generated from your product analysis. Choose the persona your storefront copy should speak to.</p></div>
+      <div class="persona-grid" id="personaGrid"></div>
+      <div class="card card-pad" style="margin-top:22px">
+        <div class="sp-label" style="margin-bottom:12px">Marketing angle for “${PERSONAS[selectedPersonaIdx].name}”</div>
+        <div class="persona-angle" id="angleShow">${PERSONAS[selectedPersonaIdx].angle}</div>
+        <div class="angle-chip-row" id="angleChips">
+          ${['Premium craftsmanship','Freedom to travel light','Built for real life','Peace of mind, guaranteed'].map((a,i)=>`<div class="angle-chip ${i===selectedAngleIdx?'active':''}" data-i="${i}">${a}</div>`).join('')}
+        </div>
+        <button class="btn btn-primary" style="margin-top:20px" id="toGenerateBtn">Generate Theme with This Angle →</button>
+      </div>
+    </div>`;
+  const grid = document.getElementById('personaGrid');
+  grid.innerHTML = PERSONAS.map((p,i)=>`
+    <div class="card persona-card ${i===selectedPersonaIdx?'selected':''}" data-i="${i}">
+      <div class="persona-avatar" style="background:${p.bg};color:${p.color}">${p.emoji}</div>
+      <div><div class="pn">${p.name}</div><div class="pd">${p.desc}</div></div>
+      <div class="persona-tags">${p.tags.map(t=>`<span>${t}</span>`).join('')}</div>
+    </div>`).join('');
+  grid.querySelectorAll('.persona-card').forEach(c=>c.onclick=()=>{
+    selectedPersonaIdx = parseInt(c.dataset.i);
+    renderPersonaView();
+  });
+  document.getElementById('angleChips').querySelectorAll('.angle-chip').forEach(ch=>ch.onclick=()=>{
+    selectedAngleIdx = parseInt(ch.dataset.i);
+    document.querySelectorAll('#angleChips .angle-chip').forEach(x=>x.classList.remove('active'));
+    ch.classList.add('active');
+  });
+  document.getElementById('toGenerateBtn').onclick = ()=>goToView('generate');
+}
+VIEW_INIT.persona = renderPersonaView;
+</script>
+<script>
+'use strict';
+/* ============================================================
+   VIEW: AI THEME GENERATION PROGRESS
+   ============================================================ */
+const GEN_STEPS = ['Analyzing your brand & product','Selecting a layout','Writing on-brand copy','Generating product imagery','Applying your design system','Finalizing your store'];
+function renderGenerateView(){
+  document.getElementById('view-generate').innerHTML = `
+    <div class="gen-wrap" id="genWrap">
+      <div class="gen-orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg></div>
+      <h1>Generating Your Store</h1>
+      <p>Using the “${PERSONAS[selectedPersonaIdx].name}” persona to write copy and pick imagery.</p>
+      <div class="gen-track"><div class="gen-fill" id="genFill"></div></div>
+      <div class="gen-list" id="genList">${GEN_STEPS.map((s,i)=>`<div class="pstep" data-i="${i}"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg></span>${s}</div>`).join('')}</div>
+      <div id="genDone" style="display:none;margin-top:28px"><button class="btn btn-primary btn-block" id="viewStoreBtn">View Your Store →</button></div>
+    </div>`;
+  const items = document.querySelectorAll('#genList .pstep');
+  const fill = document.getElementById('genFill');
+  let i=0;
+  const tick=()=>{
+    if(i>0) items[i-1].classList.add('done');
+    fill.style.width = Math.round(i/items.length*100)+'%';
+    if(i>=items.length){
+      document.getElementById('genDone').style.display='block';
+      document.getElementById('viewStoreBtn').onclick = ()=>{ goToView('editor'); toast('Your AI-generated store is ready'); };
+      return;
+    }
+    items[i].classList.add('active'); i++;
+    setTimeout(tick, 700);
+  };
+  tick();
+}
+VIEW_INIT.generate = renderGenerateView;
+</script>
+<script>
+'use strict';
+/* ============================================================
+   VIEW: IMAGE LIBRARY
+   ============================================================ */
+const LIB_IMAGES = ALL_IMGS.map((id,i)=>({id, src:IMG(id,500,500), tag: i%3===0?'AI Generated': i%3===1?'Product Shot':'Uploaded'}));
+let imgLibFilter = 'All';
+function renderImagesView(){
+  document.getElementById('view-images').innerHTML = `
+    <div class="pv-wrap">
+      <div class="pv-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px">
+        <div><h1>Image Library</h1><p>Every image generated or uploaded for your store, in one place.</p></div>
+        <button class="btn btn-accent" id="libGenBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>Generate New</button>
+      </div>
+      <div class="img-tabs" id="imgTabs">${['All','AI Generated','Uploaded','Product Shot'].map(t=>`<button class="${imgLibFilter===t?'active':''}" data-t="${t}">${t}</button>`).join('')}</div>
+      <div class="imglib-grid" id="imglibGrid"></div>
+    </div>`;
+  document.getElementById('imgTabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{ imgLibFilter=b.dataset.t; renderImagesView(); });
+  document.getElementById('libGenBtn').onclick = openLibraryGenModal;
+  const grid = document.getElementById('imglibGrid');
+  const filtered = imgLibFilter==='All' ? LIB_IMAGES : LIB_IMAGES.filter(x=>x.tag===imgLibFilter);
+  grid.innerHTML = filtered.map(im=>`
+    <div class="imglib-item"><img src="${im.src}"><span class="imglib-tag">${im.tag}</span>
+      <div class="imglib-actions">
+        <button class="il-use" title="Use"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg></button>
+        <button class="il-dl" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg></button>
+        <button class="il-del" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></button>
+      </div>
+    </div>`).join('');
+  grid.querySelectorAll('.il-use').forEach(b=>b.onclick=()=>toast('Set as active image (select a spot in the Editor to place it)'));
+  grid.querySelectorAll('.il-dl').forEach(b=>b.onclick=()=>toast('Downloading image…'));
+  grid.querySelectorAll('.il-del').forEach(b=>b.onclick=(e)=>{ e.target.closest('.imglib-item').style.opacity='.2'; toast('Image removed'); });
+}
+VIEW_INIT.images = renderImagesView;
+
+function openLibraryGenModal(){
+  const inner = document.getElementById('imageGenModalInner');
+  inner.innerHTML = `
+    <div class="modal-head"><div><div class="tt">Generate Image with AI</div><div class="st">New images are added straight to your library</div></div><button class="modal-close" data-close="imageGenModal">${ICONS.x}</button></div>
+    <div class="modal-body">
+      <div class="lib-ai-row" style="margin-bottom:16px"><textarea id="libGenPrompt" placeholder="e.g. Full-grain leather bag resting on a train station bench" style="background:var(--app-surface-2);color:var(--ink)"></textarea><button id="libGenGo" class="btn btn-accent">Generate</button></div>
+      <div class="imggen-grid" id="libGenResults"></div>
+    </div>`;
+  bindModalClose(inner);
+  document.getElementById('libGenGo').onclick = ()=>{
+    const grid = document.getElementById('libGenResults');
+    grid.innerHTML = Array(4).fill('<div class="imggen-skel"></div>').join('');
+    setTimeout(()=>{
+      const picks = shuffle(ALL_IMGS.slice()).slice(0,4);
+      grid.innerHTML = picks.map(id=>`<div class="imggen-item" data-id="${id}"><img src="${IMG(id,300,400)}"><span class="use-btn">Add to Library</span></div>`).join('');
+      grid.querySelectorAll('.imggen-item').forEach(it=>it.onclick=()=>{
+        LIB_IMAGES.unshift({id:it.dataset.id+'-'+Date.now(), src:IMG(it.dataset.id,500,500), tag:'AI Generated'});
+        closeModal('imageGenModal');
+        renderImagesView();
+        toast('Image added to library');
+      });
+    }, 1300);
+  };
+  openModal('imageGenModal');
+}
+</script>
+<script>
+'use strict';
+/* ============================================================
+   VIEW: HISTORY / RESTORE
+   ============================================================ */
+function renderHistoryView(){
+  const view = document.getElementById('view-history');
+  if(!view.querySelector('.pv-wrap')){
+    view.innerHTML = `<div class="pv-wrap"><div class="pv-head"><h1>History</h1><p>Every change is saved automatically. Restore any previous version instantly.</p></div>
+      <div class="card card-pad"><div class="hist-list" id="histList"></div></div></div>`;
+  }
+  const list = document.getElementById('histList');
+  list.innerHTML = changeLog.map((h,i)=>{
+    const ic = HIST_ICON[h.icon]||HIST_ICON.edit;
+    return `<div class="hist-item">
+      <div class="hist-ic" style="background:${ic.bg};color:${ic.color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ic.svg}</svg></div>
+      <div class="hist-body"><div class="t">${h.label}</div><div class="t2">${h.time}</div></div>
+      ${i===changeLog.length-1 ? `<button class="btn btn-soft btn-sm" data-restore-initial="1">Restore</button>` : `<button class="btn btn-ghost btn-sm" data-idx="${i}" disabled title="Demo: only the original version is restorable">Restore</button>`}
+    </div>`;
+  }).join('');
+  const initBtn = list.querySelector('[data-restore-initial]');
+  if(initBtn) initBtn.onclick = ()=>{
+    showConfirm({title:'Restore original AI-generated version?', body:'This will revert all edits back to the very first generated store. You can undo this afterward.', confirmLabel:'Restore', danger:false,
+      onConfirm:()=>{ applySnapshot(INITIAL_SNAPSHOT); commitChange('Restored original version','save'); goToView('editor'); toast('Restored to original version'); }});
+  };
+}
+VIEW_INIT.history = renderHistoryView;
+</script>
+<script>
+'use strict';
+/* ============================================================
+   VIEW: ANALYTICS
+   ============================================================ */
+function sparkPath(vals, w, h){
+  const min=Math.min(...vals), max=Math.max(...vals);
+  const pts = vals.map((v,i)=>[ i/(vals.length-1)*w, h - (max===min?h/2:(v-min)/(max-min)*h) ]);
+  return pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+}
+function renderSpark(vals, color){
+  const w=100,h=30;
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="${sparkPath(vals,w,h)}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+const REVENUE_30D = [820,910,860,1040,980,1120,1300,1180,1240,1360,1290,1410,1500,1380,1460,1600,1550,1690,1720,1650,1780,1840,1760,1900,1980,1870,2040,2120,2010,2180];
+
+function renderAnalyticsView(){
+  const days = REVENUE_30D.length;
+  document.getElementById('view-analytics').innerHTML = `
+    <div class="pv-wrap">
+      <div class="pv-head"><h1>Analytics</h1><p>How Jenni Travel Co. is performing since launch.</p></div>
+      <div class="stat-grid">
+        <div class="card stat-tile"><div class="lbl">Sessions</div><div class="val">12,480</div><div class="delta good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 15l-6-6-6 6"/></svg>8.2%</div>${renderSpark([40,44,42,50,48,55,60,58,62,68,66,72],'var(--viz-1)')}</div>
+        <div class="card stat-tile"><div class="lbl">Conversion Rate</div><div class="val">3.4%</div><div class="delta good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 15l-6-6-6 6"/></svg>0.6pt</div>${renderSpark([2.6,2.7,2.9,2.8,3.0,3.1,3.0,3.2,3.3,3.2,3.4,3.4],'var(--viz-1)')}</div>
+        <div class="card stat-tile"><div class="lbl">Average Order Value</div><div class="val">$94</div><div class="delta bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg>2.1%</div>${renderSpark([98,97,99,95,96,94,95,93,94,95,93,94],'var(--viz-2)')}</div>
+        <div class="card stat-tile"><div class="lbl">Revenue</div><div class="val">$18,240</div><div class="delta good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 15l-6-6-6 6"/></svg>14%</div>${renderSpark([12,13,12.5,14,13.8,15,16,15.5,16.8,17.5,17.2,18.2],'var(--viz-1)')}</div>
+      </div>
+      <div class="card chart-card">
+        <div class="ch-head"><h3>Revenue — Last 30 Days</h3><div class="chart-legend"><span><i style="background:var(--viz-1)"></i>Revenue</span></div></div>
+        <div style="position:relative" id="revChartWrap"></div>
+      </div>
+      <div class="two-col-charts">
+        <div class="card chart-card">
+          <div class="ch-head"><h3>Engagement by Section</h3></div>
+          <div id="engChart"></div>
+        </div>
+        <div class="card chart-card">
+          <div class="ch-head"><h3>Traffic Sources</h3></div>
+          <div class="donut-wrap" id="donutChart"></div>
+        </div>
+      </div>
+    </div>`;
+  renderRevenueChart();
+  renderEngagementChart();
+  renderDonutChart();
+}
+
+function renderRevenueChart(){
+  const wrap = document.getElementById('revChartWrap');
+  const w=880,h=220,pad=28;
+  const vals = REVENUE_30D;
+  const max = Math.max(...vals), min = Math.min(...vals)*0.9;
+  const x = i=> pad + i/(vals.length-1)*(w-pad*2);
+  const y = v=> h-pad - (v-min)/(max-min)*(h-pad*1.4);
+  const linePath = vals.map((v,i)=>(i===0?'M':'L')+x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
+  const areaPath = linePath + ` L${x(vals.length-1).toFixed(1)},${h-pad} L${x(0).toFixed(1)},${h-pad} Z`;
+  const gridLines = [0,1,2,3].map(i=>{ const gy = pad + i*(h-pad*1.4)/3; return `<line x1="${pad}" y1="${gy.toFixed(1)}" x2="${w-pad}" y2="${gy.toFixed(1)}" stroke="var(--viz-grid)" stroke-width="1"/>`; }).join('');
+  wrap.innerHTML = `
+    <svg width="100%" viewBox="0 0 ${w} ${h}" id="revSvg" style="overflow:visible">
+      <defs><linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--viz-1)" stop-opacity="0.18"/><stop offset="100%" stop-color="var(--viz-1)" stop-opacity="0"/></linearGradient></defs>
+      ${gridLines}
+      <path d="${areaPath}" fill="url(#revGrad)"/>
+      <path d="${linePath}" fill="none" stroke="var(--viz-1)" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"/>
+      <line id="revCross" x1="0" y1="${pad}" x2="0" y2="${h-pad}" stroke="var(--viz-baseline)" stroke-width="1" style="opacity:0"/>
+      <circle id="revDot" r="4.5" fill="var(--viz-1)" stroke="#fff" stroke-width="2" style="opacity:0"/>
+      <rect id="revHit" x="0" y="0" width="${w}" height="${h}" fill="transparent"/>
+    </svg>
+    <div class="tooltip-box" id="revTip"></div>`;
+  const svg = document.getElementById('revSvg');
+  const hit = document.getElementById('revHit');
+  const tip = document.getElementById('revTip');
+  const cross = document.getElementById('revCross');
+  const dot = document.getElementById('revDot');
+  hit.addEventListener('mousemove', (e)=>{
+    const r = svg.getBoundingClientRect();
+    const relX = (e.clientX - r.left) / r.width * w;
+    let idx = Math.round((relX-pad)/(w-pad*2)*(vals.length-1));
+    idx = Math.max(0, Math.min(vals.length-1, idx));
+    const px = x(idx), py = y(vals[idx]);
+    cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.style.opacity='1';
+    dot.setAttribute('cx', px); dot.setAttribute('cy', py); dot.style.opacity='1';
+    tip.style.opacity='1';
+    tip.style.left = (px/w*100)+'%'; tip.style.top = (py-38)+'px'; tip.style.transform='translateX(-50%)';
+    tip.textContent = `Day ${idx+1} · $${vals[idx].toLocaleString()}`;
+  });
+  hit.addEventListener('mouseleave', ()=>{ cross.style.opacity='0'; dot.style.opacity='0'; tip.style.opacity='0'; });
+}
+
+function renderEngagementChart(){
+  const data = [{l:'Hero',v:92},{l:'Features',v:78},{l:'Reviews',v:71},{l:'FAQ',v:54},{l:'Newsletter',v:38}];
+  document.getElementById('engChart').innerHTML = data.map(d=>`<div class="hbar-row"><span class="l">${d.l}</span><div class="hbar-track"><div class="hbar-fill" style="width:${d.v}%"></div></div><span class="v">${d.v}%</span></div>`).join('');
+}
+
+function renderDonutChart(){
+  const data = [{l:'Organic Search',v:38,c:'var(--viz-1)'},{l:'Paid Social',v:26,c:'var(--viz-2)'},{l:'Direct',v:18,c:'var(--viz-3)'},{l:'Email',v:12,c:'var(--viz-4)'},{l:'Referral',v:6,c:'var(--viz-5)'}];
+  const r=52, cx=60, cy=60, circ=2*Math.PI*r;
+  let offset=0;
+  const arcs = data.map(d=>{
+    const len = d.v/100*circ;
+    const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${d.c}" stroke-width="16" stroke-dasharray="${len-2} ${circ-len+2}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    offset += len;
+    return seg;
+  }).join('');
+  document.getElementById('donutChart').innerHTML = `
+    <svg width="120" height="120" viewBox="0 0 120 120">${arcs}</svg>
+    <div class="donut-legend">${data.map(d=>`<div class="r"><i style="background:${d.c}"></i>${d.l}<span class="lv">${d.v}%</span></div>`).join('')}</div>`;
+}
+VIEW_INIT.analytics = renderAnalyticsView;
+</script>
+<script>
+'use strict';
+/* ============================================================
+   SCROLL / MISC
+   ============================================================ */
+let scrollRaf = null;
+document.getElementById('canvasWrap').addEventListener('scroll', ()=>{
+  if(scrollRaf) return;
+  scrollRaf = requestAnimationFrame(()=>{
+    scrollRaf = null;
+    if(currentSelection && currentSelection.kind==='text'){
+      positionFloatToolbar(currentSelection.el);
+    } else {
+      document.getElementById('aiPopover').classList.remove('show');
+      document.getElementById('colorPopover').classList.remove('show');
+      document.getElementById('imagePopover').classList.remove('show');
+    }
+  });
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+renderStorefront();
+updateUndoRedoButtons();
+goToView('editor');
+setTimeout(()=>toast('Welcome to Jenni — click any text, image, or section to start editing'), 600);
+</script>
+
+</body>
+</html>

@@ -53,6 +53,8 @@ const SIZE_ID = /size/i;
 const MOBILE = /mobile/i;
 const WEIGHT_ID = /weight/i;
 const ALIGN_ID = /align/i;
+/** Setting types that hold a section's own visible copy — used to find where one text field's settings end and the next one's begin (see `pick` below). */
+const CONTENT_TYPES = new Set(["text", "textarea", "richtext", "inline_richtext"]);
 /** The theme's per-element color settings; highlight/border/bold decorations are not "the text color". */
 const COLOR_IDS = new Set(["custom_color", "custom_text_color", "text_color", "color"]);
 /**
@@ -65,12 +67,49 @@ const COLOR_IDS = new Set(["custom_color", "custom_text_color", "text_color", "c
 const COMPANION_COLOR_ID = /^title_highlight_\d+_(color|gradient)$|^(bold|italic)_(solid|gradient)_color$/;
 const COMPANION_TYPES = new Set(["color", "color_background"]);
 
-export function findTextControls(defs: ShopifySettingDef[] | undefined): TextControls {
+/**
+ * A section can hold more than one independently-bound text field (a heading plus a separate
+ * eyebrow/kicker, say), each with its own size/align/color settings — searching the whole
+ * settings list for "the" setting of a given type then picks whichever one happens to come
+ * first in schema order, regardless of which field is actually selected, silently steering an
+ * edit on field A onto field B's setting. Only kicks in on real ambiguity (more than one
+ * setting matches): with zero or one match — the overwhelming majority of sections, which have
+ * exactly one text field — this returns exactly what a plain `.find()` would have.
+ */
+function pick<T extends ShopifySettingDef>(
+  settings: T[],
+  scopeStart: number,
+  scopeEnd: number,
+  predicate: (d: T) => boolean,
+): T | undefined {
+  const matches = settings.filter(predicate);
+  if (matches.length <= 1) return matches[0];
+  const inScope = matches.find((d) => {
+    const i = settings.indexOf(d);
+    return i >= scopeStart && i < scopeEnd;
+  });
+  return inScope ?? matches[0];
+}
+
+export function findTextControls(defs: ShopifySettingDef[] | undefined, ownerId?: string): TextControls {
   const settings = (defs ?? []).filter((d) => d.id);
   const controls: TextControls = {};
 
-  const sizeSelect = settings.find((d) => d.type === "select" && SIZE_ID.test(d.id!) && !MOBILE.test(d.id!));
-  const sizeRange = settings.find(
+  // The bound field's own "zone": schemas conventionally declare a text field's companion
+  // settings (its size/alignment/color/highlights) directly after the field itself, before the
+  // next field's settings begin — so scoping ambiguous matches to [this field, the next text
+  // field) picks the one that actually belongs to it.
+  const ownerIndex = ownerId ? settings.findIndex((d) => d.id === ownerId) : -1;
+  const scopeStart = Math.max(ownerIndex, 0);
+  const nextFieldIndex =
+    ownerIndex >= 0 ? settings.findIndex((d, i) => i > ownerIndex && CONTENT_TYPES.has(d.type)) : -1;
+  const scopeEnd = nextFieldIndex >= 0 ? nextFieldIndex : settings.length;
+
+  const sizeSelect = pick(settings, scopeStart, scopeEnd, (d) => d.type === "select" && SIZE_ID.test(d.id!) && !MOBILE.test(d.id!));
+  const sizeRange = pick(
+    settings,
+    scopeStart,
+    scopeEnd,
     (d) => (d.type === "range" || d.type === "number") && SIZE_ID.test(d.id!) && !MOBILE.test(d.id!),
   );
   if (sizeSelect?.options?.length) {
@@ -90,15 +129,21 @@ export function findTextControls(defs: ShopifySettingDef[] | undefined): TextCon
     };
   }
 
-  const weight = settings.find((d) => d.type === "select" && WEIGHT_ID.test(d.id!) && d.options?.length);
+  const weight = pick(settings, scopeStart, scopeEnd, (d) => d.type === "select" && WEIGHT_ID.test(d.id!) && !!d.options?.length);
   if (weight) controls.weight = { settingId: weight.id!, options: weight.options!.map((o) => o.value) };
 
-  const align = settings.find(
-    (d) => d.type === "select" && ALIGN_ID.test(d.id!) && !MOBILE.test(d.id!) && d.options?.length,
+  const align = pick(
+    settings,
+    scopeStart,
+    scopeEnd,
+    (d) => d.type === "select" && ALIGN_ID.test(d.id!) && !MOBILE.test(d.id!) && !!d.options?.length,
   );
   if (align) {
-    const mobile = settings.find(
-      (d) => d.type === "select" && ALIGN_ID.test(d.id!) && MOBILE.test(d.id!) && d.options?.length,
+    const mobile = pick(
+      settings,
+      scopeStart,
+      scopeEnd,
+      (d) => d.type === "select" && ALIGN_ID.test(d.id!) && MOBILE.test(d.id!) && !!d.options?.length,
     );
     controls.align = {
       settingId: align.id!,
@@ -108,11 +153,11 @@ export function findTextControls(defs: ShopifySettingDef[] | undefined): TextCon
     };
   }
 
-  const color = settings.find((d) => d.type === "color" && COLOR_IDS.has(d.id!));
+  const color = pick(settings, scopeStart, scopeEnd, (d) => d.type === "color" && COLOR_IDS.has(d.id!));
   if (color) {
-    const enable = settings.find((d) => d.type === "checkbox" && /enable.*color/i.test(d.id!));
+    const enable = pick(settings, scopeStart, scopeEnd, (d) => d.type === "checkbox" && /enable.*color/i.test(d.id!));
     const companions = settings
-      .filter((d) => COMPANION_TYPES.has(d.type) && COMPANION_COLOR_ID.test(d.id!))
+      .filter((d, i) => COMPANION_TYPES.has(d.type) && COMPANION_COLOR_ID.test(d.id!) && i >= scopeStart && i < scopeEnd)
       .map((d) => d.id!);
     controls.color = { settingId: color.id!, enableId: enable?.id, companionIds: companions };
   }

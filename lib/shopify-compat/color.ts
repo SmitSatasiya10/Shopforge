@@ -32,7 +32,7 @@ export function parseColor(input: unknown): Rgb | null {
   return null;
 }
 
-function toHsl({ r, g, b }: Rgb) {
+export function toHsl({ r, g, b }: Rgb) {
   const [rn, gn, bn] = [r / 255, g / 255, b / 255];
   const max = Math.max(rn, gn, bn);
   const min = Math.min(rn, gn, bn);
@@ -45,7 +45,7 @@ function toHsl({ r, g, b }: Rgb) {
   return { h: h * 60, s, l };
 }
 
-function fromHsl(h: number, s: number, l: number, a: number): Rgb {
+export function fromHsl(h: number, s: number, l: number, a: number): Rgb {
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const hp = (((h % 360) + 360) % 360) / 60;
   const x = c * (1 - Math.abs((hp % 2) - 1));

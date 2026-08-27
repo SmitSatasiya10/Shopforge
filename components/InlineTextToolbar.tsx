@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { Minus, Plus, Trash2, WandSparkles, X } from "lucide-react";
 import type { SelectionRect } from "./PreviewFrame";
 import { sizeLabel, type TextControls } from "@/lib/editor/text-controls";
+import type { NamedColor, ThemeColorRow } from "@/lib/editor/color-palette";
+import { ColorPickerPopover } from "./ColorPickerPopover";
 
 interface InlineTextToolbarProps {
   rect: SelectionRect;
@@ -12,6 +15,9 @@ interface InlineTextToolbarProps {
   busy: boolean;
   /** The binding sits inside a block, so it can be deleted. */
   canDeleteBlock: boolean;
+  /** Feeds the color swatch's "Theme"/"Common Colors" tabs (lib/editor/color-palette.ts). */
+  themeColorRows: ThemeColorRow[];
+  commonColors: NamedColor[];
   onRewrite: () => void;
   onStepSize: (direction: -1 | 1) => void;
   onCycleWeight: () => void;
@@ -45,6 +51,8 @@ export function InlineTextToolbar({
   values,
   busy,
   canDeleteBlock,
+  themeColorRows,
+  commonColors,
   onRewrite,
   onStepSize,
   onCycleWeight,
@@ -53,6 +61,8 @@ export function InlineTextToolbar({
   onDeleteBlock,
   onClose,
 }: InlineTextToolbarProps) {
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+
   // Above the element when there is room, below it otherwise; never off the left edge.
   const top = rect.top > 56 ? rect.top - 48 : rect.top + rect.height + 8;
   const left = Math.max(8, rect.left);
@@ -121,23 +131,32 @@ export function InlineTextToolbar({
       ) : null}
 
       {controls.color ? (
-        <label className="relative grid h-6 w-6 cursor-pointer place-items-center" title="Text color">
-          <span
-            className="h-4 w-4 rounded-full border border-neutral-500"
-            style={{
-              background: colorActive
-                ? colorValue
-                : "repeating-linear-gradient(45deg, #525252 0 2px, transparent 2px 5px)",
-            }}
-          />
-          <input
-            type="color"
-            value={/^#[0-9a-f]{6}$/i.test(colorValue) ? colorValue : "#000000"}
+        <div className="relative">
+          <button
+            onClick={() => setColorPickerOpen((v) => !v)}
             disabled={busy}
-            onChange={(e) => onPickColor(e.target.value)}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-          />
-        </label>
+            title="Text color"
+            className="grid h-6 w-6 place-items-center rounded disabled:opacity-40"
+          >
+            <span
+              className="h-4 w-4 rounded-full border border-neutral-500"
+              style={{
+                background: colorActive
+                  ? colorValue
+                  : "repeating-linear-gradient(45deg, #525252 0 2px, transparent 2px 5px)",
+              }}
+            />
+          </button>
+          {colorPickerOpen ? (
+            <ColorPickerPopover
+              value={/^#[0-9a-f]{6}$/i.test(colorValue) ? colorValue : "#000000"}
+              themeRows={themeColorRows}
+              commonColors={commonColors}
+              onChange={onPickColor}
+              onClose={() => setColorPickerOpen(false)}
+            />
+          ) : null}
+        </div>
       ) : null}
 
       {canDeleteBlock ? (
