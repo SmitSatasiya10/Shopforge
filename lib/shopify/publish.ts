@@ -225,14 +225,14 @@ export interface PublishResult {
 export async function publishProjectToShopify(projectId: string): Promise<PublishResult> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { shopifyStore: true },
+    include: { store: { include: { shopifyStore: true } } },
   });
   if (!project) throw new PublishError("Project not found.");
-  if (!project.shopifyStore) {
+  if (!project.store.shopifyStore) {
     throw new PublishError("This project isn't connected to a Shopify store yet.");
   }
 
-  const { shopDomain } = project.shopifyStore;
+  const { shopDomain } = project.store.shopifyStore;
   // Theme-write calls require Shopify's separate write_themes exemption on top of the OAuth
   // scope, which can take weeks to be granted (docs/product-spec/21-security-and-multi-tenancy.md
   // §5). Try the OAuth token for the store this project is actually connected to first — a
@@ -248,7 +248,7 @@ export async function publishProjectToShopify(projectId: string): Promise<Publis
   // both candidates are tried in order against the real calls below, not decided upfront.
   const accessTokenCandidates: string[] = [];
   try {
-    accessTokenCandidates.push(await getValidAccessToken(project.shopifyStore));
+    accessTokenCandidates.push(await getValidAccessToken(project.store.shopifyStore));
   } catch {
     // No usable OAuth token for this store — fall through to the Theme Access password, if any.
   }
@@ -280,7 +280,7 @@ export async function publishProjectToShopify(projectId: string): Promise<Publis
         // themeFilesUpsert rejects the whole push otherwise. Upload whatever isn't already a
         // shopify:// reference and push that rewritten copy; project.configurationJson (and the
         // editor's own preview, which needs the original URLs) is never touched.
-        const resolvedConfig = await resolveProjectAssets(project.shopifyStore.id, shopDomain, accessToken, baseConfig);
+        const resolvedConfig = await resolveProjectAssets(project.store.shopifyStore.id, shopDomain, accessToken, baseConfig);
         await pushConfigurationJson(shopDomain, accessToken, themeId, resolvedConfig);
         await publishTheme(shopDomain, accessToken, themeId);
         lastErr = null;
@@ -300,6 +300,13 @@ export async function publishProjectToShopify(projectId: string): Promise<Publis
     record = await prisma.publishRecord.update({
       where: { id: record.id },
       data: { status: "success", shopifyThemeId: themeId },
+    });
+
+    // This theme is now the one live on the shop — mirror that locally so the dashboard/theme
+    // list can show an accurate Active badge without an extra Shopify API round-trip.
+    await prisma.store.update({
+      where: { id: project.storeId },
+      data: { activeThemeId: projectId },
     });
 
     return { status: "success", shopifyThemeId: themeId, storeUrl: `https://${shopDomain}` };

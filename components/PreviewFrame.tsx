@@ -413,6 +413,20 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
       if ((e.target as HTMLElement).closest("a")) e.preventDefault();
     };
 
+    // Header search, nav dropdowns, the mobile menu drawer, and the share-button fallback are
+    // all native <details>/<summary> disclosures — unlike media-gallery-style widgets, toggling
+    // them needs no JS at all, so they *do* open here even though the preview iframe never runs
+    // theme scripts. That's worse than not opening: the theme's <head> normally strips a
+    // `no-js` class off <html> in an inline script that also never runs here, so `.no-js
+    // .predictive-search { display: none }` (base.css) hides the search modal's actual input
+    // while its close button stays visible — the merchant gets a full-screen modal that's just
+    // a stray close icon on a gradient, with no JS left to close it either. Block the toggle at
+    // the source, the same way link navigation is blocked above, so clicking a search/menu icon
+    // in the preview does nothing rather than opening a modal it can't render or dismiss.
+    const handleDetailsToggle = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("summary")) e.preventDefault();
+    };
+
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
 
@@ -557,6 +571,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
     };
 
     doc.addEventListener("click", handleLinkNavigation, true);
+    doc.addEventListener("click", handleDetailsToggle, true);
     doc.addEventListener("click", handleGalleryThumbnailClick);
     doc.addEventListener("click", handleClick);
     doc.addEventListener("mouseover", handleOver);

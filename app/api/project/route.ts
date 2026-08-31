@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
-import { createFsTemplateReader } from "@/lib/preview/fs-template-reader";
-import { defaultConfiguration } from "@/lib/store-config/store";
-import { loadCatalog } from "@/lib/ai/catalog";
-import { collectImageTargets, applyProductImages } from "@/lib/ai/images";
-import { toNormalizedProduct, toProductDTO } from "@/lib/product/db-mapping";
+import { seedThemeConfiguration } from "@/lib/store-config/seed-theme";
 import { DEFAULT_STORE_LANGUAGE, normalizeStoreLanguage } from "@/lib/store-config/language";
 import { PersonaOptionsCacheSchema, type CustomerPersona } from "@/lib/store-config/persona";
 import { MarketingAngleCacheSchema, type MarketingAngle } from "@/lib/store-config/marketing-angle";
@@ -14,12 +10,16 @@ import {
   allCandidates,
   type SelectedImages,
 } from "@/lib/store-config/product-images";
-import { Prisma } from "@/app/generated/prisma/client";
 
-// POST /api/project — { productId, name, language } -> creates the Project seeded with the
-// Base Theme's own templates, so the store is previewable the moment it exists. AI content
-// generation is a separate call (POST /api/project/:id/generate) rather than something
-// project creation blocks on: a full two-template generation takes over a minute.
+// POST /api/project — { productId, name, language, storeId? } -> creates a theme (Project row)
+// seeded with the Base Theme's own templates, so it's previewable the moment it exists. AI
+// content generation is a separate call (POST /api/project/:id/generate) rather than something
+// theme creation blocks on: a full two-template generation takes over a minute.
+//
+// No "storeId": creates a brand-new Store for this product (its first theme, "Theme 1") — the
+// only path when a product was freshly imported and has no store yet.
+// "storeId" present: adds another theme to that existing store. The store's product must match
+// the given productId — every theme in a store shares the one store product.
 //
 // "language" is the target language for generated customer-facing store content
 // (store-content-language-selection-implementation.md) — an ISO 639-1 code such as "de".
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Provide { productId: string, name?: string, language?: string, personaId?: string, personaText?: string, angleId?: string, angleSelectionType?: \"generated\" | \"ai\", imageSelection?: string[] }",
+          "Provide { productId: string, name?: string, language?: string, storeId?: string, personaId?: string, personaText?: string, angleId?: string, angleSelectionType?: \"generated\" | \"ai\", imageSelection?: string[] }",
       },
       { status: 400 },
     );
@@ -132,53 +132,50 @@ export async function POST(req: NextRequest) {
     selectedImages = { images };
   }
 
-  const existing = await prisma.project.findUnique({ where: { productId: product.id } });
-  if (existing) {
-    // Re-running the wizard for the same product with a different language or persona
-    // should win: later generation reads these off the project row.
-    const data: Prisma.ProjectUpdateInput = {
-      ...(language && language !== existing.language ? { language } : {}),
-      ...(persona ? { personaJson: persona } : {}),
-      ...(marketingAngle ? { marketingAngleJson: marketingAngle } : {}),
-      ...(selectedImages ? { selectedImagesJson: selectedImages } : {}),
-    };
-    if (Object.keys(data).length > 0) {
-      const updated = await prisma.project.update({ where: { id: existing.id }, data });
-      return NextResponse.json({ project: updated }, { status: 200 });
+  const configuration = await seedThemeConfiguration(product, selectedImages);
+  const configurationJson = JSON.parse(JSON.stringify(configuration));
+
+  if (typeof body.storeId === "string" && body.storeId) {
+    const store = await prisma.store.findUnique({ where: { id: body.storeId } });
+    if (!store) return NextResponse.json({ error: "Store not found" }, { status: 404 });
+    if (store.productId !== product.id) {
+      return NextResponse.json({ error: "This product does not belong to the given store" }, { status: 400 });
     }
-    return NextResponse.json({ project: existing }, { status: 200 });
+
+    const themeCount = await prisma.project.count({ where: { storeId: store.id } });
+    const project = await prisma.project.create({
+      data: {
+        storeId: store.id,
+        name: typeof body.name === "string" && body.name.trim() ? body.name : `Theme ${themeCount + 1}`,
+        language: language ?? DEFAULT_STORE_LANGUAGE,
+        ...(persona ? { personaJson: persona } : {}),
+        ...(marketingAngle ? { marketingAngleJson: marketingAngle } : {}),
+        ...(selectedImages ? { selectedImagesJson: selectedImages } : {}),
+        configurationJson,
+      },
+    });
+    // A newly added theme is a draft — it never becomes the store's active theme automatically.
+    return NextResponse.json({ project, storeId: store.id }, { status: 201 });
   }
 
-  const configuration = await defaultConfiguration(createFsTemplateReader());
-
-  // Seed every image slot from the wizard's selected images when the Product Images step ran,
-  // so the very first preview reflects what the merchant actually picked rather than the raw
-  // scrape; otherwise fall back to the imported product's own photos as before. AI generation
-  // later replaces these (with the same images again, or generated images when the toggle is
-  // on); a product with no images leaves the theme defaults in place.
-  const normalized = toNormalizedProduct(toProductDTO(product));
-  const seedProduct = selectedImages
-    ? { ...normalized, images: selectedImages.images.map((img) => ({ url: img.url, altText: img.altText })) }
-    : normalized;
-  const { sections, blocks } = await loadCatalog();
-  for (const template of Object.values(configuration.templates)) {
-    applyProductImages(collectImageTargets(template, sections, blocks), seedProduct);
-  }
-
+  const store = await prisma.store.create({
+    data: {
+      name: typeof body.name === "string" && body.name.trim() ? body.name : (product.title ?? "Untitled store"),
+      productId: product.id,
+    },
+  });
   const project = await prisma.project.create({
     data: {
-      name:
-        typeof body.name === "string" && body.name.trim() ? body.name : (product.title ?? "Untitled store"),
-      productId: product.id,
+      storeId: store.id,
+      name: "Theme 1",
       language: language ?? DEFAULT_STORE_LANGUAGE,
       ...(persona ? { personaJson: persona } : {}),
       ...(marketingAngle ? { marketingAngleJson: marketingAngle } : {}),
       ...(selectedImages ? { selectedImagesJson: selectedImages } : {}),
-      // Prisma's Json input type wants an index signature the configuration type does not
-      // structurally have; round-tripping through JSON keeps this a plain-object write.
-      configurationJson: JSON.parse(JSON.stringify(configuration)),
+      configurationJson,
     },
   });
+  await prisma.store.update({ where: { id: store.id }, data: { activeThemeId: project.id } });
 
-  return NextResponse.json({ project }, { status: 201 });
+  return NextResponse.json({ project, storeId: store.id }, { status: 201 });
 }

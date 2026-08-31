@@ -25,12 +25,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const project = await prisma.project.findUnique({
     where: { id },
-    select: { productId: true, configurationJson: true },
+    select: { configurationJson: true, store: { select: { productId: true } } },
   });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const product = await prisma.product.update({
-    where: { id: project.productId },
+    where: { id: project.store.productId },
     data: {
       ...(title !== undefined ? { title } : {}),
       ...(hasDescription ? { description: body.description as string | null } : {}),

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
-import { AlertCircle, Monitor, Plus, Redo2, Smartphone, Undo2, X } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { AlertCircle, Copy, Monitor, Plus, Redo2, Smartphone, Undo2, X } from "lucide-react";
 import { PreviewFrame, PreviewFrameHandle, SelectInfo, SelectionRect } from "@/components/PreviewFrame";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { MediaPanel } from "@/components/MediaPanel";
@@ -12,6 +12,7 @@ import { SectionToolbar } from "@/components/SectionToolbar";
 import { SectionPicker } from "@/components/SectionPicker";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HistoryPanel } from "@/components/HistoryPanel";
+import { DuplicateThemeModal } from "@/components/DuplicateThemeModal";
 import { InlineTextToolbar } from "@/components/InlineTextToolbar";
 import { ImageChangeButton } from "@/components/ImageChangeButton";
 import { renderTemplate } from "@/lib/preview/template-renderer";
@@ -51,6 +52,7 @@ import {
 } from "@/lib/editor/setting-locator";
 import { applyAlign, applyColor, cycleWeight, findTextControls, stepSize } from "@/lib/editor/text-controls";
 import { buildThemePalette, parsePredefinedSwatches, FALLBACK_COMMON_COLORS, NamedColor, ThemeColorRow } from "@/lib/editor/color-palette";
+import { classifySaveResponseStatus } from "@/lib/editor/save-state";
 import { loadThemeSettings } from "@/lib/preview/theme-settings";
 import type { ProductDTO } from "@/lib/product/db-mapping";
 import { toNormalizedProduct } from "@/lib/product/db-mapping";
@@ -71,6 +73,7 @@ const HISTORY_COALESCE_MS = 700;
 // (docs/product-spec/06-preview-architecture.md, docs/EDITOR-TOOLBARS.md).
 export default function EditorPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const router = useRouter();
   const [product, setProduct] = useState<ProductDTO | null>(null);
   const [configuration, setConfiguration] = useState<StoreConfiguration | null>(null);
   const [page, setPage] = useState<PageTemplate>("product");
@@ -92,7 +95,8 @@ export default function EditorPage() {
   const [themeColorRows, setThemeColorRows] = useState<ThemeColorRow[]>([]);
   const [commonColors, setCommonColors] = useState<NamedColor[]>(FALLBACK_COMMON_COLORS);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle");
+  const [conflict, setConflict] = useState<{ currentUpdatedAt: string } | null>(null);
   const [generating, setGenerating] = useState(false);
   const [rewriting, setRewriting] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -123,6 +127,30 @@ export default function EditorPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<{ storeUrl: string } | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  // The store this theme belongs to, and which of the store's themes is currently the live
+  // one — used for the breadcrumb and to decide whether publishing needs a confirm step
+  // (publishing a theme that isn't already active flips the store's live theme).
+  const [storeId, setStoreId] = useState<string | null>(null);
+  const [storeName, setStoreName] = useState<string | null>(null);
+  const [themeName, setThemeName] = useState<string | null>(null);
+  const [storeActiveThemeId, setStoreActiveThemeId] = useState<string | null>(null);
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [showDuplicateTheme, setShowDuplicateTheme] = useState(false);
+
+  const duplicateTheme = useCallback(
+    async (name: string) => {
+      setShowDuplicateTheme(false);
+      if (!storeId) return;
+      const res = await fetch(`/api/store/${storeId}/theme`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, duplicateFrom: projectId }),
+      });
+      const data = await res.json();
+      if (res.ok) router.push(`/editor/${data.project.id}`);
+    },
+    [storeId, projectId, router],
+  );
   const [disconnecting, setDisconnecting] = useState(false);
   const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
   // Which section a new one should land after — set when the picker is opened from the inline
@@ -149,6 +177,20 @@ export default function EditorPage() {
   // otherwise trigger. Also flipped true right before setProduct when the server already
   // persisted the new title itself (AI rewrite), so the client doesn't re-save the same value.
   const skipNextProductSave = useRef(true);
+  // Optimistic-concurrency token for the configuration PATCH — the server rejects a save whose
+  // expectedUpdatedAt no longer matches Project.updatedAt (another tab/device saved since),
+  // rather than silently letting a stale save overwrite a newer one.
+  const lastKnownUpdatedAtRef = useRef<string | null>(null);
+  // True whenever there's a configuration/product change not yet confirmed saved by the server
+  // (covers both "not sent yet" and "sent but the response hasn't come back"). Drives the
+  // flush-on-hide/unmount/unload logic below and gates the beforeunload prompt.
+  const configDirtyRef = useRef(false);
+  const productDirtyRef = useRef(false);
+  // Neither debounce cancels an in-flight request — these guard against two overlapping saves
+  // racing each other; a flush that lands while one is already in flight just marks dirty and
+  // lets that request's own completion trigger the next send.
+  const configSaveInFlightRef = useRef(false);
+  const productSaveInFlightRef = useRef(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const previewFrameRef = useRef<PreviewFrameHandle>(null);
   const paletteIndex = useRef(-1);
@@ -171,6 +213,11 @@ export default function EditorPage() {
         setProduct(data.product);
         setShopifyShopDomain(data.project.shopifyShopDomain ?? null);
         setProjectLanguage(data.project.language ?? "en");
+        setStoreId(data.project.storeId ?? null);
+        setStoreName(data.project.storeName ?? null);
+        setThemeName(data.project.name ?? null);
+        setStoreActiveThemeId(data.project.storeActiveThemeId ?? null);
+        lastKnownUpdatedAtRef.current = data.project.updatedAt;
         try {
           const parsed = parseConfiguration(data.project.configurationJson);
           configRef.current = parsed;
@@ -262,23 +309,122 @@ export default function EditorPage() {
     };
   }, [configuration, page, product, readTemplate, readBinary]);
 
-  // Debounced persistence — configuration is never lost on reload.
+  // Holds the latest flushConfigurationSave so its own "a newer edit arrived mid-request"
+  // continuation below can call back into it without referencing the useCallback-bound const
+  // from inside its own initializer (which the React Compiler's ESLint plugin flags as an
+  // unsafe self-reference for memoization purposes).
+  const flushConfigurationSaveRef = useRef<() => void>(() => {});
+
+  // Sends whatever configuration is currently held, guarded by optimistic concurrency
+  // (expectedUpdatedAt) so a stale save can't silently overwrite a newer one. Called by the
+  // debounce timer below, and directly by the hide/unmount flush effects further down so a
+  // pending change isn't lost on refresh/navigation.
+  const flushConfigurationSave = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (configSaveInFlightRef.current) {
+      // Another save is already in flight — it'll notice configDirtyRef is still true and
+      // send this update itself once it resolves, rather than racing it here.
+      configDirtyRef.current = true;
+      return;
+    }
+    const config = configRef.current;
+    if (!config) return;
+    configSaveInFlightRef.current = true;
+    setSaveState("saving");
+    fetch(`/api/project/${projectId}/configuration`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ configuration: config, expectedUpdatedAt: lastKnownUpdatedAtRef.current }),
+    })
+      .then(async (res) => {
+        const outcome = classifySaveResponseStatus(res.status);
+        if (outcome === "conflict") {
+          const data = await res.json().catch(() => null);
+          setConflict({ currentUpdatedAt: data?.currentUpdatedAt ?? new Date().toISOString() });
+          setSaveState("conflict");
+          return outcome;
+        }
+        if (outcome === "error") throw new Error();
+        const data = await res.json();
+        lastKnownUpdatedAtRef.current = data.project.updatedAt;
+        configDirtyRef.current = false;
+        setSaveState("saved");
+        return outcome;
+      })
+      .catch((): "error" => {
+        setSaveState("error");
+        return "error";
+      })
+      .then((outcome) => {
+        configSaveInFlightRef.current = false;
+        // A newer edit landed while this request was in flight — send it now instead of
+        // waiting out a fresh debounce window. Only auto-continues after a real success;
+        // an error or conflict waits for the user (Retry / Reload / Keep my version).
+        if (outcome === "saved" && configDirtyRef.current) flushConfigurationSaveRef.current();
+      });
+  }, [projectId]);
+  useEffect(() => {
+    flushConfigurationSaveRef.current = flushConfigurationSave;
+  }, [flushConfigurationSave]);
+
+  // Debounced persistence — configuration is never lost on reload (barring the sub-500ms
+  // window before the timer fires, which the hide/unmount/unload flush effects below cover).
   useEffect(() => {
     if (!configuration) return;
+    configDirtyRef.current = true;
     queueMicrotask(() => setSaveState("saving"));
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      fetch(`/api/project/${projectId}/configuration`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ configuration }),
-      }).then(() => setSaveState("saved"));
-    }, 500);
+    saveTimer.current = setTimeout(flushConfigurationSave, 500);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configuration]);
+  }, [configuration, flushConfigurationSave]);
+
+  // Product title/description equivalent of flushConfigurationSave above. No optimistic
+  // concurrency here — the product record isn't subject to the same multi-tab race in practice
+  // (it's a single title/description pair, not a whole template), so this stays as simple as
+  // the original debounced save, just factored out so the hide/unmount flush can reuse it.
+  const flushProductSaveRef = useRef<() => void>(() => {});
+  const flushProductSave = useCallback(() => {
+    if (productSaveTimer.current) {
+      clearTimeout(productSaveTimer.current);
+      productSaveTimer.current = null;
+    }
+    if (productSaveInFlightRef.current) {
+      productDirtyRef.current = true;
+      return;
+    }
+    const current = productRef.current;
+    if (!current) return;
+    productSaveInFlightRef.current = true;
+    const { title, description } = current;
+    setSaveState("saving");
+    fetch(`/api/project/${projectId}/product`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title, description }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error();
+        productDirtyRef.current = false;
+        setSaveState("saved");
+        return "saved" as const;
+      })
+      .catch((): "error" => {
+        setNotice("Could not save the product.");
+        return "error";
+      })
+      .then((outcome) => {
+        productSaveInFlightRef.current = false;
+        if (outcome === "saved" && productDirtyRef.current) flushProductSaveRef.current();
+      });
+  }, [projectId]);
+  useEffect(() => {
+    flushProductSaveRef.current = flushProductSave;
+  }, [flushProductSave]);
 
   // Debounced persistence for the product title/description — mirrors the configuration save
   // above, so inline edits, AI rewrites, and undo/redo of either all end up saved the same way.
@@ -288,26 +434,76 @@ export default function EditorPage() {
       return;
     }
     if (!product) return;
+    productDirtyRef.current = true;
     queueMicrotask(() => setSaveState("saving"));
     if (productSaveTimer.current) clearTimeout(productSaveTimer.current);
-    const { title, description } = product;
-    productSaveTimer.current = setTimeout(() => {
-      fetch(`/api/project/${projectId}/product`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, description }),
-      })
-        .then((res) => {
-          if (!res.ok) throw new Error();
-          setSaveState("saved");
-        })
-        .catch(() => setNotice("Could not save the product."));
-    }, 500);
+    productSaveTimer.current = setTimeout(flushProductSave, 500);
     return () => {
       if (productSaveTimer.current) clearTimeout(productSaveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product?.title, product?.description]);
+  }, [product?.title, product?.description, flushProductSave]);
+
+  // Flush a pending save as soon as the tab is hidden (switched away from, backgrounded) or
+  // the editor unmounts (SPA navigation away from this route) — both still allow a normal
+  // fetch to complete, unlike an actual page close/reload, which beforeunload below covers.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "hidden") return;
+      if (configDirtyRef.current) flushConfigurationSave();
+      if (productDirtyRef.current) flushProductSave();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [flushConfigurationSave, flushProductSave]);
+
+  useEffect(() => {
+    return () => {
+      if (configDirtyRef.current) flushConfigurationSave();
+      if (productDirtyRef.current) flushProductSave();
+    };
+    // Empty deps deliberately — this must run only on true unmount, not on every
+    // configuration/product change (flushConfigurationSave/flushProductSave only close over
+    // `projectId`, which never changes for a mounted editor, so the captured versions stay
+    // current).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Last-resort backstop for a hard reload/close that happens before the above get a chance to
+  // run. navigator.sendBeacon is the one mechanism reliably delivered during actual unload;
+  // it can only POST, hence the route's POST alias. Payloads are capped (~64KB in most
+  // browsers) — an unusually large configuration could still fail to flush this way, a known,
+  // accepted limitation. Also nudges the browser's native "leave site?" prompt as a human
+  // backstop, but only when there's a real unsaved change.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!configDirtyRef.current || !configRef.current) return;
+      const payload = JSON.stringify({
+        configuration: configRef.current,
+        expectedUpdatedAt: lastKnownUpdatedAtRef.current,
+      });
+      navigator.sendBeacon(
+        `/api/project/${projectId}/configuration`,
+        new Blob([payload], { type: "application/json" }),
+      );
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [projectId]);
+
+  // The conflict dialog's explicit, user-approved overwrite: take the fresher timestamp the
+  // server just reported and save the local draft over it. Deliberately not automatic — the
+  // whole point of the 409 is that silently overwriting someone else's save is exactly what
+  // this feature exists to prevent.
+  const keepMyVersion = useCallback(() => {
+    if (!conflict) return;
+    lastKnownUpdatedAtRef.current = conflict.currentUpdatedAt;
+    configDirtyRef.current = true;
+    setConflict(null);
+    flushConfigurationSave();
+  }, [conflict, flushConfigurationSave]);
 
   // The clicked section's schema drives the Inspector. The loaded schema is stored with the
   // type it belongs to, so a stale result for a previously-selected section is ignored by
@@ -559,7 +755,7 @@ export default function EditorPage() {
   // Installs/reuses the project's Shopify theme, pushes the current Store Configuration onto
   // it, and publishes it live (lib/shopify/publish.ts). Only reachable once shopifyShopDomain
   // is set, i.e. after the Connect flow below has linked a ShopifyStore to this project.
-  const publish = useCallback(async () => {
+  const doPublish = useCallback(async () => {
     setPublishing(true);
     setPublishError(null);
     setPublishResult(null);
@@ -571,12 +767,25 @@ export default function EditorPage() {
         return;
       }
       setPublishResult({ storeUrl: data.storeUrl });
+      // This theme is now the store's live one.
+      setStoreActiveThemeId(projectId);
     } catch {
       setPublishError("Something went wrong while publishing.");
     } finally {
       setPublishing(false);
     }
   }, [projectId]);
+
+  // Re-publishing the theme that's already live is the common case and skips the confirm step;
+  // publishing a different, currently-draft theme replaces the store's live theme, so that gets
+  // a confirmation first since it's a real behavior change for the merchant's storefront.
+  const publish = useCallback(() => {
+    if (storeActiveThemeId && storeActiveThemeId !== projectId) {
+      setConfirmPublish(true);
+      return;
+    }
+    doPublish();
+  }, [storeActiveThemeId, projectId, doPublish]);
 
   // Purges the stored connection (lib/shopify/publish.ts's disconnect route deletes the
   // ShopifyStore row outright rather than marking it inactive) so a different store can be
@@ -846,7 +1055,17 @@ export default function EditorPage() {
     // inherits the body background, which goes dark under `prefers-color-scheme: dark`.
     <div className="flex min-h-0 flex-1 flex-col bg-white text-neutral-900">
       <header className="flex items-center justify-between gap-4 border-b border-neutral-800 bg-neutral-900 px-4 py-2 text-sm text-white">
-        <span className="text-neutral-400">{product?.title ?? "Untitled store"}</span>
+        <span className="flex min-w-0 items-center gap-1.5 text-neutral-400">
+          {storeId ? (
+            <a href={`/store/${storeId}`} className="truncate hover:text-white hover:underline">
+              {storeName ?? product?.title ?? "Untitled store"}
+            </a>
+          ) : (
+            <span className="truncate">{storeName ?? product?.title ?? "Untitled store"}</span>
+          )}
+          <span aria-hidden="true">/</span>
+          <span className="truncate text-neutral-200">{themeName ?? "Theme"}</span>
+        </span>
 
         <div className="flex items-center gap-1 rounded border border-neutral-700 p-0.5">
           {PAGE_TEMPLATES.map((name) => (
@@ -888,6 +1107,14 @@ export default function EditorPage() {
 
           <HistoryPanel projectId={projectId} onRestore={restoreFromHistory} />
 
+          <button
+            onClick={() => setShowDuplicateTheme(true)}
+            title="Duplicate this theme"
+            className="rounded p-1.5 text-neutral-400 hover:bg-white/10 hover:text-white"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+
           <div className="flex items-center gap-0.5 rounded border border-neutral-700 p-0.5">
             <button
               onClick={() => setViewport("desktop")}
@@ -909,8 +1136,23 @@ export default function EditorPage() {
             </button>
           </div>
 
-          <span className="w-14 text-right text-xs text-neutral-500">
-            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}
+          <span className="whitespace-nowrap text-right text-xs text-neutral-500">
+            {saveState === "saving" ? (
+              "Saving…"
+            ) : saveState === "saved" ? (
+              "Saved"
+            ) : saveState === "conflict" ? (
+              <span className="text-amber-500">Conflict</span>
+            ) : saveState === "error" ? (
+              <button
+                onClick={() => flushConfigurationSave()}
+                className="text-red-500 underline decoration-dotted hover:text-red-400"
+              >
+                Save failed — Retry
+              </button>
+            ) : (
+              ""
+            )}
           </span>
 
           <a
@@ -1264,6 +1506,66 @@ export default function EditorPage() {
           }}
           onCancel={() => setConfirmDelete(null)}
         />
+      ) : null}
+
+      {confirmPublish ? (
+        <ConfirmDialog
+          tone="info"
+          title="Make this the active theme?"
+          message={`"${themeName ?? "This theme"}" will become live on ${shopifyShopDomain}. The theme currently live becomes a draft you can still edit and republish.`}
+          confirmLabel="Publish"
+          onConfirm={() => {
+            setConfirmPublish(false);
+            doPublish();
+          }}
+          onCancel={() => setConfirmPublish(false)}
+        />
+      ) : null}
+
+      {showDuplicateTheme ? (
+        <DuplicateThemeModal
+          sourceName={themeName ?? "This theme"}
+          onClose={() => setShowDuplicateTheme(false)}
+          onConfirm={duplicateTheme}
+        />
+      ) : null}
+
+      {conflict ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-neutral-950/50 p-4">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="This project changed elsewhere"
+            className="w-full max-w-sm rounded-2xl bg-neutral-900 p-5 text-white shadow-2xl ring-1 ring-white/10"
+          >
+            <div className="flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-400">
+                <AlertCircle className="h-4.5 w-4.5" strokeWidth={1.75} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">This project changed elsewhere</p>
+                <p className="mt-1 text-xs leading-relaxed text-neutral-400">
+                  It looks like this project was edited in another tab or device since you last saved. Reload to
+                  see the latest version, or keep editing and save your version over it.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => window.location.reload()}
+                className="rounded-full px-4 py-1.5 text-xs font-medium text-neutral-300 ring-1 ring-white/15 hover:bg-neutral-700 hover:text-white"
+              >
+                Reload latest
+              </button>
+              <button
+                onClick={keepMyVersion}
+                className="rounded-full bg-amber-500 px-4 py-1.5 text-xs font-medium text-neutral-900 hover:bg-amber-400"
+              >
+                Keep my version
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

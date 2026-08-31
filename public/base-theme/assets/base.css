@@ -1785,7 +1785,8 @@ section-group {
 }
 
 .media model-viewer,
-.media> :not(.zoom):not(.deferred-media__poster-button) {
+.media> :not(.zoom):not(.deferred-media__poster-button),
+.media> [data-sf-editable]> :not(.zoom):not(.deferred-media__poster-button) {
   display: block;
   max-width: 100%;
   position: absolute;
@@ -1797,7 +1798,10 @@ section-group {
 
 .media>img,
 .media>video,
-.media>internal-video video {
+.media>internal-video video,
+.media> [data-sf-editable]>img,
+.media> [data-sf-editable]>video,
+.media> [data-sf-editable]>internal-video video {
   object-fit: cover;
   object-position: center center;
   transition: opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
