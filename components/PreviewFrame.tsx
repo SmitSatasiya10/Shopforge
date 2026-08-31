@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { morphChildren } from "@/lib/editor/dom-morph";
+import { createDictationInsertSession, insertDictatedText as applyDictatedTextInsert } from "@/lib/editor/dictation-insert";
 import type { TextBinding } from "@/lib/editor/setting-locator";
 
 /** Viewport-relative box of the selected element — the iframe fills its container, so these map 1:1 onto the overlay. */
@@ -59,6 +60,16 @@ interface PreviewFrameProps {
    * land below the fold (even off the end) of a shorter page and hide its header.
    */
   resetScrollKey?: string | number;
+}
+
+export interface PreviewFrameHandle {
+  /**
+   * Inserts speech-recognized text into the field currently being inline-edited, at its live
+   * caret (docs/VOICE-DICTATION-PLAN.md §5/§9) — a no-op if nothing is actively contenteditable
+   * right now (the mic is only shown while a text field is selected, but the field can lose its
+   * live edit state — e.g. the user tabbed away — between renders).
+   */
+  insertDictatedText(text: string, isFinal: boolean): void;
 }
 
 /**
@@ -195,19 +206,40 @@ interface Tracked {
  * `contentDocument` for click-to-select, hover affordances and inline text editing —
  * no postMessage, because same-origin gives direct DOM access without it.
  */
-export function PreviewFrame({
-  html,
-  selectedSectionId,
-  onSelect,
-  onTextCommit,
-  resolveText,
-  onRectChange,
-  onUndo,
-  onRedo,
-  resetScrollKey,
-}: PreviewFrameProps) {
+export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(function PreviewFrame(
+  {
+    html,
+    selectedSectionId,
+    onSelect,
+    onTextCommit,
+    resolveText,
+    onRectChange,
+    onUndo,
+    onRedo,
+    resetScrollKey,
+  },
+  ref,
+) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const trackedRef = useRef<Tracked | null>(null);
+  // Voice dictation's insert-in-place state (docs/VOICE-DICTATION-PLAN.md §5) — keyed to
+  // whichever element it was last used on, so switching fields between two mic holds starts a
+  // fresh session instead of resuming a leftover interim node in the field just left behind.
+  const dictationSessionRef = useRef(createDictationInsertSession());
+  const dictationElRef = useRef<HTMLElement | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    insertDictatedText(text, isFinal) {
+      const el = trackedRef.current?.el ?? null;
+      if (!el || !el.isContentEditable) return;
+      if (dictationElRef.current !== el) {
+        dictationSessionRef.current = createDictationInsertSession();
+        dictationElRef.current = el;
+      }
+      el.focus();
+      applyDictatedTextInsert(el.ownerDocument, dictationSessionRef.current, text, isFinal);
+    },
+  }), []);
   // The document loaded for mount key N; a bumped key remounts the iframe (full reload).
   // Starts with empty html — the iframe renders once real markup arrives.
   const [mount, setMount] = useState<{ key: number; html: string }>({ key: 0, html: "" });
@@ -583,4 +615,4 @@ export function PreviewFrame({
       className="h-full w-full border-0 bg-white"
     />
   );
-}
+});

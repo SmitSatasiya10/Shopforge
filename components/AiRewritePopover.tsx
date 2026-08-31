@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ArrowUp, LoaderCircle, Minus, Plus, RefreshCw, Sparkles, Wand2, X } from "lucide-react";
 import { presetById, REWRITE_PRESETS, type RewritePreset } from "@/lib/ai/rewrite-presets";
+import { VoiceDictationButton } from "./VoiceDictationButton";
 import type { SelectionRect } from "./PreviewFrame";
 
 /** "Quick suggestions" render as purple-tinted line icons, per the reference editor. */
@@ -33,10 +34,25 @@ const ANGLE_EMOJI: Record<string, string> = {
   fomo: "🔥",
 };
 
-/** Rough rendered height of prompt card + suggestions card, used only to clamp into view. */
-const POPOVER_HEIGHT = 400;
+/**
+ * The textarea grows with its content up to this height (px) before it starts scrolling
+ * instead — a longer dictated/typed prompt used to hit the fixed `rows` count almost
+ * immediately, handing off to the browser's own cramped, unstyled scrollbar. Anchored (a
+ * field-level rewrite) gets a shorter cap than the full popover, matching their different
+ * `rows` starting points below.
+ */
+const MAX_TEXTAREA_HEIGHT_ANCHORED = 120;
+const MAX_TEXTAREA_HEIGHT_FULL = 180;
+
+/**
+ * Rough rendered height of prompt card + suggestions card, used only to clamp into view.
+ * Padded above the textarea's own max-grow height (rather than just a 2-3 row textarea) so a
+ * long dictated/typed prompt near the bottom of the screen still clamps the popover fully
+ * on-screen instead of assuming the old, smaller fixed-rows height.
+ */
+const POPOVER_HEIGHT = 500;
 /** Rough rendered height of the prompt card alone (no suggestions card), same purpose. */
-const POPOVER_HEIGHT_COMPACT = 110;
+const POPOVER_HEIGHT_COMPACT = 180;
 
 interface AiRewritePopoverProps {
   /** Display name of the selected section — the popover renders only while one is selected. */
@@ -45,6 +61,8 @@ interface AiRewritePopoverProps {
   rect: SelectionRect | null;
   /** Height of the preview container, so the popover clamps into view. */
   containerHeight: number;
+  /** BCP-47 locale for the mic's voice dictation — see lib/store-config/dictation-locale.ts. */
+  dictationLang: string;
   /**
    * True for a field selection (opened from the inline text toolbar): floats below the
    * selected element itself — same `Math.max(8, rect.left)` horizontal anchor that toolbar
@@ -72,6 +90,7 @@ export function AiRewritePopover({
   sectionLabel,
   rect,
   containerHeight,
+  dictationLang,
   anchorToElement,
   busy,
   onSubmit,
@@ -85,10 +104,26 @@ export function AiRewritePopover({
   // preset id (richer instruction) instead of the short fill text.
   const [picked, setPicked] = useState<RewritePreset | null>(DEFAULT_PRESET);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // The prompt text right before the current mic hold started, so interim/final speech results
+  // append after it instead of overwriting whatever was already typed or dictated
+  // (docs/VOICE-DICTATION-PLAN.md §3).
+  const dictationBaseRef = useRef(prompt);
 
   useEffect(() => {
     if (!busy) inputRef.current?.focus();
   }, [busy]);
+
+  // Auto-grows the textarea to fit its content (typed or dictated) up to a max height, instead
+  // of handing off to the browser's own scrollbar the moment `rows` is exceeded. useLayoutEffect
+  // (not useEffect) so the resize happens before paint — no visible snap from the old height to
+  // the new one.
+  const maxTextareaHeight = anchorToElement ? MAX_TEXTAREA_HEIGHT_ANCHORED : MAX_TEXTAREA_HEIGHT_FULL;
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, maxTextareaHeight)}px`;
+  }, [prompt, maxTextareaHeight]);
 
   const pickPreset = (preset: RewritePreset) => {
     if (busy) return;
@@ -147,8 +182,21 @@ export function AiRewritePopover({
               }
               if (e.key === "Escape") onClose();
             }}
-            className="flex-1 resize-none bg-transparent text-sm placeholder-neutral-400 outline-none disabled:opacity-50"
+            className="sf-scroll-dark flex-1 resize-none overflow-y-auto bg-transparent text-sm placeholder-neutral-400 outline-none disabled:opacity-50"
           />
+          {!busy ? (
+            <VoiceDictationButton
+              lang={dictationLang}
+              onHoldStart={() => {
+                dictationBaseRef.current = prompt;
+              }}
+              onInterim={(text) => setPrompt(dictationBaseRef.current + text)}
+              onFinal={(text) => {
+                dictationBaseRef.current = dictationBaseRef.current + text;
+                setPrompt(dictationBaseRef.current);
+              }}
+            />
+          ) : null}
           <button
             onClick={onClose}
             title="Close"
