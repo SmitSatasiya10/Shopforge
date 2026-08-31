@@ -6,14 +6,17 @@ import { Upload, X } from "lucide-react";
 interface MediaPanelProps {
   open: boolean;
   images: { url: string; altText: string | null }[];
+  /** Results accepted from the "Edit with AI" panel (Product.generatedImagesJson) — reusable the same way a product photo is. */
+  generatedImages?: { url: string; altText: string | null }[];
   onSelect: (url: string) => void;
   onClose: () => void;
 }
 
-type Tab = "product" | "reviews" | "uploaded";
+type Tab = "product" | "generated" | "reviews" | "uploaded";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "product", label: "Product" },
+  { id: "generated", label: "Generated" },
   { id: "reviews", label: "Reviews" },
   { id: "uploaded", label: "Uploaded" },
 ];
@@ -26,13 +29,15 @@ const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 /**
  * "Your media" — browse existing product photos and assign one to the currently targeted
  * image_picker setting. Renders inline as the editor's left sidebar slot (same spot as the AI
- * panel), opened via the left rail's Media button, SettingsPanel's "Browse media" button, or
- * ImageChangeButton. Product images come straight from the project's own product data; Reviews
- * has no backing data source in this app yet, so it shows an honest empty state rather than
- * fabricated content. Uploaded holds images picked from the user's device for this session,
- * encoded as data: URIs (the same value shape every other tab hands to onSelect).
+ * panel), opened via the left rail's Media button, SettingsPanel's "Browse media" button,
+ * ImageChangeButton, or as the reference picker inside AiImageEditPanel. Product images come
+ * straight from the project's own product data; Generated holds results accepted from "Edit
+ * with AI" (Product.generatedImagesJson), reusable across every theme belonging to the same
+ * store; Reviews has no backing data source in this app yet, so it shows an honest empty state
+ * rather than fabricated content. Uploaded holds images picked from the user's device for this
+ * session, encoded as data: URIs (the same value shape every other tab hands to onSelect).
  */
-export function MediaPanel({ open, images, onSelect, onClose }: MediaPanelProps) {
+export function MediaPanel({ open, images, generatedImages = [], onSelect, onClose }: MediaPanelProps) {
   const [tab, setTab] = useState<Tab>("product");
   const [uploaded, setUploaded] = useState<{ url: string; altText: string | null }[]>([]);
 
@@ -63,7 +68,9 @@ export function MediaPanel({ open, images, onSelect, onClose }: MediaPanelProps)
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {tab === "product" ? (
-          <ProductTab images={images} onSelect={onSelect} />
+          <ProductTab images={images} emptyLabel="No product images yet." onSelect={onSelect} />
+        ) : tab === "generated" ? (
+          <ProductTab images={generatedImages} emptyLabel="Images you generate with AI appear here." onSelect={onSelect} />
         ) : tab === "uploaded" ? (
           <UploadedTab
             images={uploaded}
@@ -78,9 +85,17 @@ export function MediaPanel({ open, images, onSelect, onClose }: MediaPanelProps)
   );
 }
 
-function ProductTab({ images, onSelect }: { images: { url: string; altText: string | null }[]; onSelect: (url: string) => void }) {
+function ProductTab({
+  images,
+  emptyLabel,
+  onSelect,
+}: {
+  images: { url: string; altText: string | null }[];
+  emptyLabel: string;
+  onSelect: (url: string) => void;
+}) {
   if (images.length === 0) {
-    return <p className="px-1 py-4 text-xs text-neutral-400">No product images yet.</p>;
+    return <p className="px-1 py-4 text-xs text-neutral-400">{emptyLabel}</p>;
   }
   return (
     <div className="grid grid-cols-2 gap-2">

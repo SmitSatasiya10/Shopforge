@@ -270,7 +270,7 @@ function ConnectShopify() {
   if (connectedShop) {
     return (
       <>
-        <ProgressSteps step={2} onBack={() => router.push("/")} />
+        <ProgressSteps step={2} onBack={() => router.push("/dashboard/new")} />
         <div className="mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-8">
           <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
             <span>Connected to {connectedShop}</span>
@@ -354,7 +354,7 @@ function ConnectShopify() {
 
   return (
     <>
-      <ProgressSteps step={2} onBack={() => router.push("/")} />
+      <ProgressSteps step={2} onBack={() => router.push("/dashboard/new")} />
       <div className="flex flex-1 flex-col lg:flex-row">
         {/* Left: connect actions */}
         <div className="flex flex-1 flex-col px-6 py-12 sm:px-12 lg:px-16">
@@ -611,7 +611,7 @@ function ImportForm({ source }: { source: ProductImportSource }) {
     <>
       <ProgressSteps
         step={2}
-        onBack={() => router.push(source === "shopify" ? "/import?source=shopify" : "/")}
+        onBack={() => router.push(source === "shopify" ? "/import?source=shopify" : "/dashboard/new")}
       />
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-6 py-16">
         <div className="text-center">

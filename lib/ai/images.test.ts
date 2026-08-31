@@ -1,9 +1,25 @@
-import { describe, expect, it } from "vitest";
-import { applyProductImages, collectImageTargets, resolveImages } from "./images";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+
+// requestImage() is instrumented via the debug logger the same way chat() is
+// (lib/ai/openrouter.test.ts) — mock the filesystem so these tests never touch the real
+// audit-log files.
+vi.mock("node:fs", () => ({ existsSync: () => true }));
+vi.mock("node:fs/promises", () => ({ appendFile: vi.fn(async () => {}), mkdir: vi.fn(async () => {}) }));
+
+import { applyProductImages, collectImageTargets, resolveImages, requestImage } from "./images";
 import { SectionSchema, BlockSchema } from "./catalog";
 import { ShopifyTemplate } from "@/lib/preview/shopify-template";
 import { loadAiConfig } from "./config";
 import { NormalizedProduct } from "@/lib/product/types";
+
+function jsonResponse(body: unknown, init: { ok?: boolean; status?: number } = {}) {
+  return {
+    ok: init.ok ?? true,
+    status: init.status ?? 200,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as Response;
+}
 
 const sections: SectionSchema[] = [
   {
@@ -127,5 +143,53 @@ describe("config defaults", () => {
 
   it("reads the toggle from an explicit override ahead of the environment", () => {
     expect(loadAiConfig({ generateImages: true }).generateImages).toBe(true);
+  });
+});
+
+describe("requestImage()", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  const imageConfig = loadAiConfig({ generateImages: true, apiKey: "test-key" });
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("sends the prompt as plain string content when no reference image is given", async () => {
+    fetchSpy.mockResolvedValue(jsonResponse({ choices: [{ message: { images: [{ image_url: { url: "https://cdn.example.com/out.jpg" } }] } }] }));
+
+    const result = await requestImage("a chair", imageConfig);
+
+    expect(result).toEqual({ url: "https://cdn.example.com/out.jpg" });
+    const sentBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    expect(sentBody.messages).toEqual([{ role: "user", content: "a chair" }]);
+  });
+
+  it("adds the reference image as a second content part when given, alongside the text prompt", async () => {
+    fetchSpy.mockResolvedValue(jsonResponse({ choices: [{ message: { images: [{ image_url: { url: "https://cdn.example.com/out.jpg" } }] } }] }));
+
+    await requestImage("edit this", imageConfig, undefined, "https://cdn.example.com/reference.jpg");
+
+    const sentBody = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    expect(sentBody.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "edit this" },
+          { type: "image_url", image_url: { url: "https://cdn.example.com/reference.jpg" } },
+        ],
+      },
+    ]);
+  });
+
+  it("returns null on a non-ok provider response, whether or not a reference image was given", async () => {
+    fetchSpy.mockResolvedValue(jsonResponse({}, { ok: false, status: 502 }));
+    expect(await requestImage("x", imageConfig, undefined, "https://cdn.example.com/ref.jpg")).toBeNull();
   });
 });

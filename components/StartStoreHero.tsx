@@ -45,7 +45,14 @@ const SOURCES: Array<{
   },
 ];
 
-export function StartStoreHero() {
+interface StartStoreHeroProps {
+  /** Shown as a back button in the top-left corner when provided — used when this is reached
+   * from "+ New store" (there's a dashboard to return to); omitted for the dashboard's own
+   * empty state, where there's nowhere to go back to yet. */
+  onBack?: () => void;
+}
+
+export function StartStoreHero({ onBack }: StartStoreHeroProps = {}) {
   const router = useRouter();
   const [pendingSource, setPendingSource] = useState<ProductImportSource | null>(null);
   const [loadingSample, setLoadingSample] = useState(false);
@@ -83,6 +90,19 @@ export function StartStoreHero() {
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[560px] bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(139,92,246,0.16),transparent_70%)]"
         aria-hidden="true"
       />
+
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back to your stores"
+          className="absolute top-6 left-6 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-[#A1A1AA] transition duration-200 hover:border-white/20 hover:bg-white/5 hover:text-[#FAFAFA] focus-visible:ring-2 focus-visible:ring-[#8B5CF6]/60 focus-visible:outline-none sm:left-8"
+        >
+          <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75">
+            <path d="M12.5 4.5 7 10l5.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      ) : null}
 
       <div className="mx-auto flex w-full max-w-[1050px] flex-1 flex-col justify-center px-6 py-14 sm:py-16">
         <div className="animate-fade-up text-center">

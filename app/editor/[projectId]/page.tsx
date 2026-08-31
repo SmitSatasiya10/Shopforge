@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertCircle, Copy, Monitor, Plus, Redo2, Smartphone, Undo2, X } from "lucide-react";
+import { AlertCircle, Copy, Link, Monitor, Plus, Redo2, Smartphone, Undo2, X } from "lucide-react";
 import { PreviewFrame, PreviewFrameHandle, SelectInfo, SelectionRect } from "@/components/PreviewFrame";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { MediaPanel } from "@/components/MediaPanel";
@@ -13,8 +13,11 @@ import { SectionPicker } from "@/components/SectionPicker";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { DuplicateThemeModal } from "@/components/DuplicateThemeModal";
+import { PublicLinkModal } from "@/components/PublicLinkModal";
 import { InlineTextToolbar } from "@/components/InlineTextToolbar";
 import { ImageChangeButton } from "@/components/ImageChangeButton";
+import { AiImageEditPanel } from "@/components/AiImageEditPanel";
+import type { GeneratedImage } from "@/lib/product/generated-images";
 import { renderTemplate } from "@/lib/preview/template-renderer";
 import { createFetchTemplateReader, createFetchBinaryReader } from "@/lib/preview/template-loader";
 import {
@@ -136,6 +139,32 @@ export default function EditorPage() {
   const [storeActiveThemeId, setStoreActiveThemeId] = useState<string | null>(null);
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [showDuplicateTheme, setShowDuplicateTheme] = useState(false);
+  const [publicPreviewEnabled, setPublicPreviewEnabled] = useState(false);
+  const [publicPreviewToken, setPublicPreviewToken] = useState<string | null>(null);
+  const [showPublicLink, setShowPublicLink] = useState(false);
+  const [publicLinkBusy, setPublicLinkBusy] = useState(false);
+
+  const setPublicPreview = useCallback(
+    async (enabled: boolean) => {
+      if (!storeId) return;
+      setPublicLinkBusy(true);
+      try {
+        const res = await fetch(`/api/store/${storeId}/theme/${projectId}/public-link`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ enabled }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPublicPreviewEnabled(data.publicPreviewEnabled);
+          setPublicPreviewToken(data.publicPreviewToken);
+        }
+      } finally {
+        setPublicLinkBusy(false);
+      }
+    },
+    [storeId, projectId],
+  );
 
   const duplicateTheme = useCallback(
     async (name: string) => {
@@ -164,6 +193,15 @@ export default function EditorPage() {
   // existing SectionPicker modal directly, same as the old header button did.
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [mediaPanelOpen, setMediaPanelOpen] = useState(false);
+  // "Edit with AI" (ImageChangeButton's second action) — a fourth view of the same left
+  // sidebar slot. aiImageTarget mirrors mediaPickerTarget: which image_picker setting "Use
+  // image" writes into. aiReferenceUrl is the panel's current reference image, seeded from the
+  // clicked image and swappable via aiReferencePicking, which reopens MediaPanel to pick a
+  // different one without touching aiImageTarget.
+  const [aiImagePanelOpen, setAiImagePanelOpen] = useState(false);
+  const [aiImageTarget, setAiImageTarget] = useState<{ settingId: string; blockPath: string[] } | null>(null);
+  const [aiReferenceUrl, setAiReferenceUrl] = useState<string>("");
+  const [aiReferencePicking, setAiReferencePicking] = useState(false);
   // The project's target store-content language (ISO 639-1, e.g. "fr") — read once at load,
   // used only to bias the AI prompt's voice-dictation mic toward the right speech locale
   // (docs/VOICE-DICTATION-PLAN.md §4); never drives anything else on this page.
@@ -217,6 +255,8 @@ export default function EditorPage() {
         setStoreName(data.project.storeName ?? null);
         setThemeName(data.project.name ?? null);
         setStoreActiveThemeId(data.project.storeActiveThemeId ?? null);
+        setPublicPreviewEnabled(data.project.publicPreviewEnabled ?? false);
+        setPublicPreviewToken(data.project.publicPreviewToken ?? null);
         lastKnownUpdatedAtRef.current = data.project.updatedAt;
         try {
           const parsed = parseConfiguration(data.project.configurationJson);
@@ -539,6 +579,16 @@ export default function EditorPage() {
   // A direct click on an image_picker-backed <img> (data-sf-editable="image") — shows
   // ImageChangeButton instead of the text toolbar.
   const imageSettingId = !binding && selection?.editable === "image" ? selection.settingId : null;
+  // The clicked image's current value — seeds AiImageEditPanel's reference image when "Edit
+  // with AI" opens, read the same way boundValues reads a bound text setting's current value.
+  const currentImageNode =
+    imageSettingId && selectedSection
+      ? ((blockScope && blockScope.length > 0 ? getBlockAt(selectedSection, blockScope) : selectedSection) as
+          | { settings?: Record<string, unknown> }
+          | undefined)
+      : undefined;
+  const currentImageUrl =
+    imageSettingId && currentImageNode ? String(currentImageNode.settings?.[imageSettingId] ?? "") : "";
   const scopedBlockType =
     selectedSection && blockScope ? (getBlockAt(selectedSection, blockScope) as { type?: string } | undefined)?.type ?? null : null;
   // Product-name text binds to the Product record, not a template setting — the schema
@@ -1163,6 +1213,19 @@ export default function EditorPage() {
             Download zip
           </a>
 
+          <button
+            onClick={() => setShowPublicLink(true)}
+            title="Share a public link to this theme's storefront"
+            className={`flex items-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium ${
+              publicPreviewEnabled
+                ? "border-[#8B5CF6]/40 bg-[#1B1530] text-[#A78BFA] hover:bg-[#241a3d]"
+                : "border-neutral-700 text-neutral-300 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            <Link className="h-3.5 w-3.5" />
+            Public link
+          </button>
+
           <div className="h-4 w-px bg-neutral-700" aria-hidden="true" />
 
           {shopifyShopDomain ? (
@@ -1243,6 +1306,7 @@ export default function EditorPage() {
               if (next) {
                 setMediaPickerTarget(null);
                 setMediaPanelOpen(false);
+                setAiImagePanelOpen(false);
               }
               return next;
             })
@@ -1254,17 +1318,25 @@ export default function EditorPage() {
             } else {
               setMediaPanelOpen(true);
               setAiPanelOpen(false);
+              setAiImagePanelOpen(false);
             }
           }}
         />
 
-        {/* Sections, AI, and Media are three views of the same left sidebar slot — only one
-            renders at a time, right beside the rail, never as a separate floating overlay. */}
-        {mediaPickerTarget !== null || mediaPanelOpen ? (
+        {/* Sections, AI, Media, and AI-image-edit are four views of the same left sidebar
+            slot — only one renders at a time, right beside the rail, never as a separate
+            floating overlay. */}
+        {mediaPickerTarget !== null || mediaPanelOpen || aiReferencePicking ? (
           <MediaPanel
             open
             images={product?.images ?? []}
+            generatedImages={(product?.generatedImages ?? []).map((g) => ({ url: g.url, altText: g.prompt }))}
             onSelect={(url) => {
+              if (aiReferencePicking) {
+                setAiReferenceUrl(url);
+                setAiReferencePicking(false);
+                return;
+              }
               if (mediaPickerTarget && selection?.sectionId) {
                 updateSetting(selection.sectionId, mediaPickerTarget.settingId, url, mediaPickerTarget.blockPath);
               }
@@ -1274,7 +1346,24 @@ export default function EditorPage() {
             onClose={() => {
               setMediaPickerTarget(null);
               setMediaPanelOpen(false);
+              setAiReferencePicking(false);
             }}
+          />
+        ) : aiImagePanelOpen ? (
+          <AiImageEditPanel
+            productId={product?.id ?? null}
+            sourceImageUrl={aiReferenceUrl}
+            onChooseReference={() => setAiReferencePicking(true)}
+            onGenerated={(image: GeneratedImage) =>
+              setProduct((prev) => (prev ? { ...prev, generatedImages: [...prev.generatedImages, image] } : prev))
+            }
+            onUseImage={(url) => {
+              if (aiImageTarget && selection?.sectionId) {
+                updateSetting(selection.sectionId, aiImageTarget.settingId, url, aiImageTarget.blockPath);
+              }
+              setAiImagePanelOpen(false);
+            }}
+            onClose={() => setAiImagePanelOpen(false)}
           />
         ) : aiPanelOpen ? (
           <div className="flex w-72 shrink-0 flex-col gap-3 border-r border-neutral-200 bg-white p-4">
@@ -1400,9 +1489,19 @@ export default function EditorPage() {
           {imageSettingId && selectionRect && !showRewrite ? (
             <ImageChangeButton
               rect={selectionRect}
-              onClick={() => {
+              aiEnabled={generateImages}
+              onChooseMedia={() => {
                 setMediaPickerTarget({ settingId: imageSettingId, blockPath: blockScope ?? [] });
                 setAiPanelOpen(false);
+                setAiImagePanelOpen(false);
+              }}
+              onEditWithAI={() => {
+                setAiImageTarget({ settingId: imageSettingId, blockPath: blockScope ?? [] });
+                setAiReferenceUrl(currentImageUrl);
+                setAiImagePanelOpen(true);
+                setAiPanelOpen(false);
+                setMediaPickerTarget(null);
+                setMediaPanelOpen(false);
               }}
             />
           ) : null}
@@ -1456,6 +1555,7 @@ export default function EditorPage() {
             onBrowseMedia={(settingId) => {
               setMediaPickerTarget({ settingId, blockPath: [] });
               setAiPanelOpen(false);
+              setAiImagePanelOpen(false);
             }}
             onClose={() => {
               setSelection(null);
@@ -1527,6 +1627,17 @@ export default function EditorPage() {
           sourceName={themeName ?? "This theme"}
           onClose={() => setShowDuplicateTheme(false)}
           onConfirm={duplicateTheme}
+        />
+      ) : null}
+
+      {showPublicLink ? (
+        <PublicLinkModal
+          themeName={themeName ?? "This theme"}
+          enabled={publicPreviewEnabled}
+          token={publicPreviewToken}
+          busy={publicLinkBusy}
+          onClose={() => setShowPublicLink(false)}
+          onToggle={setPublicPreview}
         />
       ) : null}
 

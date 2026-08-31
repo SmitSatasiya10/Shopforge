@@ -25,6 +25,7 @@ function makeProduct(overrides: Partial<ProductDTO> = {}): ProductDTO {
     importedFieldsMissing: [],
     importSource: "shopify",
     supplierPlatform: null,
+    generatedImages: [],
     ...overrides,
   };
 }

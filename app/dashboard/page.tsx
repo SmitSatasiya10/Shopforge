@@ -30,10 +30,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="relative isolate flex flex-1 flex-col overflow-hidden bg-[#09090B] text-[#FAFAFA]">
-      <div className="bg-grain pointer-events-none absolute inset-0 -z-10 opacity-[0.025]" aria-hidden="true" />
+    <div className="relative isolate flex flex-1 flex-col overflow-y-auto bg-[#09090B] text-[#FAFAFA]">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#09090B]" aria-hidden="true" />
+      <div className="bg-grain pointer-events-none fixed inset-0 -z-10 opacity-[0.025]" aria-hidden="true" />
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(139,92,246,0.14),transparent_70%)]"
+        className="pointer-events-none fixed inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(139,92,246,0.14),transparent_70%)]"
         aria-hidden="true"
       />
 
@@ -42,7 +43,7 @@ export default function DashboardPage() {
           <h1 className="text-[26px] font-semibold tracking-[-0.01em]">Your stores</h1>
           <button
             type="button"
-            onClick={() => router.push("/import")}
+            onClick={() => router.push("/dashboard/new")}
             className="rounded-full bg-neutral-50 px-4 py-2 text-[13px] font-medium text-neutral-900 hover:bg-neutral-200"
           >
             + New store

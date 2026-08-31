@@ -219,6 +219,10 @@
                           endif
                         %}
                         {% render 'video-player', block: block, action_on_inactive: action_on_inactive %}
+                      {% elsif block.type == 'image_slide' %}
+                        <span data-sf-setting="image" data-sf-editable="image" style="display: contents;">
+                          {{ 'image' | placeholder_svg_tag: 'placeholder-svg placeholder' }}
+                        </span>
                       {% else %}
                         {{ 'image' | placeholder_svg_tag: 'placeholder-svg placeholder' }}
                       {% endif %}

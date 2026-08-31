@@ -1,13 +1,15 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Copy, LayoutTemplate, MoreVertical, Pencil, Star, Trash2 } from "lucide-react";
+import { Copy, LayoutTemplate, Link, MoreVertical, Pencil, Star, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useOutsideDismiss } from "@/lib/hooks/use-outside-dismiss";
 
 export interface ThemeSummary {
   id: string;
   name: string;
+  publicPreviewEnabled: boolean;
+  publicPreviewToken: string | null;
 }
 
 interface ThemeCardProps {
@@ -18,9 +20,19 @@ interface ThemeCardProps {
   onDuplicate: () => void;
   onDelete: () => void;
   onMakeActive: () => void;
+  onOpenPublicLink: () => void;
 }
 
-export function ThemeCard({ theme, isActive, busy, onRename, onDuplicate, onDelete, onMakeActive }: ThemeCardProps) {
+export function ThemeCard({
+  theme,
+  isActive,
+  busy,
+  onRename,
+  onDuplicate,
+  onDelete,
+  onMakeActive,
+  onOpenPublicLink,
+}: ThemeCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [nameInput, setNameInput] = useState(theme.name);
@@ -55,6 +67,11 @@ export function ThemeCard({ theme, isActive, busy, onRename, onDuplicate, onDele
             Draft
           </span>
         )}
+        {theme.publicPreviewEnabled ? (
+          <span className="w-fit rounded-full border border-[#8B5CF6]/30 bg-[#1B1530] px-2.5 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-[#A78BFA] uppercase">
+            Public
+          </span>
+        ) : null}
       </div>
 
       <div className="flex items-center justify-between border-t border-white/[0.08] px-3 py-2">
@@ -130,6 +147,17 @@ export function ThemeCard({ theme, isActive, busy, onRename, onDuplicate, onDele
                       className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-neutral-700 disabled:opacity-50"
                     >
                       <Copy className="h-3.5 w-3.5" /> Duplicate
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onOpenPublicLink();
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-neutral-700"
+                    >
+                      <Link className="h-3.5 w-3.5" /> Public link
                     </button>
                   </li>
                   <li>
