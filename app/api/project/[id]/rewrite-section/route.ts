@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // scopes to one whole block. Neither present = no scope, the legacy whole-section rewrite.
   const scope = settingId || blockPath.length > 0 ? { settingId, blockPath } : undefined;
 
-  const project = await prisma.project.findUnique({ where: { id }, include: { product: true } });
+  const project = await prisma.project.findUnique({ where: { id }, include: { store: { include: { product: true } } } });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   let configuration;
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         operation: "section-rewrite",
         route: "/api/project/[id]/rewrite-section",
         projectId: id,
-        productId: project.productId,
+        productId: project.store.productId,
         template: page,
         sectionId: body.sectionId,
         field: settingId,
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
       () =>
         rewriteSection({
-          product: toNormalizedProduct(toProductDTO(project.product)),
+          product: toNormalizedProduct(toProductDTO(project.store.product)),
           sectionId: body.sectionId as string,
           section,
           instruction,

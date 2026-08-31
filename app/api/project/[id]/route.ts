@@ -15,11 +15,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const project = await prisma.project.findUnique({
     where: { id },
-    include: { product: true, shopifyStore: true },
+    include: { store: { include: { product: true, shopifyStore: true } } },
   });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const product = toProductDTO(project.product);
+  const product = toProductDTO(project.store.product);
   const selected = parseSelectedImages(project.selectedImagesJson);
   if (selected) {
     product.images = selected.images.map((img) => ({ url: img.url, altText: img.altText }));
@@ -29,13 +29,32 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     project: {
       id: project.id,
       name: project.name,
-      productId: project.productId,
+      productId: project.store.productId,
+      storeId: project.storeId,
+      storeName: project.store.name,
+      storeActiveThemeId: project.store.activeThemeId,
       configurationJson: project.configurationJson,
-      shopifyShopDomain: project.shopifyStore?.shopDomain ?? null,
+      shopifyShopDomain: project.store.shopifyStore?.shopDomain ?? null,
       installedThemeShopifyId: project.installedThemeShopifyId,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     },
     product,
   });
+}
+
+// PATCH /api/project/:id — { name } — renames this theme (Project.name; not the store name,
+// which is PATCH /api/store/:id).
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const body = await req.json().catch(() => null);
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!name) return NextResponse.json({ error: "Provide { name: string }" }, { status: 400 });
+
+  try {
+    const project = await prisma.project.update({ where: { id }, data: { name } });
+    return NextResponse.json({ project });
+  } catch {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 }

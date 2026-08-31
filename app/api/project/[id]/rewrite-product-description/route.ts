@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Provide a prompt or a preset" }, { status: 400 });
   }
 
-  const project = await prisma.project.findUnique({ where: { id }, include: { product: true } });
+  const project = await prisma.project.findUnique({ where: { id }, include: { store: { include: { product: true } } } });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
@@ -45,11 +45,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         operation: "rewrite-product-description",
         route: "/api/project/[id]/rewrite-product-description",
         projectId: id,
-        productId: project.productId,
+        productId: project.store.productId,
       },
       () =>
         rewriteProductDescription({
-          product: toNormalizedProduct(toProductDTO(project.product)),
+          product: toNormalizedProduct(toProductDTO(project.store.product)),
           instruction,
           // Rewrites honor the same customer store-content language and persona as full generation.
           language: project.language,
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
 
     const product = await prisma.product.update({
-      where: { id: project.productId },
+      where: { id: project.store.productId },
       data: { description: result.description },
     });
 

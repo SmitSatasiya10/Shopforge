@@ -39,7 +39,7 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project Project?
+  store Store?
 }
 
 model ShopifyStore {
@@ -53,8 +53,32 @@ model ShopifyStore {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  projects       Project[]
+  stores         Store[]
   uploadedAssets ShopifyUploadedAsset[]
+}
+
+/// A merchant's store: owns the shared Product and (once connected) the shared Shopify OAuth
+/// connection. A store has one or more Themes (Project rows) — independent storefront
+/// configurations — of which at most one is the store's currently-live/active theme.
+model Store {
+  id   String @id @default(uuid())
+  name String
+
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  shopifyStoreId String?
+  shopifyStore   ShopifyStore? @relation(fields: [shopifyStoreId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  // The theme currently live on this store's connected Shopify shop (or, pre-connection, the
+  // implicit "main" theme). Null only for the brief window before a store's first theme exists.
+  activeThemeId String?  @unique
+  activeTheme   Project? @relation("StoreActiveTheme", fields: [activeThemeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  themes Project[] @relation("StoreThemes")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 /// Caches "this setting value was already uploaded to this shop as Shopify file X" (lib/shopify/asset-upload.ts)
@@ -70,11 +94,16 @@ model ShopifyUploadedAsset {
   @@unique([shopifyStoreId, sourceUrlHash])
 }
 
+// A theme: one independent storefront configuration belonging to a Store. Kept as the `Project`
+// model/table name so `projectId` stays the identifier everywhere (editor route, checkpoints,
+// publish records) — a "theme" and a "project" are the same thing from here on.
 model Project {
-  id                String  @id @default(uuid())
-  name              String
-  productId         String  @unique
-  product           Product @relation(fields: [productId], references: [id])
+  id                String @id @default(uuid())
+  name              String // theme name, e.g. "Default", "Summer Sale" (not the store name)
+
+  storeId String
+  store   Store  @relation("StoreThemes", fields: [storeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   configurationJson Json
   language          String  @default("en") // target language for generated customer-facing store content (ISO 639-1)
   personaJson       Json? // selected customer persona: { type: "generated", id, name, description } | { type: "custom", text }
@@ -83,20 +112,19 @@ model Project {
 
   versions ProjectVersion[]
 
-  shopifyStoreId          String?
-  shopifyStore            ShopifyStore? @relation(fields: [shopifyStoreId], references: [id])
   installedThemeShopifyId String? // Shopify theme GID, set after the first successful themeCreate; reused on later publishes
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   publishRecords PublishRecord[]
+  activeForStore Store?          @relation("StoreActiveTheme")
 }
 
 model PublishRecord {
   id             String   @id @default(uuid())
   projectId      String
-  project        Project  @relation(fields: [projectId], references: [id])
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   shopifyThemeId String
   status         String // "pending" | "success" | "failed"
   errorMessage   String?

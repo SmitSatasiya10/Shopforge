@@ -26,10 +26,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     model?: unknown;
   };
 
-  const project = await prisma.project.findUnique({ where: { id }, include: { product: true } });
+  const project = await prisma.project.findUnique({ where: { id }, include: { store: { include: { product: true } } } });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const normalized = toProductDTO(project.product);
+  const normalized = toProductDTO(project.store.product);
   // The wizard's Product Images selection (shopforge-personalization-image-selection-plan.md
   // §17), when present, is what hero/banner image settings round-robin-fill from — the
   // merchant's curated set, not the raw scrape. Product.images itself is never modified.
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const generated = await withAITrace(
       "generate-store",
-      { route: "/api/project/[id]/generate", projectId: id, productId: project.productId },
+      { route: "/api/project/[id]/generate", projectId: id, productId: project.store.productId },
       () =>
         generateStore(normalized, {
           // The customer-language and persona selections made during onboarding: all

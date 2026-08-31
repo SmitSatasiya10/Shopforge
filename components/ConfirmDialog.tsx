@@ -1,24 +1,27 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Trash2 } from "lucide-react";
+import { Info, Trash2 } from "lucide-react";
 
 interface ConfirmDialogProps {
   title: string;
   message: string;
-  /** Label for the destructive action button, e.g. "Delete". */
+  /** Label for the action button, e.g. "Delete" or "Publish". */
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /** "destructive" (default) is red/Trash2, for delete-style actions. "info" is a neutral
+   * purple/Info icon and button, for confirms that change state without destroying anything
+   * (e.g. "make this theme active"). */
+  tone?: "destructive" | "info";
 }
 
 /**
- * In-app replacement for `window.confirm` on destructive actions, styled like the
- * editor's floating cards (dark neutral-900, ring-white/10 — see AiRewritePopover).
- * Escape or a backdrop click cancels; focus starts on Cancel so Enter never
- * deletes by accident.
+ * In-app replacement for `window.confirm`, styled like the editor's floating cards (dark
+ * neutral-900, ring-white/10 — see AiRewritePopover). Escape or a backdrop click cancels;
+ * focus starts on Cancel so Enter never confirms by accident.
  */
-export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel, tone = "destructive" }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -43,8 +46,16 @@ export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCance
         className="w-full max-w-sm rounded-2xl bg-neutral-900 p-5 text-white shadow-2xl ring-1 ring-white/10"
       >
         <div className="flex items-start gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-red-500/15 text-red-400">
-            <Trash2 className="h-4.5 w-4.5" strokeWidth={1.75} />
+          <span
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
+              tone === "destructive" ? "bg-red-500/15 text-red-400" : "bg-[#8B5CF6]/15 text-[#A78BFA]"
+            }`}
+          >
+            {tone === "destructive" ? (
+              <Trash2 className="h-4.5 w-4.5" strokeWidth={1.75} />
+            ) : (
+              <Info className="h-4.5 w-4.5" strokeWidth={1.75} />
+            )}
           </span>
           <div className="min-w-0">
             <p className="text-sm font-semibold">{title}</p>
@@ -61,7 +72,9 @@ export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCance
           </button>
           <button
             onClick={onConfirm}
-            className="rounded-full bg-red-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-red-400"
+            className={`rounded-full px-4 py-1.5 text-xs font-medium text-white ${
+              tone === "destructive" ? "bg-red-500 hover:bg-red-400" : "bg-[#8B5CF6] hover:bg-[#7C3AED]"
+            }`}
           >
             {confirmLabel}
           </button>

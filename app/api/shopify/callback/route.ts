@@ -81,14 +81,14 @@ export async function GET(req: NextRequest) {
     update: tokenFields,
   });
 
-  // Connecting from the editor's Publish flow carries a projectId cookie so this store gets
-  // linked to that project directly, landing back in the editor rather than the import wizard.
+  // Connecting from the editor's Publish flow carries a projectId (theme id) cookie so the
+  // theme's whole store gets linked, landing back in the editor rather than the import wizard.
   const projectId = req.cookies.get(PROJECT_ID_COOKIE)?.value;
   let redirectUrl = new URL(`/import?source=shopify&connected=${encodeURIComponent(shop)}`, req.url);
   if (projectId) {
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { storeId: true } });
     if (project) {
-      await prisma.project.update({ where: { id: projectId }, data: { shopifyStoreId: store.id } });
+      await prisma.store.update({ where: { id: project.storeId }, data: { shopifyStoreId: store.id } });
       redirectUrl = new URL(`/editor/${projectId}?connected=${encodeURIComponent(shop)}`, req.url);
     }
   }
