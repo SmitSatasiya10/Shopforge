@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { AlertCircle, Monitor, Plus, Redo2, Smartphone, Undo2, X } from "lucide-react";
-import { PreviewFrame, SelectInfo, SelectionRect } from "@/components/PreviewFrame";
+import { PreviewFrame, PreviewFrameHandle, SelectInfo, SelectionRect } from "@/components/PreviewFrame";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { MediaPanel } from "@/components/MediaPanel";
 import { EditorRail } from "@/components/EditorRail";
@@ -23,6 +23,7 @@ import {
   ShopifySettingDef,
 } from "@/lib/preview/section-schema";
 import { PAGE_TEMPLATES, PageTemplate, parseConfiguration, StoreConfiguration } from "@/lib/store-config/store";
+import { speechLocaleFor } from "@/lib/store-config/dictation-locale";
 import { deriveStoreName } from "@/lib/store-config/store-name";
 import {
   getBlockAt,
@@ -135,6 +136,10 @@ export default function EditorPage() {
   // existing SectionPicker modal directly, same as the old header button did.
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [mediaPanelOpen, setMediaPanelOpen] = useState(false);
+  // The project's target store-content language (ISO 639-1, e.g. "fr") — read once at load,
+  // used only to bias the AI prompt's voice-dictation mic toward the right speech locale
+  // (docs/VOICE-DICTATION-PLAN.md §4); never drives anything else on this page.
+  const [projectLanguage, setProjectLanguage] = useState("en");
 
   const readTemplate = useMemo(() => createFetchTemplateReader(), []);
   const readBinary = useMemo(() => createFetchBinaryReader(), []);
@@ -145,6 +150,7 @@ export default function EditorPage() {
   // persisted the new title itself (AI rewrite), so the client doesn't re-save the same value.
   const skipNextProductSave = useRef(true);
   const previewRef = useRef<HTMLDivElement>(null);
+  const previewFrameRef = useRef<PreviewFrameHandle>(null);
   const paletteIndex = useRef(-1);
 
   // Undo/history: `configRef`/`productRef` mirror the latest state synchronously (updated at
@@ -164,6 +170,7 @@ export default function EditorPage() {
         productRef.current = data.product;
         setProduct(data.product);
         setShopifyShopDomain(data.project.shopifyShopDomain ?? null);
+        setProjectLanguage(data.project.language ?? "en");
         try {
           const parsed = parseConfiguration(data.project.configurationJson);
           configRef.current = parsed;
@@ -1065,6 +1072,7 @@ export default function EditorPage() {
         >
           <div className={viewport === "mobile" ? "h-full w-97.5 shrink-0 border-x border-neutral-300 bg-white" : "h-full w-full"}>
             <PreviewFrame
+              ref={previewFrameRef}
               html={html}
               resetScrollKey={page}
               selectedSectionId={selection?.sectionId ?? null}
@@ -1120,6 +1128,8 @@ export default function EditorPage() {
               canDeleteBlock={binding.blockPath.length > 0}
               themeColorRows={themeColorRows}
               commonColors={commonColors}
+              dictationLang={speechLocaleFor(projectLanguage)}
+              onDictate={(text, isFinal) => previewFrameRef.current?.insertDictatedText(text, isFinal)}
               onRewrite={() => setShowRewrite(true)}
               onStepSize={(direction) => {
                 if (!textControls.size) return;
@@ -1170,6 +1180,7 @@ export default function EditorPage() {
               }
               rect={selectionRect}
               containerHeight={previewHeight}
+              dictationLang={speechLocaleFor(projectLanguage)}
               // Opened from the inline text toolbar (a field selection): float below the
               // selected text itself, like that toolbar does, instead of the fixed slot next
               // to the section toolbar's pill — pinning it to the right edge regardless of

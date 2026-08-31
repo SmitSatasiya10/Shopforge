@@ -6,6 +6,7 @@ import type { SelectionRect } from "./PreviewFrame";
 import { sizeLabel, type TextControls } from "@/lib/editor/text-controls";
 import type { NamedColor, ThemeColorRow } from "@/lib/editor/color-palette";
 import { ColorPickerPopover } from "./ColorPickerPopover";
+import { VoiceDictationButton } from "./VoiceDictationButton";
 
 interface InlineTextToolbarProps {
   rect: SelectionRect;
@@ -18,6 +19,14 @@ interface InlineTextToolbarProps {
   /** Feeds the color swatch's "Theme"/"Common Colors" tabs (lib/editor/color-palette.ts). */
   themeColorRows: ThemeColorRow[];
   commonColors: NamedColor[];
+  /** BCP-47 locale for the mic's voice dictation — see lib/store-config/dictation-locale.ts. */
+  dictationLang: string;
+  /**
+   * Inserts speech-recognized text into the field being edited, at its live caret — forwards
+   * straight to PreviewFrame's imperative handle (docs/VOICE-DICTATION-PLAN.md §5). This toolbar
+   * never touches the iframe's DOM itself.
+   */
+  onDictate: (text: string, isFinal: boolean) => void;
   onRewrite: () => void;
   onStepSize: (direction: -1 | 1) => void;
   onCycleWeight: () => void;
@@ -53,6 +62,8 @@ export function InlineTextToolbar({
   canDeleteBlock,
   themeColorRows,
   commonColors,
+  dictationLang,
+  onDictate,
   onRewrite,
   onStepSize,
   onCycleWeight,
@@ -81,7 +92,9 @@ export function InlineTextToolbar({
       style={{ top, left }}
       // Deliberately NOT preventing mousedown: pressing any control first blurs the
       // contenteditable text, which commits whatever was typed — so a size/color/rewrite
-      // action can never throw away an in-progress edit.
+      // action can never throw away an in-progress edit. The mic button is the one exception —
+      // it prevents its own pointerdown default so the field stays focused and dictation can
+      // insert at the live caret (docs/VOICE-DICTATION-PLAN.md §5).
     >
       <button
         onClick={onRewrite}
@@ -91,6 +104,12 @@ export function InlineTextToolbar({
         <WandSparkles className="h-3.5 w-3.5" strokeWidth={1.75} />
         Rewrite
       </button>
+
+      <VoiceDictationButton
+        lang={dictationLang}
+        onInterim={(text) => onDictate(text, false)}
+        onFinal={(text) => onDictate(text, true)}
+      />
 
       {controls.align ? (
         <span className="flex items-center gap-0.5 rounded-lg border border-neutral-700 px-0.5 py-0.5">
