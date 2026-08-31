@@ -35,6 +35,7 @@ model Product {
   personaOptionsJson Json? // cached AI persona options for the wizard: { language, options: [4 x PersonaOption] }
   marketingAnglesJson Json? // cached AI marketing angles: { language, personaKey, options: [4 x MarketingAngleOption], recommendedId }
   imageCandidatesJson Json? // cached image candidates for the wizard's Product Images step: { primary: ImageCandidate[], other: ImageCandidate[] }
+  generatedImagesJson Json     @default("[]") // append-only log of editor "Edit with AI" results: GeneratedImage[] (lib/product/generated-images.ts)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -109,6 +110,12 @@ model Project {
   personaJson       Json? // selected customer persona: { type: "generated", id, name, description } | { type: "custom", text }
   marketingAngleJson Json? // selected marketing angle: { id, title, description, selectionType: "generated" | "ai" }
   selectedImagesJson Json? // selected product images from the wizard's Product Images step: { images: ImageCandidate[] } (max 5, order = gallery order, first = featured). Never overwrites Product.images.
+
+  // Public, unauthenticated storefront preview link (/preview/<publicPreviewToken>). Token is
+  // generated once, on first enable, and never cleared on disable — re-enabling restores the
+  // same URL. Disabling just flips the flag; the theme and its configuration are untouched.
+  publicPreviewEnabled Boolean @default(false)
+  publicPreviewToken   String? @unique
 
   versions ProjectVersion[]
 

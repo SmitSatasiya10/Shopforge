@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
-import { toProductDTO } from "@/lib/product/db-mapping";
-import { parseSelectedImages } from "@/lib/store-config/product-images";
+import { toProductDTOWithOverrides } from "@/lib/product/db-mapping";
 
 // GET /api/project/:id — Project + nested Product, the reload/restore path
 // (prototype-phase-plan.md §17/§20 persistence test).
@@ -19,11 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const product = toProductDTO(project.store.product);
-  const selected = parseSelectedImages(project.selectedImagesJson);
-  if (selected) {
-    product.images = selected.images.map((img) => ({ url: img.url, altText: img.altText }));
-  }
+  const product = toProductDTOWithOverrides(project.store.product, project.selectedImagesJson);
 
   return NextResponse.json({
     project: {
@@ -36,6 +31,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       configurationJson: project.configurationJson,
       shopifyShopDomain: project.store.shopifyStore?.shopDomain ?? null,
       installedThemeShopifyId: project.installedThemeShopifyId,
+      publicPreviewEnabled: project.publicPreviewEnabled,
+      publicPreviewToken: project.publicPreviewToken,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     },

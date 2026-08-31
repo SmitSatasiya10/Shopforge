@@ -170,15 +170,35 @@ function buildImagePrompt(target: ImageTarget, product: NormalizedProduct | null
   );
 }
 
-/** Exported so other product-specific image generators (lib/ai/product-image-generator.ts) reuse the same OpenRouter call. */
+/**
+ * Exported so other product-specific image generators (lib/ai/product-image-generator.ts,
+ * lib/ai/image-editor.ts) reuse the same OpenRouter call. `referenceImageUrl`, when given, adds
+ * the image as a second content part alongside the text prompt — gemini-2.5-flash-image accepts
+ * multimodal chat input, so this is how "edit this image" / "use this as a reference" reaches
+ * the model. Logging always captures the text prompt only, never the (potentially multi-MB
+ * data: URI) reference image.
+ */
 export async function requestImage(
   prompt: string,
   config: AiConfig,
   signal?: AbortSignal,
+  referenceImageUrl?: string,
 ): Promise<GeneratedImage | null> {
-  const messages = [{ role: "user", content: prompt }];
-  const handle = startAIRequest({ model: config.imageModel, provider: "OpenRouter", messages });
-  logAIRequestInput(handle, messages);
+  const logMessages = [{ role: "user", content: prompt }];
+  const handle = startAIRequest({ model: config.imageModel, provider: "OpenRouter", messages: logMessages });
+  logAIRequestInput(handle, logMessages);
+
+  const requestMessages = [
+    {
+      role: "user",
+      content: referenceImageUrl
+        ? [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: referenceImageUrl } },
+          ]
+        : prompt,
+    },
+  ];
 
   try {
     const response = await fetch(`${config.baseUrl}/chat/completions`, {
@@ -190,7 +210,7 @@ export async function requestImage(
       },
       body: JSON.stringify({
         model: config.imageModel,
-        messages,
+        messages: requestMessages,
         modalities: ["image", "text"],
       }),
       signal,

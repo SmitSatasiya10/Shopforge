@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ThemeCard, type ThemeSummary } from "@/components/ThemeCard";
 import { DuplicateThemeModal } from "@/components/DuplicateThemeModal";
+import { PublicLinkModal } from "@/components/PublicLinkModal";
 
 interface StoreDetail {
   id: string;
@@ -53,7 +54,12 @@ function CreateThemeModal({
         setError(data.error ?? "Could not create the theme");
         return;
       }
-      onCreated({ id: data.project.id, name: data.project.name });
+      onCreated({
+        id: data.project.id,
+        name: data.project.name,
+        publicPreviewEnabled: false,
+        publicPreviewToken: null,
+      });
     } finally {
       setCreating(false);
     }
@@ -156,6 +162,7 @@ export default function StoreThemesPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [duplicatingTheme, setDuplicatingTheme] = useState<ThemeSummary | null>(null);
+  const [publicLinkTheme, setPublicLinkTheme] = useState<ThemeSummary | null>(null);
   const [busyThemeId, setBusyThemeId] = useState<string | null>(null);
 
   function load() {
@@ -209,6 +216,28 @@ export default function StoreThemesPage() {
     }
   }
 
+  async function setPublicPreview(themeId: string, enabled: boolean) {
+    setBusyThemeId(themeId);
+    try {
+      const res = await fetch(`/api/store/${storeId}/theme/${themeId}/public-link`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPublicLinkTheme((cur) =>
+          cur && cur.id === themeId
+            ? { ...cur, publicPreviewEnabled: data.publicPreviewEnabled, publicPreviewToken: data.publicPreviewToken }
+            : cur,
+        );
+        load();
+      }
+    } finally {
+      setBusyThemeId(null);
+    }
+  }
+
   // Once Shopify is connected, "active" is a real publish, not just a local marker — the
   // theme currently live on the shop gets replaced with this one.
   async function makeActive(themeId: string) {
@@ -238,8 +267,9 @@ export default function StoreThemesPage() {
   }
 
   return (
-    <div className="relative isolate flex flex-1 flex-col overflow-hidden bg-[#09090B] text-[#FAFAFA]">
-      <div className="bg-grain pointer-events-none absolute inset-0 -z-10 opacity-[0.025]" aria-hidden="true" />
+    <div className="relative isolate flex flex-1 flex-col overflow-y-auto bg-[#09090B] text-[#FAFAFA]">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#09090B]" aria-hidden="true" />
+      <div className="bg-grain pointer-events-none fixed inset-0 -z-10 opacity-[0.025]" aria-hidden="true" />
 
       <div className="mx-auto w-full max-w-[1200px] flex-1 px-6 py-10 sm:px-8 sm:py-12">
         <div className="flex items-center gap-3">
@@ -285,6 +315,7 @@ export default function StoreThemesPage() {
               onDuplicate={() => setDuplicatingTheme(theme)}
               onDelete={() => deleteTheme(theme.id)}
               onMakeActive={() => makeActive(theme.id)}
+              onOpenPublicLink={() => setPublicLinkTheme(theme)}
             />
           ))}
         </div>
@@ -295,6 +326,17 @@ export default function StoreThemesPage() {
           sourceName={duplicatingTheme.name}
           onClose={() => setDuplicatingTheme(null)}
           onConfirm={(name) => duplicateTheme(duplicatingTheme.id, name)}
+        />
+      ) : null}
+
+      {publicLinkTheme ? (
+        <PublicLinkModal
+          themeName={publicLinkTheme.name}
+          enabled={publicLinkTheme.publicPreviewEnabled}
+          token={publicLinkTheme.publicPreviewToken}
+          busy={busyThemeId === publicLinkTheme.id}
+          onClose={() => setPublicLinkTheme(null)}
+          onToggle={(enabled) => setPublicPreview(publicLinkTheme.id, enabled)}
         />
       ) : null}
 

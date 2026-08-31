@@ -10,7 +10,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       product: { select: { title: true, images: true } },
       shopifyStore: { select: { shopDomain: true } },
       themes: {
-        select: { id: true, name: true, installedThemeShopifyId: true, updatedAt: true },
+        select: {
+          id: true,
+          name: true,
+          installedThemeShopifyId: true,
+          updatedAt: true,
+          publicPreviewEnabled: true,
+          publicPreviewToken: true,
+        },
         orderBy: { updatedAt: "desc" },
       },
     },
