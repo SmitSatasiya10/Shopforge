@@ -21,11 +21,11 @@ export interface SelectInfo {
   /** Set when the click resolved to a text setting (docs/EDITOR-TOOLBARS.md). */
   binding: TextBinding | null;
   /**
-   * Block ids from the section down to the clicked block, set when the click landed inside a
-   * block (via its `data-shopify-editor-block` marker) but didn't resolve to a single text
-   * setting — e.g. an image, icon or non-text area of the block. Null when `binding` is set
-   * (field scope) or the click landed on the section but no block (section scope). Never set
-   * together with `binding`: a resolved field always takes precedence.
+   * Block ids from the section down to the clicked block, set when the click landed on an
+   * image or icon setting (`editable === "image" | "icon"`) inside a block, or a non-text area
+   * of the block. Null when `binding` is set (field scope) or the click landed on the section
+   * but no block (section scope). Never set together with `binding`: a resolved field always
+   * takes precedence.
    */
   blockScope: string[] | null;
   /** Box of the clicked text element (binding set), block (blockScope set), or the section itself. */
@@ -486,11 +486,12 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
           sectionType: settingSectionEl.getAttribute("data-sf-section-type"),
           settingId,
           editable,
-          // An image setting isn't a text binding — keeping it null here stops the inline
-          // text toolbar from popping up for an image click (it renders on binding alone).
-          binding: editable === "image" ? null : binding,
-          // Only carried for image settings — text keeps the section-root scope it always had.
-          blockScope: editable === "image" && settingBlockPath.length > 0 ? settingBlockPath : null,
+          // An image or icon setting isn't a text binding — keeping it null here stops the
+          // inline text toolbar from popping up for that click (it renders on binding alone).
+          binding: editable === "image" || editable === "icon" ? null : binding,
+          // Only carried for image/icon settings — text keeps the section-root scope it always had.
+          blockScope:
+            (editable === "image" || editable === "icon") && settingBlockPath.length > 0 ? settingBlockPath : null,
           rect: toRect(target!, iframeOffset(iframe)),
         });
         if (editable === "text" || editable === "richtext") {

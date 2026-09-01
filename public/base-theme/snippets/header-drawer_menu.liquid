@@ -11,7 +11,7 @@
       %}
       {% capture item_icon %}
         {% if section.settings[icon_type] == 'icon' %}
-          {% render 'material-icon', icon: section.settings[icon], filled: section.settings[filled_icon] %}
+          {% render 'material-icon', icon: section.settings[icon], filled: section.settings[filled_icon], setting_id: icon %}
         {% elsif section.settings[icon_type] == 'image' and section.settings[image_icon] != blank %}
           <img
             src="{{ section.settings[image_icon] | image_url }}"

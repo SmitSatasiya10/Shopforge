@@ -1,3 +1,7 @@
-<span class="material-icon material-symbols-outlined{% if filled %} filled{% endif %}{% if custom_color != blank %} material-icon--custom-color color-icon-{{ custom_color }}{% endif %}{{ class }}">
-  {{ icon | strip | downcase | replace: ' ', '_' }}
-</span>
+<span
+  class="material-icon material-symbols-outlined{% if filled %} filled{% endif %}{% if custom_color != blank %} material-icon--custom-color color-icon-{{ custom_color }}{% endif %}{{ class }}"
+  {%- if setting_id != blank %}
+    data-sf-setting="{{ setting_id }}"
+    data-sf-editable="icon"
+  {%- endif %}
+>{{ icon | strip | downcase | replace: ' ', '_' }}</span>

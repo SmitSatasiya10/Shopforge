@@ -105,7 +105,7 @@
                 loading="lazy"
               >
             {% elsif block.settings[tab_icon] != blank %}
-              {% render 'material-icon', icon: block.settings[tab_icon], filled: block.settings[tab_filled_icon] %}
+              {% render 'material-icon', icon: block.settings[tab_icon], filled: block.settings[tab_filled_icon], setting_id: tab_icon %}
             {% endif %}
             <span>{{ block.settings[tab_title] }}</span>
           </button>

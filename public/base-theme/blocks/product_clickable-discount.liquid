@@ -57,7 +57,7 @@
                 {% if block.settings.custom_icon_1.alt == blank %}aria-hidden="true"{% endif %}
               >
             {% elsif block.settings.icon_1 != blank %}
-              {% render 'material-icon', icon: block.settings.icon_1, filled: block.settings.filled_icon_1 %}
+              {% render 'material-icon', icon: block.settings.icon_1, filled: block.settings.filled_icon_1, setting_id: 'icon_1' %}
             {% endif %}
             <span class="product__text__text">{{- block.settings.text_1 -}}</span>
             <svg
@@ -103,7 +103,7 @@
                 {% if block.settings.custom_icon_2.alt == blank %}aria-hidden="true"{% endif %}
               >
             {% elsif block.settings.icon_2 != blank %}
-              {% render 'material-icon', icon: block.settings.icon_2, filled: block.settings.filled_icon_2 %}
+              {% render 'material-icon', icon: block.settings.icon_2, filled: block.settings.filled_icon_2, setting_id: 'icon_2' %}
             {% endif %}
             <span class="product__text__text">{{- block.settings.text_2 -}}</span>
           </p>

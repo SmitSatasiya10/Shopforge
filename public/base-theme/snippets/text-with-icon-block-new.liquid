@@ -235,6 +235,7 @@
           assign custom_icon = block.settings.custom_icon_6
           assign filled_icon = block.settings.filled_icon_6
       endcase
+      assign icon_setting_id = 'icon_' | append: i
     %}
     {% if text != blank %}
       <p
@@ -376,7 +377,7 @@
             loading="lazy"
           >
         {% elsif icon != blank %}
-          {% render 'material-icon', icon: icon, filled: filled_icon %}
+          {% render 'material-icon', icon: icon, filled: filled_icon, setting_id: icon_setting_id %}
         {% endif %}
         <span
           class="text"

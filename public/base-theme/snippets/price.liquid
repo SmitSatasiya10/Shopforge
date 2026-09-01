@@ -133,7 +133,7 @@
             loading="lazy"
           >
         {% elsif block.settings.icon_1 != blank %}
-          {% render 'material-icon', icon: block.settings.icon_1, filled: block.settings.filled_icon_1 %}
+          {% render 'material-icon', icon: block.settings.icon_1, filled: block.settings.filled_icon_1, setting_id: 'icon_1' %}
         {% endif %}
       {% endcapture %}
       {% capture icon_2 %}
@@ -146,7 +146,7 @@
             loading="lazy"
           >
         {% elsif block.settings.icon_2 != blank %}
-          {% render 'material-icon', icon: block.settings.icon_2, filled: block.settings.filled_icon_2 %}
+          {% render 'material-icon', icon: block.settings.icon_2, filled: block.settings.filled_icon_2, setting_id: 'icon_2' %}
         {% endif %}
       {% endcapture %}
       <span class="badge price__badge-custom color-{{ sale_badge_color_scheme }} nowrap" style="--icon-size: {{ block.settings.icon_scale | divided_by: 100.0 }}em;">

@@ -329,7 +329,7 @@
           {% if block.settings.subscription_description_text != blank %}
             {% capture benefit_icon %}
               {%- if block.settings.benefits_custom_icon == blank -%}
-                {% render 'material-icon', icon: block.settings.benefits_icon, filled: block.settings.benefits_filled_icon %}
+                {% render 'material-icon', icon: block.settings.benefits_icon, filled: block.settings.benefits_filled_icon, setting_id: 'benefits_icon' %}
               {%- else -%}
                 <img
                   src="{{ block.settings.benefits_custom_icon | image_url }}"

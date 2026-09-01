@@ -21,7 +21,7 @@
       <div class="timeline__point" data-marker> 
         {%- case block.settings.point_content -%}
           {%- when 'icon' -%}
-            {% render 'material-icon', icon: block.settings.point_icon_name, filled: block.settings.point_icon_filled %}
+            {% render 'material-icon', icon: block.settings.point_icon_name, filled: block.settings.point_icon_filled, setting_id: 'point_icon_name' %}
           {%- when 'custom_icon' -%}
             {%- if block.settings.point_custom_icon != blank -%}
               {{ block.settings.point_custom_icon | image_url: width: 400 | image_tag: loading: 'lazy' }}

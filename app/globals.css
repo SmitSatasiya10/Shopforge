@@ -89,3 +89,17 @@ button:not(:disabled),
   width: 0;
   height: 0;
 }
+
+/* Same sizing/fill rules the rendered theme preview applies (base-theme/layout/theme.liquid) —
+   kept identical here so the Inspector's icon control and IconPanel's grid render glyphs the
+   same way the live preview does. */
+.material-symbols-outlined {
+  max-width: 1em;
+  flex-shrink: 0;
+  overflow: hidden;
+  vertical-align: bottom;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 48;
+}
+.material-symbols-outlined.filled {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 48;
+}
