@@ -7,6 +7,7 @@ import {
   resolveSchemaLabel,
 } from "@/lib/preview/section-schema";
 import { filledIconSettingId, isIconSettingId } from "@/lib/preview/icon-setting";
+import type { FontOption } from "@/lib/editor/font-options";
 
 interface SettingsPanelProps {
   sectionType: string | null;
@@ -127,7 +128,7 @@ export function SettingsPanel({
   );
 }
 
-function SettingControl({
+export function SettingControl({
   setting,
   value,
   allValues,
@@ -135,6 +136,7 @@ function SettingControl({
   onBrowseMedia,
   onBrowseIcon,
   schemaLocale,
+  fontOptions,
 }: {
   setting: ShopifySettingDef;
   value: unknown;
@@ -143,6 +145,9 @@ function SettingControl({
   onBrowseMedia: (settingId: string) => void;
   onBrowseIcon: (settingId: string) => void;
   schemaLocale: Record<string, unknown>;
+  /** Known font handles for a `font_picker` setting (lib/editor/font-options.ts) — section
+   *  schemas never declare this type, so this is only ever supplied by the Design panel. */
+  fontOptions?: FontOption[];
 }) {
   const id = setting.id!;
   const input = "rounded border border-neutral-300 p-2 text-sm font-normal";
@@ -196,6 +201,27 @@ function SettingControl({
           ))}
         </select>
       );
+
+    // Shopify's real font_picker opens a hosted font-library UI this project doesn't have; the
+    // theme instead stores a plain handle ("poetsen_one_n4"). Shown as a dropdown of every
+    // handle this theme's own config actually uses (lib/editor/font-options.ts) rather than a
+    // raw text input — falls back to text if no known handles were found for it.
+    case "font_picker": {
+      if (!fontOptions || fontOptions.length === 0) {
+        return (
+          <input type="text" className={input} value={String(value)} onChange={(e) => onChange(id, e.target.value)} />
+        );
+      }
+      return (
+        <select className={input} value={String(value)} onChange={(e) => onChange(id, e.target.value)}>
+          {fontOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
 
     case "range":
       return (

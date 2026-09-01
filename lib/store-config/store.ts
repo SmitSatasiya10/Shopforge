@@ -19,6 +19,13 @@ export const StoreConfigurationSchema = z.object({
   }),
   /** Set once AI generation has run, so the editor can tell generated from default. */
   generatedAt: z.string().nullable().default(null),
+  /**
+   * Project-level overrides for the theme's global settings (config/settings_schema.json
+   * ids, e.g. "colors_accent_1", "buttons_radius") — layered on top of the Base Theme's own
+   * config/settings_data.json at render time (lib/preview/theme-settings.ts). Empty until the
+   * Design panel is used; absent keys fall back to the theme's static defaults.
+   */
+  themeSettings: z.record(z.string(), z.unknown()).default({}),
 });
 
 export type StoreConfiguration = z.infer<typeof StoreConfigurationSchema>;
@@ -34,7 +41,7 @@ export async function defaultConfiguration(readTemplate: TemplateReader): Promis
       ShopifyTemplateSchema.parse(JSON.parse(await readTemplate(`templates/${name}.json`))),
     ),
   );
-  return { version: 2, templates: { index, product }, generatedAt: null };
+  return { version: 2, templates: { index, product }, generatedAt: null, themeSettings: {} };
 }
 
 /** Reads a persisted configurationJson, rejecting anything that is not the v2 shape. */

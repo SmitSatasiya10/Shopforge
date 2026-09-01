@@ -21,6 +21,8 @@ export interface RenderTemplateOptions {
   readBinary?: BinaryReader;
   /** Which Shopify template this is, so `request.page_type` and `template.name` are right. */
   templateName?: string;
+  /** Project-level Design panel overrides, layered on top of the theme's own global settings. */
+  themeSettingOverrides?: Record<string, unknown>;
 }
 
 async function readJson<T>(readTemplate: TemplateReader, path: string, fallback: T): Promise<T> {
@@ -193,10 +195,14 @@ export async function renderTemplate(opts: RenderTemplateOptions): Promise<strin
     return path.endsWith(".liquid") ? normalizeRenderTagArgs(raw) : raw;
   };
 
-  const [locale, settings] = await Promise.all([
+  const [locale, baseSettings] = await Promise.all([
     readJson<Record<string, unknown>>(readTemplate, "locales/en.default.json", {}),
     loadThemeSettings(readTemplate),
   ]);
+  // A project's Design-panel overrides (StoreConfiguration.themeSettings) win over the Base
+  // Theme's own config/settings_data.json, same precedence loadThemeSettings already applies
+  // between the schema's defaults and the merchant's saved settings.
+  const settings = { ...baseSettings, ...(opts.themeSettingOverrides ?? {}) };
 
   const engine = createShopifyLiquid({ readTemplate, locale, currency: product?.currency });
 

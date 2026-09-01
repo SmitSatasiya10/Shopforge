@@ -75,6 +75,12 @@ const COMPANION_TYPES = new Set(["color", "color_background"]);
  * edit on field A onto field B's setting. Only kicks in on real ambiguity (more than one
  * setting matches): with zero or one match — the overwhelming majority of sections, which have
  * exactly one text field — this returns exactly what a plain `.find()` would have.
+ *
+ * When ambiguous and none of the matches fall in the selected field's zone (the zone heuristic
+ * only looks forward to the next content field, so a field whose companion setting is declared
+ * *before* it — e.g. a `text` block that follows an unrelated `heading_size` — has no in-scope
+ * candidate), this deliberately returns nothing rather than guessing: a missing control is
+ * recoverable, a control that quietly edits a different field's setting is not.
  */
 function pick<T extends ShopifySettingDef>(
   settings: T[],
@@ -84,11 +90,10 @@ function pick<T extends ShopifySettingDef>(
 ): T | undefined {
   const matches = settings.filter(predicate);
   if (matches.length <= 1) return matches[0];
-  const inScope = matches.find((d) => {
+  return matches.find((d) => {
     const i = settings.indexOf(d);
     return i >= scopeStart && i < scopeEnd;
   });
-  return inScope ?? matches[0];
 }
 
 export function findTextControls(defs: ShopifySettingDef[] | undefined, ownerId?: string): TextControls {
@@ -105,13 +110,17 @@ export function findTextControls(defs: ShopifySettingDef[] | undefined, ownerId?
     ownerIndex >= 0 ? settings.findIndex((d, i) => i > ownerIndex && CONTENT_TYPES.has(d.type)) : -1;
   const scopeEnd = nextFieldIndex >= 0 ? nextFieldIndex : settings.length;
 
-  const sizeSelect = pick(settings, scopeStart, scopeEnd, (d) => d.type === "select" && SIZE_ID.test(d.id!) && !MOBILE.test(d.id!));
-  const sizeRange = pick(
-    settings,
-    scopeStart,
-    scopeEnd,
-    (d) => (d.type === "range" || d.type === "number") && SIZE_ID.test(d.id!) && !MOBILE.test(d.id!),
-  );
+  // A select-type size setting (e.g. "custom" heading_size) and a range-type one (e.g. a
+  // per-field font-size slider) are resolved as one combined pool, not two independent `pick()`
+  // calls — otherwise a globally-unique select belonging to a *different* field (so it always
+  // clears `pick()`'s own single-match shortcut) would unconditionally beat a range setting that
+  // is genuinely in scope for the selected field, since selects were checked first below.
+  const isSizeSelect = (d: ShopifySettingDef) => d.type === "select" && SIZE_ID.test(d.id!) && !MOBILE.test(d.id!);
+  const isSizeRange = (d: ShopifySettingDef) =>
+    (d.type === "range" || d.type === "number") && SIZE_ID.test(d.id!) && !MOBILE.test(d.id!);
+  const sizeMatch = pick(settings, scopeStart, scopeEnd, (d) => isSizeSelect(d) || isSizeRange(d));
+  const sizeSelect = sizeMatch && isSizeSelect(sizeMatch) ? sizeMatch : undefined;
+  const sizeRange = sizeMatch && isSizeRange(sizeMatch) ? sizeMatch : undefined;
   if (sizeSelect?.options?.length) {
     controls.size = {
       kind: "select",

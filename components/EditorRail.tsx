@@ -1,10 +1,10 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Images, LayoutGrid, Sparkles } from "lucide-react";
+import { Images, LayoutGrid, Palette, Sparkles } from "lucide-react";
 
 interface RailTool {
-  id: "sections" | "ai" | "media";
+  id: "sections" | "ai" | "media" | "design";
   label: string;
   icon: LucideIcon;
   active: boolean;
@@ -15,21 +15,34 @@ interface EditorRailProps {
   sectionsActive: boolean;
   aiActive: boolean;
   mediaActive: boolean;
+  designActive: boolean;
   onSections: () => void;
   onAI: () => void;
   onMedia: () => void;
+  onDesign: () => void;
 }
 
 /**
- * The editor's left tool rail — Sections / AI / Media. Each button just toggles whichever
- * overlay already implements that workflow (SectionPicker, the inline AI panel, MediaPanel);
- * this component only renders the rail and reflects which one is currently open.
+ * The editor's left tool rail — Sections / AI / Media / Design. Each button just toggles
+ * whichever overlay already implements that workflow (SectionPicker, the inline AI panel,
+ * MediaPanel, DesignPanel); this component only renders the rail and reflects which one is
+ * currently open.
  */
-export function EditorRail({ sectionsActive, aiActive, mediaActive, onSections, onAI, onMedia }: EditorRailProps) {
+export function EditorRail({
+  sectionsActive,
+  aiActive,
+  mediaActive,
+  designActive,
+  onSections,
+  onAI,
+  onMedia,
+  onDesign,
+}: EditorRailProps) {
   const tools: RailTool[] = [
     { id: "sections", label: "Sections", icon: LayoutGrid, active: sectionsActive, onClick: onSections },
     { id: "ai", label: "AI", icon: Sparkles, active: aiActive, onClick: onAI },
     { id: "media", label: "Media", icon: Images, active: mediaActive, onClick: onMedia },
+    { id: "design", label: "Design", icon: Palette, active: designActive, onClick: onDesign },
   ];
 
   return (

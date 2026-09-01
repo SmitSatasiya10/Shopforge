@@ -72,4 +72,50 @@ describe("findTextControls", () => {
     expect(findTextControls(defs, "title").size?.settingId).toBe("heading_size");
     expect(findTextControls(defs, "text").size?.settingId).toBe("heading_size");
   });
+
+  it("regression: a content field whose size setting is declared before it gets no size control, instead of stealing another field's setting", () => {
+    // Shape of slideshow-hero.liquid's slide block: heading_size sits between heading and
+    // heading_suffix, and heading_prefix_size sits between heading_suffix and text — so text's
+    // forward-only zone [text, button_label_1) contains neither. Previously `pick()` fell back
+    // to the first size match anywhere in the schema (heading_size), so stepping the
+    // description's font size silently resized the heading instead. It should now resolve to
+    // no size control at all rather than guessing wrong.
+    const slideDefs: ShopifySettingDef[] = [
+      { id: "heading_prefix", type: "text" },
+      { id: "heading", type: "text" },
+      { id: "title_highlight_color", type: "color" },
+      { id: "heading_size", type: "select", options: [{ value: "h2", label: "Medium" }, { value: "h1", label: "Large" }] },
+      { id: "heading_suffix", type: "text" },
+      { id: "heading_prefix_size", type: "select", options: [{ value: "h4", label: "Small" }, { value: "h3", label: "Medium" }] },
+      { id: "text", type: "richtext" },
+      { id: "button_label_1", type: "text" },
+    ];
+    expect(findTextControls(slideDefs, "text").size).toBeUndefined();
+    // The heading itself still correctly resolves to its own size setting.
+    expect(findTextControls(slideDefs, "heading").size?.settingId).toBe("heading_size");
+    expect(findTextControls(slideDefs, "heading_suffix").size?.settingId).toBe("heading_prefix_size");
+  });
+
+  it("regression: a genuinely in-scope range setting isn't shadowed by an out-of-scope select that happens to be the schema's only select", () => {
+    // Shape of parallax-hero.liquid's content block: heading_prefix_size (select) belongs to
+    // heading_prefix/heading_suffix, while heading has its own heading_size (range) declared
+    // right after it. Because heading_prefix_size is the ONLY select-type size match in the
+    // whole schema, `pick()`'s single-match shortcut used to return it unconditionally — and
+    // findTextControls checked the select result before ever considering the range — so
+    // selecting the heading always resolved to the prefix's select control instead of its own,
+    // correctly-scoped range.
+    const parallaxDefs: ShopifySettingDef[] = [
+      { id: "heading_prefix", type: "text" },
+      { id: "heading", type: "text" },
+      { id: "heading_size", type: "range", min: 24, max: 60 },
+      { id: "heading_suffix", type: "text" },
+      { id: "heading_prefix_size", type: "select", options: [{ value: "h4", label: "Small" }, { value: "h3", label: "Medium" }] },
+      { id: "text", type: "richtext" },
+    ];
+    expect(findTextControls(parallaxDefs, "heading").size?.settingId).toBe("heading_size");
+    expect(findTextControls(parallaxDefs, "heading").size?.kind).toBe("range");
+    // heading_prefix_size sits between heading_suffix and text, so it's in heading_suffix's
+    // zone (not heading_prefix's, which has no companion setting of its own at all).
+    expect(findTextControls(parallaxDefs, "heading_suffix").size?.settingId).toBe("heading_prefix_size");
+  });
 });

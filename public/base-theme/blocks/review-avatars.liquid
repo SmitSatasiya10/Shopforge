@@ -390,6 +390,16 @@
         "default": "<strong>100+ orders</strong>",
         "info": "Use [stars] to display review stars."
       }, {
+        "type": "range",
+        "id": "text_1_line_1_size",
+        "min": 10,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 14,
+        "label": "Text line #1 size",
+        "visible_if": "{{ block.settings.text_1_line_1 != blank }}"
+      }, {
         "type": "checkbox",
         "id": "text_1_line_1_mobile_custom",
         "label": "Custom line #1.1 for mobile",
@@ -411,21 +421,21 @@
         "label": "Mobile line #1.1 font size",
         "visible_if": "{{ block.settings.text_1_line_1_mobile_custom == true }}"
       }, {
-        "type": "range",
-        "id": "text_1_line_1_size",
-        "min": 10,
-        "max": 20,
-        "step": 1,
-        "unit": "px",
-        "default": 14,
-        "label": "Text line #1 size",
-        "visible_if": "{{ block.settings.text_1_line_1 != blank }}"
-      }, {
         "type": "inline_richtext",
         "id": "text_1_line_2",
         "label": "Text line #2",
         "default": "in the last 24h",
         "info": "Use [stars] to display review stars."
+      }, {
+        "type": "range",
+        "id": "text_1_line_2_size",
+        "min": 10,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 12,
+        "label": "Text line #2 size",
+        "visible_if": "{{ block.settings.text_1_line_2_size != blank }}"
       }, {
         "type": "checkbox",
         "id": "text_1_line_2_mobile_custom",
@@ -447,16 +457,6 @@
         "default": 12,
         "label": "Mobile line #1.2 font size",
         "visible_if": "{{ block.settings.text_1_line_2_mobile_custom == true }}"
-      }, {
-        "type": "range",
-        "id": "text_1_line_2_size",
-        "min": 10,
-        "max": 20,
-        "step": 1,
-        "unit": "px",
-        "default": 12,
-        "label": "Text line #2 size",
-        "visible_if": "{{ block.settings.text_1_line_2_size != blank }}"
       }, {
         "type": "color",
         "id": "text_1_color",
@@ -531,6 +531,16 @@
         "label": "Text line #1",
         "info": "Use [stars] to display review stars."
       }, {
+        "type": "range",
+        "id": "text_2_line_1_size",
+        "min": 10,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 14,
+        "label": "Text line #1 size",
+        "visible_if": "{{ block.settings.text_2_line_1 != blank }}"
+      }, {
         "type": "checkbox",
         "id": "text_2_line_1_mobile_custom",
         "label": "Custom line #2.1 for mobile",
@@ -551,20 +561,20 @@
         "label": "Mobile line #2.1 font size",
         "visible_if": "{{ block.settings.text_2_line_1_mobile_custom == true }}"
       }, {
-        "type": "range",
-        "id": "text_2_line_1_size",
-        "min": 10,
-        "max": 20,
-        "step": 1,
-        "unit": "px",
-        "default": 14,
-        "label": "Text line #1 size",
-        "visible_if": "{{ block.settings.text_2_line_1 != blank }}"
-      }, {
         "type": "inline_richtext",
         "id": "text_2_line_2",
         "label": "Text line #2",
         "info": "Use [stars] to display review stars."
+      }, {
+        "type": "range",
+        "id": "text_2_line_2_size",
+        "min": 10,
+        "max": 20,
+        "step": 1,
+        "unit": "px",
+        "default": 12,
+        "label": "Text line #2 size",
+        "visible_if": "{{ block.settings.text_2_line_2 != blank }}"
       }, {
         "type": "checkbox",
         "id": "text_2_line_2_mobile_custom",
@@ -585,16 +595,6 @@
         "default": 12,
         "label": "Mobile line #2.2 font size",
         "visible_if": "{{ block.settings.text_2_line_2_mobile_custom == true }}"
-      }, {
-        "type": "range",
-        "id": "text_2_line_2_size",
-        "min": 10,
-        "max": 20,
-        "step": 1,
-        "unit": "px",
-        "default": 12,
-        "label": "Text line #2 size",
-        "visible_if": "{{ block.settings.text_2_line_2 != blank }}"
       }, {
         "type": "color",
         "id": "text_2_color",

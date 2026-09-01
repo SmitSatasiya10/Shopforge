@@ -21,6 +21,9 @@ import { ImageChangeButton } from "@/components/ImageChangeButton";
 import { IconChangeButton } from "@/components/IconChangeButton";
 import { IconPanel } from "@/components/IconPanel";
 import { AiImageEditPanel } from "@/components/AiImageEditPanel";
+import { DesignPanel } from "@/components/DesignPanel";
+import { DesignCategoryKey, SchemaGroup } from "@/lib/editor/design-categories";
+import { collectKnownFontHandles, describeFontHandle } from "@/lib/editor/font-options";
 import type { GeneratedImage } from "@/lib/product/generated-images";
 import { renderTemplate } from "@/lib/preview/template-renderer";
 import { createFetchTemplateReader, createFetchBinaryReader } from "@/lib/preview/template-loader";
@@ -57,6 +60,7 @@ import {
 // page reaches loadCatalog()'s data instead.
 import type { SectionSchema } from "@/lib/ai/catalog";
 import { applyMagicBrush, cycleColorScheme, rollPalette, PALETTES } from "@/lib/editor/magic-brush";
+import { shufflePaletteColors } from "@/lib/editor/palette-shuffle";
 import {
   locateBlockPathByType,
   locateTextSetting,
@@ -66,7 +70,7 @@ import {
   TextBinding,
 } from "@/lib/editor/setting-locator";
 import { applyAlign, applyColor, cycleWeight, findTextControls, stepSize } from "@/lib/editor/text-controls";
-import { buildThemePalette, parsePredefinedSwatches, FALLBACK_COMMON_COLORS, NamedColor, ThemeColorRow } from "@/lib/editor/color-palette";
+import { buildThemePalette, parsePredefinedSwatches, FALLBACK_COMMON_COLORS } from "@/lib/editor/color-palette";
 import { classifySaveResponseStatus } from "@/lib/editor/save-state";
 import { loadThemeSettings } from "@/lib/preview/theme-settings";
 import type { ProductDTO } from "@/lib/product/db-mapping";
@@ -120,10 +124,6 @@ export default function EditorPage() {
     null,
   );
   const [schemaLocale, setSchemaLocale] = useState<Record<string, unknown>>({});
-  // Feeds the inline toolbar's color picker ("Theme"/"Common Colors" tabs) from the store's
-  // own settings_data.json, rather than the picker only ever offering a bare hex input.
-  const [themeColorRows, setThemeColorRows] = useState<ThemeColorRow[]>([]);
-  const [commonColors, setCommonColors] = useState<NamedColor[]>(FALLBACK_COMMON_COLORS);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle");
   const [conflict, setConflict] = useState<{ currentUpdatedAt: string } | null>(null);
@@ -221,6 +221,21 @@ export default function EditorPage() {
   // existing SectionPicker modal directly, same as the old header button did.
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [mediaPanelOpen, setMediaPanelOpen] = useState(false);
+  // Design's rail entry — a fifth view of the same left sidebar slot, editing global theme
+  // settings (StoreConfiguration.themeSettings) rather than a section/block. Resets to the
+  // category list (null) whenever the panel closes.
+  const [designPanelOpen, setDesignPanelOpen] = useState(false);
+  const [designActiveCategory, setDesignActiveCategory] = useState<DesignCategoryKey | null>(null);
+  // config/settings_schema.json's raw groups, fetched once — drives which controls the Design
+  // panel renders per category (lib/editor/design-categories.ts).
+  const [themeSchemaGroups, setThemeSchemaGroups] = useState<SchemaGroup[]>([]);
+  // The theme's global settings merged with config/settings_data.json's current values (same
+  // merge loadThemeSettings does) — a Design control's effective value layers
+  // configuration.themeSettings on top of this.
+  const [baseThemeSettings, setBaseThemeSettings] = useState<Record<string, unknown>>({});
+  // config/settings_data.json's raw contents (current + presets) — the Design panel's font
+  // dropdown is built from every font handle this actually contains, never a fabricated list.
+  const [themeSettingsDataRaw, setThemeSettingsDataRaw] = useState<Record<string, unknown>>({});
   // "Edit with AI" (ImageChangeButton's second action) — a fourth view of the same left
   // sidebar slot. aiImageTarget mirrors mediaPickerTarget: which image_picker setting "Use
   // image" writes into. aiReferenceUrl is the panel's current reference image, seeded from the
@@ -260,6 +275,9 @@ export default function EditorPage() {
   const previewRef = useRef<HTMLDivElement>(null);
   const previewFrameRef = useRef<PreviewFrameHandle>(null);
   const paletteIndex = useRef(-1);
+  // Separate from the per-section Magic Brush's own paletteIndex above — an independent
+  // "don't repeat the last roll" tracker for the Design panel's global palette shuffle.
+  const colorPaletteShuffleIndex = useRef(-1);
 
   // Undo/history: `configRef`/`productRef` mirror the latest state synchronously (updated at
   // the same point as the setState calls, not via a separate effect) so a burst of edits
@@ -323,6 +341,22 @@ export default function EditorPage() {
       .catch(() => setSchemaLocale({}));
   }, [readTemplate]);
 
+  // The Design panel's raw settings groups — config/settings_schema.json's own structure,
+  // fetched once (same reader as everything else) rather than a hand-kept category catalog.
+  useEffect(() => {
+    readTemplate("config/settings_schema.json")
+      .then((raw) => setThemeSchemaGroups(JSON.parse(raw)))
+      .catch(() => setThemeSchemaGroups([]));
+  }, [readTemplate]);
+
+  // The Design panel's font dropdown is built from this file's own font handles, not a
+  // fabricated catalog (lib/editor/font-options.ts).
+  useEffect(() => {
+    readTemplate("config/settings_data.json")
+      .then((raw) => setThemeSettingsDataRaw(JSON.parse(raw)))
+      .catch(() => setThemeSettingsDataRaw({}));
+  }, [readTemplate]);
+
   // The Add Section picker's catalog — the same curated list AI generation reads from
   // (lib/ai/catalog.ts), fetched once via the server since it's a disk-backed module.
   useEffect(() => {
@@ -332,16 +366,42 @@ export default function EditorPage() {
       .catch(() => setSectionCatalog([]));
   }, []);
 
-  // The store's brand colors, for the inline toolbar's color-picker "Theme" tab.
+  // The theme's own global settings (config/settings_data.json merged with schema defaults) —
+  // fetched once; the Design panel and the effect below layer configuration.themeSettings on
+  // top rather than re-fetching on every edit.
   useEffect(() => {
     loadThemeSettings(readTemplate)
-      .then((settings) => {
-        setThemeColorRows(buildThemePalette(settings));
-        const predefined = parsePredefinedSwatches(settings.swatches_predefined_colors ?? settings.swatches_predefined_colors_list);
-        if (predefined.length) setCommonColors(predefined);
-      })
+      .then(setBaseThemeSettings)
       .catch(() => {});
   }, [readTemplate]);
+
+  // The store's brand colors, for the inline toolbar's color-picker "Theme" tab — derived so it
+  // never shows a stale swatch after a Design-panel color change.
+  const effectiveThemeSettings = useMemo(
+    () => ({ ...baseThemeSettings, ...(configuration?.themeSettings ?? {}) }),
+    [baseThemeSettings, configuration?.themeSettings],
+  );
+  const themeColorRows = useMemo(() => buildThemePalette(effectiveThemeSettings), [effectiveThemeSettings]);
+  const commonColors = useMemo(() => {
+    const predefined = parsePredefinedSwatches(
+      effectiveThemeSettings.swatches_predefined_colors ?? effectiveThemeSettings.swatches_predefined_colors_list,
+    );
+    return predefined.length ? predefined : FALLBACK_COMMON_COLORS;
+  }, [effectiveThemeSettings]);
+
+  // The Design panel's Typography font dropdown — every font handle this theme's own config
+  // actually uses, plus whichever handle is currently selected (even if unrecognized), so an
+  // existing choice is never dropped from the list (lib/editor/font-options.ts).
+  const designFontOptions = useMemo(() => {
+    const handles = collectKnownFontHandles(themeSchemaGroups, themeSettingsDataRaw);
+    for (const id of ["type_header_font", "type_body_font"]) {
+      const value = effectiveThemeSettings[id];
+      if (typeof value === "string" && value) handles.add(value);
+    }
+    return [...handles]
+      .map((value) => ({ value, label: describeFontHandle(value) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [themeSchemaGroups, themeSettingsDataRaw, effectiveThemeSettings]);
 
   // The section toolbar clamps itself into the preview's height.
   useEffect(() => {
@@ -369,6 +429,7 @@ export default function EditorPage() {
       readTemplate,
       readBinary,
       templateName: page,
+      themeSettingOverrides: configuration.themeSettings,
     })
       .then((rendered) => !cancelled && setHtml(rendered))
       .catch((err) => !cancelled && setLoadError(err instanceof Error ? err.message : "Render failed"));
@@ -834,6 +895,36 @@ export default function EditorPage() {
     },
     [updateTemplate],
   );
+
+  /** Design panel edits — global, not scoped to the current page's templates, so this writes
+   *  directly via commitConfiguration rather than through updateTemplate. */
+  const updateThemeSetting = useCallback(
+    (settingId: string, value: unknown) => {
+      const prev = configRef.current;
+      if (!prev) return;
+      commitConfiguration({ ...prev, themeSettings: { ...prev.themeSettings, [settingId]: value } });
+    },
+    [commitConfiguration],
+  );
+
+  /** Applies several theme settings together as one undo step — e.g. a Buttons style preset,
+   *  which is a bundle of real settings rather than a single stored value. */
+  const updateThemeSettings = useCallback(
+    (patch: Record<string, unknown>) => {
+      const prev = configRef.current;
+      if (!prev) return;
+      commitConfiguration({ ...prev, themeSettings: { ...prev.themeSettings, ...patch } });
+    },
+    [commitConfiguration],
+  );
+
+  /** Design → Colors → Color Palette's shuffle button — one curated, coordinated
+   *  Primary/Secondary pair applied as a single themeSettings update/undo step. */
+  const shuffleColorPalette = useCallback(() => {
+    const index = rollPalette(colorPaletteShuffleIndex.current);
+    colorPaletteShuffleIndex.current = index;
+    updateThemeSettings(shufflePaletteColors(index));
+  }, [updateThemeSettings]);
 
   const generate = useCallback(async () => {
     setGenerating(true);
@@ -1393,6 +1484,7 @@ export default function EditorPage() {
           sectionsActive={sectionPickerOpen}
           aiActive={aiPanelOpen}
           mediaActive={mediaPickerTarget !== null || mediaPanelOpen}
+          designActive={designPanelOpen}
           onSections={() => {
             setInsertAfterId(null);
             setSectionPickerOpen(true);
@@ -1405,6 +1497,7 @@ export default function EditorPage() {
                 setMediaPanelOpen(false);
                 setAiImagePanelOpen(false);
                 setIconPickerTarget(null);
+                setDesignPanelOpen(false);
               }
               return next;
             })
@@ -1418,13 +1511,29 @@ export default function EditorPage() {
               setAiPanelOpen(false);
               setAiImagePanelOpen(false);
               setIconPickerTarget(null);
+              setDesignPanelOpen(false);
             }
           }}
+          onDesign={() =>
+            setDesignPanelOpen((v) => {
+              const next = !v;
+              if (next) {
+                setAiPanelOpen(false);
+                setMediaPickerTarget(null);
+                setMediaPanelOpen(false);
+                setIconPickerTarget(null);
+                setAiImagePanelOpen(false);
+              } else {
+                setDesignActiveCategory(null);
+              }
+              return next;
+            })
+          }
         />
 
-        {/* Sections, AI, Media, and AI-image-edit are four views of the same left sidebar
-            slot — only one renders at a time, right beside the rail, never as a separate
-            floating overlay. */}
+        {/* Sections, AI, Media, AI-image-edit, and Design are five views of the same left
+            sidebar slot — only one renders at a time, right beside the rail, never as a
+            separate floating overlay. */}
         {mediaPickerTarget !== null || mediaPanelOpen || aiReferencePicking ? (
           <MediaPanel
             open
@@ -1504,6 +1613,22 @@ export default function EditorPage() {
               {generating ? "Generating…" : "Generate content"}
             </button>
           </div>
+        ) : designPanelOpen ? (
+          <DesignPanel
+            activeCategory={designActiveCategory}
+            onSelectCategory={setDesignActiveCategory}
+            schemaGroups={themeSchemaGroups}
+            schemaLocale={schemaLocale}
+            values={effectiveThemeSettings}
+            onChange={updateThemeSetting}
+            onApplyPreset={updateThemeSettings}
+            onShufflePalette={shuffleColorPalette}
+            fontOptions={designFontOptions}
+            onClose={() => {
+              setDesignPanelOpen(false);
+              setDesignActiveCategory(null);
+            }}
+          />
         ) : null}
 
         <div
@@ -1619,6 +1744,7 @@ export default function EditorPage() {
                 setAiPanelOpen(false);
                 setAiImagePanelOpen(false);
                 setIconPickerTarget(null);
+                setDesignPanelOpen(false);
               }}
               onEditWithAI={() => {
                 setAiImageTarget({ settingId: imageSettingId, blockPath: blockScope ?? [] });
@@ -1628,6 +1754,7 @@ export default function EditorPage() {
                 setMediaPickerTarget(null);
                 setMediaPanelOpen(false);
                 setIconPickerTarget(null);
+                setDesignPanelOpen(false);
               }}
             />
           ) : null}
@@ -1641,6 +1768,7 @@ export default function EditorPage() {
                 setAiImagePanelOpen(false);
                 setMediaPickerTarget(null);
                 setMediaPanelOpen(false);
+                setDesignPanelOpen(false);
               }}
             />
           ) : null}
@@ -1696,12 +1824,14 @@ export default function EditorPage() {
               setAiPanelOpen(false);
               setAiImagePanelOpen(false);
               setIconPickerTarget(null);
+              setDesignPanelOpen(false);
             }}
             onBrowseIcon={(settingId) => {
               setIconPickerTarget({ settingId, blockPath: [] });
               setAiPanelOpen(false);
               setAiImagePanelOpen(false);
               setMediaPickerTarget(null);
+              setDesignPanelOpen(false);
             }}
             onClose={() => {
               setSelection(null);
