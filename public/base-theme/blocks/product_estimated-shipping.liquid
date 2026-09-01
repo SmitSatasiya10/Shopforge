@@ -23,7 +23,7 @@
           loading="lazy"
         >
       {% else %}
-        {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon %}
+        {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon, setting_id: 'icon' %}
       {% endif %}
     </div>
   {% endunless %}

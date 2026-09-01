@@ -6,6 +6,7 @@ import {
   ShopifySettingDef,
   resolveSchemaLabel,
 } from "@/lib/preview/section-schema";
+import { filledIconSettingId, isIconSettingId } from "@/lib/preview/icon-setting";
 
 interface SettingsPanelProps {
   sectionType: string | null;
@@ -15,6 +16,8 @@ interface SettingsPanelProps {
   onChange: (settingId: string, value: unknown) => void;
   /** Opens the "Your media" panel targeting this image_picker setting. */
   onBrowseMedia: (settingId: string) => void;
+  /** Opens the icon picker (IconPanel) targeting this icon-name setting. */
+  onBrowseIcon: (settingId: string) => void;
   onClose: () => void;
   /** Collapses the panel to its rail; distinct from onClose, which clears the selection. */
   onCollapse: () => void;
@@ -32,6 +35,7 @@ export function SettingsPanel({
   schemaLocale,
   onChange,
   onBrowseMedia,
+  onBrowseIcon,
   onClose,
   onCollapse,
 }: SettingsPanelProps) {
@@ -103,8 +107,10 @@ export function SettingsPanel({
                 <SettingControl
                   setting={setting}
                   value={value}
+                  allValues={values}
                   onChange={onChange}
                   onBrowseMedia={onBrowseMedia}
+                  onBrowseIcon={onBrowseIcon}
                   schemaLocale={schemaLocale}
                 />
                 {setting.info ? (
@@ -124,18 +130,49 @@ export function SettingsPanel({
 function SettingControl({
   setting,
   value,
+  allValues,
   onChange,
   onBrowseMedia,
+  onBrowseIcon,
   schemaLocale,
 }: {
   setting: ShopifySettingDef;
   value: unknown;
+  allValues: Record<string, unknown>;
   onChange: (id: string, value: unknown) => void;
   onBrowseMedia: (settingId: string) => void;
+  onBrowseIcon: (settingId: string) => void;
   schemaLocale: Record<string, unknown>;
 }) {
   const id = setting.id!;
   const input = "rounded border border-neutral-300 p-2 text-sm font-normal";
+
+  // Shopify has no dedicated "icon" setting type — this theme's icon settings are plain `text`
+  // fields following an `icon`/`icon_N` naming convention (lib/preview/icon-setting.ts), so
+  // detection is by id rather than by setting.type. Shown as a glyph preview + "Browse icons"
+  // button instead of falling through to the generic text input below.
+  if (setting.type === "text" && isIconSettingId(id)) {
+    const filled = Boolean(allValues[filledIconSettingId(id)]);
+    const iconName = String(value).trim();
+    return (
+      <span className="flex items-center gap-2">
+        <span
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded border border-neutral-300 material-symbols-outlined${
+            filled ? " filled" : ""
+          }`}
+        >
+          {iconName || "help"}
+        </span>
+        <button
+          type="button"
+          onClick={() => onBrowseIcon(id)}
+          className="flex-1 rounded border border-neutral-300 px-2 py-2 text-left text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+        >
+          {iconName ? iconName.replace(/_/g, " ") : "Browse icons"}
+        </button>
+      </span>
+    );
+  }
 
   switch (setting.type) {
     case "checkbox":

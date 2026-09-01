@@ -24,7 +24,7 @@
         loading="lazy"
       >
     {% elsif block.settings.button_icon != blank %}
-      {% render 'material-icon', icon: block.settings.button_icon, filled: block.settings.button_filled_icon %}
+      {% render 'material-icon', icon: block.settings.button_icon, filled: block.settings.button_filled_icon, setting_id: 'button_icon' %}
     {% endif %}
     <span class="sizing-chart__button__text">{{ block.settings.button_label }}</span>
   </button>

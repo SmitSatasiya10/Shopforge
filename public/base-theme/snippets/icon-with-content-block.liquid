@@ -21,7 +21,12 @@
 {% elsif block.settings.block_width == 'unlimited' %}
   {% assign nowrap = true %}
 {% endif %}
-<div class="icons-with-text__icon-item icons-with-text__icon-item-{{ block.id }} icons-with-text__icon-item--{{ block.settings.icon_position }} icons-with-text__icon-item--{{ block.settings.icon_text_alignment }}">
+<div
+  class="icons-with-text__icon-item icons-with-text__icon-item-{{ block.id }} icons-with-text__icon-item--{{ block.settings.icon_position }} icons-with-text__icon-item--{{ block.settings.icon_text_alignment }}"
+  {% if block_attributes %}
+    {{- block.shopify_attributes -}}
+  {% endif %}
+>
   {% if block.settings.icon_position != 'next-to-title' and has_icon %}
     <div class="icons-with-text__icon__icon icons-with-text__icon__icon--{{ block.settings.icon_size }} color-{{ block.settings.icon_color }}">
       {%- if block.settings.image != blank -%}
@@ -39,7 +44,7 @@
           data-sf-editable="image"
         >
       {%- else -%}
-        {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon %}
+        {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon, setting_id: 'icon' %}
       {%- endif -%}
     </div>
   {% endif %}
@@ -64,7 +69,8 @@
           {%- else -%}
             {% render 'material-icon',
               icon: block.settings.icon,
-              filled: block.settings.filled_icon
+              filled: block.settings.filled_icon,
+              setting_id: 'icon'
             %}
           {%- endif -%}
         </div>

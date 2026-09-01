@@ -60,7 +60,7 @@
       %}
       {% capture item_icon %}
         {% if block.settings[icon_type] == 'icon' %}
-          {% render 'material-icon', icon: block.settings[icon], filled: block.settings[filled_icon] %}
+          {% render 'material-icon', icon: block.settings[icon], filled: block.settings[filled_icon], setting_id: icon %}
         {% elsif block.settings[icon_type] == 'image' and block.settings[image_icon] != blank %}
           <img
             src="{{ block.settings[image_icon] | image_url }}"

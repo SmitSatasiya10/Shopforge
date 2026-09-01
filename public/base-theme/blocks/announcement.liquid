@@ -33,7 +33,8 @@
           {% elsif block.settings.icon != blank %}
             {% render 'material-icon',
               icon: block.settings.icon,
-              filled: block.settings.filled_icon
+              filled: block.settings.filled_icon,
+              setting_id: 'icon'
             %}
           {% endif %}
           <span>{{ block.settings.text }}</span>

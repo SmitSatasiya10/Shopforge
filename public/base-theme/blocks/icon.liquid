@@ -25,7 +25,7 @@
   {%- endif -%}
 
   {%- if block.settings.image == blank -%}
-    {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon, aria_hidden: true %}
+    {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon, aria_hidden: true, setting_id: 'icon' %}
   {%- else -%}
     <img
       src="{{ block.settings.image | image_url }}"

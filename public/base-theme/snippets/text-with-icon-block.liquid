@@ -113,6 +113,7 @@
           assign filled_icon = block.settings.filled_icon_6
       endcase
       assign custom_icon_setting_id = 'custom_icon_' | append: i
+      assign icon_setting_id = 'icon_' | append: i
     %}
     {% if text != blank %}
       <p
@@ -130,7 +131,7 @@
             data-sf-editable="image"
           >
         {% elsif icon != blank %}
-          {% render 'material-icon', icon: icon, filled: filled_icon %}
+          {% render 'material-icon', icon: icon, filled: filled_icon, setting_id: icon_setting_id %}
         {% endif %}
         <span{% if nowrap %} class="nowrap"{% endif %}>{{- text -}}</span>
       </p>

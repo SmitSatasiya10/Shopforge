@@ -79,7 +79,7 @@
                   data-sf-editable="image"
                 >
               {% elsif block.settings.btn_icon != blank %}
-                {% render 'material-icon', icon: block.settings.btn_icon, filled: block.settings.filled_btn_icon %}
+                {% render 'material-icon', icon: block.settings.btn_icon, filled: block.settings.filled_btn_icon, setting_id: 'btn_icon' %}
               {%- endif -%}
               <span>{{ block.settings.btn_label }}</span>
             </button>

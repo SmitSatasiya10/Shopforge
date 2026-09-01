@@ -45,7 +45,7 @@
                         data-sf-editable="image"
                       >
                     {%- elsif block.settings.icon != 'none' -%}
-                      {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon %}
+                      {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon, setting_id: 'icon' %}
                     {%- endif -%}
                   </div>
                 {% endif %}
@@ -68,7 +68,7 @@
                             data-sf-editable="image"
                           >
                         {%- elsif block.settings.icon != 'none' -%}
-                          {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon %}
+                          {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon, setting_id: 'icon' %}
                         {%- endif -%}
                       </div>
                     {% endif %}

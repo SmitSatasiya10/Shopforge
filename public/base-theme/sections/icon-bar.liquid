@@ -107,7 +107,7 @@
                 <div class="icon-bar-card icon-bar-card--{{ section.settings.icon_layout }} multicolumn-card center content-container cards-color-scheme-{{ section.id }} color-{{ section.settings.cards_color_scheme }} gradient{{ bg_diff_class }} animate-item animate-item--child">
                   <div class="icon-bar-card__icon icon-bar-card__icon--{{ section.settings.icon_size }} text-color-{{ section.settings.icon_color }} flex-shrink-0">
                     {%- if block.settings.image == blank -%}
-                      {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon %}
+                      {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon, setting_id: 'icon' %}
                     {%- else -%}
                       <img
                         src="{{ block.settings.image | image_url }}"

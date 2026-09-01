@@ -18,6 +18,8 @@ import { DuplicateThemeModal } from "@/components/DuplicateThemeModal";
 import { PublicLinkModal } from "@/components/PublicLinkModal";
 import { InlineTextToolbar } from "@/components/InlineTextToolbar";
 import { ImageChangeButton } from "@/components/ImageChangeButton";
+import { IconChangeButton } from "@/components/IconChangeButton";
+import { IconPanel } from "@/components/IconPanel";
 import { AiImageEditPanel } from "@/components/AiImageEditPanel";
 import type { GeneratedImage } from "@/lib/product/generated-images";
 import { renderTemplate } from "@/lib/preview/template-renderer";
@@ -101,6 +103,11 @@ export default function EditorPage() {
   // set when the setting lives inside a block (e.g. a hotspot's own image), empty for a
   // section-level setting, so the picked url lands on the right node either way.
   const [mediaPickerTarget, setMediaPickerTarget] = useState<{ settingId: string; blockPath: string[] } | null>(
+    null,
+  );
+  // The icon-name setting currently targeted by "Change icon"/"Browse icons" (IconPanel) —
+  // mirrors mediaPickerTarget exactly, same lifecycle and blockPath semantics.
+  const [iconPickerTarget, setIconPickerTarget] = useState<{ settingId: string; blockPath: string[] } | null>(
     null,
   );
   const [schema, setSchema] = useState<{ type: string; schema: ShopifySectionSchema | null } | null>(null);
@@ -607,6 +614,16 @@ export default function EditorPage() {
   // A direct click on an image_picker-backed <img> (data-sf-editable="image") — shows
   // ImageChangeButton instead of the text toolbar.
   const imageSettingId = !binding && selection?.editable === "image" ? selection.settingId : null;
+  // A direct click on an icon-name glyph (data-sf-editable="icon") — shows IconChangeButton.
+  const iconSettingId = !binding && selection?.editable === "icon" ? selection.settingId : null;
+  const currentIconNode =
+    iconSettingId && selectedSection
+      ? ((blockScope && blockScope.length > 0 ? getBlockAt(selectedSection, blockScope) : selectedSection) as
+          | { settings?: Record<string, unknown> }
+          | undefined)
+      : undefined;
+  const currentIconValue =
+    iconSettingId && currentIconNode ? String(currentIconNode.settings?.[iconSettingId] ?? "") : "";
   // The clicked image's current value — seeds AiImageEditPanel's reference image when "Edit
   // with AI" opens, read the same way boundValues reads a bound text setting's current value.
   const currentImageNode =
@@ -1142,6 +1159,7 @@ export default function EditorPage() {
     setSelectionRect(info.rect);
     setShowRewrite(false);
     setMediaPickerTarget(null);
+    setIconPickerTarget(null);
   }, []);
   const handleRectChange = useCallback((rect: SelectionRect | null) => setSelectionRect(rect), []);
   const handleSectionRectChange = useCallback((rect: SelectionRect | null) => setSectionRect(rect), []);
@@ -1386,6 +1404,7 @@ export default function EditorPage() {
                 setMediaPickerTarget(null);
                 setMediaPanelOpen(false);
                 setAiImagePanelOpen(false);
+                setIconPickerTarget(null);
               }
               return next;
             })
@@ -1398,6 +1417,7 @@ export default function EditorPage() {
               setMediaPanelOpen(true);
               setAiPanelOpen(false);
               setAiImagePanelOpen(false);
+              setIconPickerTarget(null);
             }
           }}
         />
@@ -1427,6 +1447,18 @@ export default function EditorPage() {
               setMediaPanelOpen(false);
               setAiReferencePicking(false);
             }}
+          />
+        ) : iconPickerTarget !== null ? (
+          <IconPanel
+            open
+            value={currentIconValue}
+            onSelect={(iconName) => {
+              if (iconPickerTarget && selection?.sectionId) {
+                updateSetting(selection.sectionId, iconPickerTarget.settingId, iconName, iconPickerTarget.blockPath);
+              }
+              setIconPickerTarget(null);
+            }}
+            onClose={() => setIconPickerTarget(null)}
           />
         ) : aiImagePanelOpen ? (
           <AiImageEditPanel
@@ -1586,12 +1618,27 @@ export default function EditorPage() {
                 setMediaPickerTarget({ settingId: imageSettingId, blockPath: blockScope ?? [] });
                 setAiPanelOpen(false);
                 setAiImagePanelOpen(false);
+                setIconPickerTarget(null);
               }}
               onEditWithAI={() => {
                 setAiImageTarget({ settingId: imageSettingId, blockPath: blockScope ?? [] });
                 setAiReferenceUrl(currentImageUrl);
                 setAiImagePanelOpen(true);
                 setAiPanelOpen(false);
+                setMediaPickerTarget(null);
+                setMediaPanelOpen(false);
+                setIconPickerTarget(null);
+              }}
+            />
+          ) : null}
+
+          {iconSettingId && selectionRect && !showRewrite ? (
+            <IconChangeButton
+              rect={selectionRect}
+              onBrowseIcons={() => {
+                setIconPickerTarget({ settingId: iconSettingId, blockPath: blockScope ?? [] });
+                setAiPanelOpen(false);
+                setAiImagePanelOpen(false);
                 setMediaPickerTarget(null);
                 setMediaPanelOpen(false);
               }}
@@ -1648,10 +1695,18 @@ export default function EditorPage() {
               setMediaPickerTarget({ settingId, blockPath: [] });
               setAiPanelOpen(false);
               setAiImagePanelOpen(false);
+              setIconPickerTarget(null);
+            }}
+            onBrowseIcon={(settingId) => {
+              setIconPickerTarget({ settingId, blockPath: [] });
+              setAiPanelOpen(false);
+              setAiImagePanelOpen(false);
+              setMediaPickerTarget(null);
             }}
             onClose={() => {
               setSelection(null);
               setMediaPickerTarget(null);
+              setIconPickerTarget(null);
             }}
             onCollapse={() => setPanelOpen(false)}
           />

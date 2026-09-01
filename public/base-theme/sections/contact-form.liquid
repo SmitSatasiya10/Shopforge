@@ -51,7 +51,8 @@
           {% elsif section.settings.success_icon != blank %}
             {% render 'material-icon',
               icon: section.settings.success_icon,
-              filled: section.settings.success_icon_filled
+              filled: section.settings.success_icon_filled,
+              setting_id: 'success_icon'
             %}
           {% endif %}
           <div class="contact-from__message__content">
@@ -80,7 +81,8 @@
           {% elsif section.settings.errors_icon != blank %}
             {% render 'material-icon',
               icon: section.settings.errors_icon,
-              filled: section.settings.errors_icon_filled
+              filled: section.settings.errors_icon_filled,
+              setting_id: 'errors_icon'
             %}
           {% endif %}
           <div class="contact-from__message__content">

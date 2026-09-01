@@ -152,9 +152,9 @@
             %}
             {%- render 'reviews', block: block, force_padding: force_padding -%}
           {%- when 'text_with_icon' -%}
-            {% render 'text-with-icon-block', block: block, mobile_align: true %}
+            {% render 'text-with-icon-block', block: block, mobile_align: true, block_attributes: true %}
           {% when 'icon_with_content' %}
-            {% render 'icon-with-content-block', block: block, mobile_align: true %}
+            {% render 'icon-with-content-block', block: block, mobile_align: true, block_attributes: true %}
         {% endcase %}
       {%- endfor -%}
 
@@ -201,9 +201,9 @@
                 %}
                 {%- render 'reviews', block: block, force_padding: force_padding -%}
               {%- when 'text_with_icon' -%}
-                {% render 'text-with-icon-block', block: block, mobile_align: true %}
+                {% render 'text-with-icon-block', block: block, mobile_align: true, block_attributes: true %}
               {% when 'icon_with_content' %}
-                {% render 'icon-with-content-block', block: block, mobile_align: true %}
+                {% render 'icon-with-content-block', block: block, mobile_align: true, block_attributes: true %}
             {% endcase %}
 
             {% assign block_counter = block_counter | plus: 1 %}

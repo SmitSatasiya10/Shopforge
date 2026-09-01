@@ -94,7 +94,7 @@
                     {{ block.settings.custom_icon | image_url: width: 600 | image_tag: loading: 'lazy', width: 500 }}
                   </span>
                 {% else %}
-                  {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon %}
+                  {% render 'material-icon', icon: block.settings.icon, filled: block.settings.filled_icon, setting_id: 'icon' %}
                 {% endif %}
               </div>
             {% endunless %}
