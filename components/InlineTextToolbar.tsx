@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Minus, Plus, Trash2, WandSparkles, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Minus, Plus, Trash2, WandSparkles, X } from "lucide-react";
 import type { SelectionRect } from "./PreviewFrame";
 import { sizeLabel, type TextControls } from "@/lib/editor/text-controls";
 import type { NamedColor, ThemeColorRow } from "@/lib/editor/color-palette";
@@ -14,7 +14,7 @@ interface InlineTextToolbarProps {
   /** Current values at the bound path, for showing the active size/weight/color. */
   values: Record<string, unknown>;
   busy: boolean;
-  /** The binding sits inside a block, so it can be deleted. */
+  /** The binding sits inside a block, so it can be deleted and reordered. */
   canDeleteBlock: boolean;
   /** Feeds the color swatch's "Theme"/"Common Colors" tabs (lib/editor/color-palette.ts). */
   themeColorRows: ThemeColorRow[];
@@ -32,6 +32,7 @@ interface InlineTextToolbarProps {
   onCycleWeight: () => void;
   onAlign: (value: string) => void;
   onPickColor: (hex: string) => void;
+  onMoveBlock: (delta: -1 | 1) => void;
   onDeleteBlock: () => void;
   onClose: () => void;
 }
@@ -69,6 +70,7 @@ export function InlineTextToolbar({
   onCycleWeight,
   onAlign,
   onPickColor,
+  onMoveBlock,
   onDeleteBlock,
   onClose,
 }: InlineTextToolbarProps) {
@@ -176,6 +178,17 @@ export function InlineTextToolbar({
             />
           ) : null}
         </div>
+      ) : null}
+
+      {canDeleteBlock ? (
+        <span className="flex items-center gap-0.5 rounded-lg border border-neutral-700 px-0.5 py-0.5">
+          <button onClick={() => onMoveBlock(-1)} disabled={busy} title="Move block up" className="grid h-6 w-6 place-items-center rounded text-neutral-300 hover:bg-neutral-700 disabled:opacity-40">
+            <ArrowUp className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+          <button onClick={() => onMoveBlock(1)} disabled={busy} title="Move block down" className="grid h-6 w-6 place-items-center rounded text-neutral-300 hover:bg-neutral-700 disabled:opacity-40">
+            <ArrowDown className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </button>
+        </span>
       ) : null}
 
       {canDeleteBlock ? (

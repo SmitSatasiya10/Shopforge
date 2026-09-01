@@ -9,7 +9,9 @@ import { MediaPanel } from "@/components/MediaPanel";
 import { EditorRail } from "@/components/EditorRail";
 import { AiRewritePopover } from "@/components/AiRewritePopover";
 import { SectionToolbar } from "@/components/SectionToolbar";
+import { SectionNameBadge } from "@/components/SectionNameBadge";
 import { SectionPicker } from "@/components/SectionPicker";
+import { BlockPicker } from "@/components/BlockPicker";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { DuplicateThemeModal } from "@/components/DuplicateThemeModal";
@@ -23,6 +25,7 @@ import { createFetchTemplateReader, createFetchBinaryReader } from "@/lib/previe
 import {
   loadBlockSchema,
   loadSectionSchema,
+  resolveSchemaLabel,
   ShopifySectionSchema,
   ShopifySettingDef,
 } from "@/lib/preview/section-schema";
@@ -30,8 +33,10 @@ import { PAGE_TEMPLATES, PageTemplate, parseConfiguration, StoreConfiguration } 
 import { speechLocaleFor } from "@/lib/store-config/dictation-locale";
 import { deriveStoreName } from "@/lib/store-config/store-name";
 import {
+  addBlockAt,
   getBlockAt,
   insertSection,
+  moveBlockAt,
   moveSection,
   removeBlockAt,
   removeSection,
@@ -39,7 +44,12 @@ import {
   setSettingAtPath,
   setSettingsAtPath,
 } from "@/lib/store-config/template-ops";
-import { createSectionInstance, generateInstanceId, presetBlockTypes } from "@/lib/store-config/section-factory";
+import {
+  createBlockInstance,
+  createSectionInstance,
+  generateInstanceId,
+  presetBlockTypes,
+} from "@/lib/store-config/section-factory";
 // Type-only: lib/ai/catalog.ts reads from disk (node:fs/promises) and must never be imported
 // for its runtime code from this client component — GET /api/catalog/sections is how this
 // page reaches loadCatalog()'s data instead.
@@ -83,6 +93,9 @@ export default function EditorPage() {
   const [html, setHtml] = useState("");
   const [selection, setSelection] = useState<SelectInfo | null>(null);
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
+  /** The selected section's own root box — distinct from `selectionRect` (whatever field/block
+   * inside it was actually clicked) — so the name badge anchors to the whole section. */
+  const [sectionRect, setSectionRect] = useState<SelectionRect | null>(null);
   // The image_picker setting currently targeted by "Browse media" (MediaPanel) — cleared
   // whenever the selected section changes so a stale target can't be written to. blockPath is
   // set when the setting lives inside a block (e.g. a hotspot's own image), empty for a
@@ -92,6 +105,13 @@ export default function EditorPage() {
   );
   const [schema, setSchema] = useState<{ type: string; schema: ShopifySectionSchema | null } | null>(null);
   const [boundDefs, setBoundDefs] = useState<{ key: string; defs: ShopifySettingDef[] } | null>(null);
+  // The selected *nested* block's own schema (blocks/<type>.liquid) — a container block like
+  // Column declares its own `blocks` list there, same as a section does, so "Add block" needs
+  // this to offer the right menu when a block-inside-a-block (not the section itself) is
+  // selected (docs/EDITOR-TOOLBARS.md).
+  const [scopedBlockSchema, setScopedBlockSchema] = useState<{ type: string; schema: ShopifySectionSchema | null } | null>(
+    null,
+  );
   const [schemaLocale, setSchemaLocale] = useState<Record<string, unknown>>({});
   // Feeds the inline toolbar's color picker ("Theme"/"Common Colors" tabs) from the store's
   // own settings_data.json, rather than the picker only ever offering a bare hex input.
@@ -186,6 +206,7 @@ export default function EditorPage() {
   // "+" below a selected section; null means the header's own Add Section button opened it,
   // which appends to the end of the page instead.
   const [insertAfterId, setInsertAfterId] = useState<string | null>(null);
+  const [blockPickerOpen, setBlockPickerOpen] = useState(false);
   const [sectionCatalog, setSectionCatalog] = useState<SectionSchema[]>([]);
   // Left tool rail: AI's controls live in this inline panel; Media's rail entry opens
   // MediaPanel in a browse-only mode (no `image_picker` target to write into, unlike its other
@@ -561,6 +582,8 @@ export default function EditorPage() {
   }, [selection?.sectionType, readTemplate]);
 
   const activeSchema = schema && schema.type === selection?.sectionType ? schema.schema : null;
+  const selectedSectionName =
+    resolveSchemaLabel(activeSchema?.name, schemaLocale) || selection?.sectionType || "Section";
 
   // Same rule as lib/ai/catalog.ts's sectionsForTemplate() + excluding locked sections — kept
   // as a local one-liner rather than importing that module, which is disk-backed (node:fs) and
@@ -576,6 +599,11 @@ export default function EditorPage() {
   // Set only when the click landed inside a block but didn't resolve to one text setting —
   // narrows a rewrite to that block instead of the whole section (docs/EDITOR-TOOLBARS.md).
   const blockScope = !binding ? (selection?.blockScope ?? null) : null;
+  // Whichever block the current selection is actually scoped to, regardless of *how* it got
+  // there — a bound text field inside a block, or a non-text click (image, plain wrapper) that
+  // only resolved to blockScope. `binding` and `blockScope` are mutually exclusive (PreviewFrame
+  // never sets both), so this is never ambiguous. Null means the section root itself is selected.
+  const activeBlockPath = binding && binding.blockPath.length > 0 ? binding.blockPath : blockScope;
   // A direct click on an image_picker-backed <img> (data-sf-editable="image") — shows
   // ImageChangeButton instead of the text toolbar.
   const imageSettingId = !binding && selection?.editable === "image" ? selection.settingId : null;
@@ -591,6 +619,21 @@ export default function EditorPage() {
     imageSettingId && currentImageNode ? String(currentImageNode.settings?.[imageSettingId] ?? "") : "";
   const scopedBlockType =
     selectedSection && blockScope ? (getBlockAt(selectedSection, blockScope) as { type?: string } | undefined)?.type ?? null : null;
+  const activeScopedBlockSchema =
+    scopedBlockSchema && scopedBlockSchema.type === scopedBlockType ? scopedBlockSchema.schema : null;
+
+  useEffect(() => {
+    const type = scopedBlockType;
+    if (!type) return;
+    let cancelled = false;
+    loadBlockSchema(readTemplate, type).then((loaded) => {
+      if (!cancelled) setScopedBlockSchema({ type, schema: loaded });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scopedBlockType, readTemplate]);
+
   // Product-name text binds to the Product record, not a template setting — the schema
   // controls that anchor to a real product_title block still apply, but AI rewrite goes
   // through its own endpoint instead of rewrite-section (docs/EDITOR-TOOLBARS.md). The product
@@ -997,6 +1040,27 @@ export default function EditorPage() {
     [readTemplate, updateTemplate, insertAfterId],
   );
 
+  // Add Block: same shape as addSection, but for one block type from the *currently relevant
+  // container's* own schema — the selected section's top level, or (when a nested container
+  // block like a Custom Columns "Column" is scoped) that block's own `{% schema %}` blocks
+  // array one level deeper. Real Shopify lets a merchant add a block at either level the same
+  // way, so this targets `blockScope` when set instead of always the section root.
+  const addBlockToSection = useCallback(
+    (blockDef: NonNullable<ShopifySectionSchema["blocks"]>[number]) => {
+      if (!selectedSectionId) return;
+      const id = generateInstanceId(blockDef.type);
+      const block = createBlockInstance(blockDef.type, blockDef);
+      const path = blockScope ?? [];
+      updateTemplate((template) => {
+        const section = template.sections[selectedSectionId];
+        if (!section) return template;
+        return replaceSection(template, selectedSectionId, addBlockAt(section, path, id, block));
+      });
+      setBlockPickerOpen(false);
+    },
+    [selectedSectionId, blockScope, updateTemplate],
+  );
+
   const handleMove = useCallback(
     (delta: -1 | 1) => {
       if (!selectedSectionId) return;
@@ -1012,16 +1076,30 @@ export default function EditorPage() {
     setShowRewrite(false);
   }, [selectedSectionId, updateTemplate]);
 
+  const handleMoveBlock = useCallback(
+    (delta: -1 | 1) => {
+      if (!selectedSectionId || !activeBlockPath) return;
+      updateTemplate((template) => {
+        const section = template.sections[selectedSectionId];
+        if (!section) return template;
+        return replaceSection(template, selectedSectionId, moveBlockAt(section, activeBlockPath, delta));
+      });
+    },
+    [selectedSectionId, activeBlockPath, updateTemplate],
+  );
+
   const handleDeleteBlock = useCallback(() => {
-    if (!selectedSectionId || !binding || binding.blockPath.length === 0) return;
+    if (!selectedSectionId || !activeBlockPath) return;
     updateTemplate((template) => {
       const section = template.sections[selectedSectionId];
       if (!section) return template;
-      return replaceSection(template, selectedSectionId, removeBlockAt(section, binding.blockPath));
+      return replaceSection(template, selectedSectionId, removeBlockAt(section, activeBlockPath));
     });
-    // Keep the section selected; the text (and its block) is gone.
-    setSelection((prev) => (prev ? { ...prev, binding: null, settingId: null, editable: null } : prev));
-  }, [selectedSectionId, binding, updateTemplate]);
+    // Keep the section selected; the block (and any bound text within it) is gone.
+    setSelection((prev) =>
+      prev ? { ...prev, binding: null, settingId: null, editable: null, blockScope: null } : prev,
+    );
+  }, [selectedSectionId, activeBlockPath, updateTemplate]);
 
   const writeBoundSettings = useCallback(
     (values: Record<string, unknown> | null) => {
@@ -1066,6 +1144,7 @@ export default function EditorPage() {
     setMediaPickerTarget(null);
   }, []);
   const handleRectChange = useCallback((rect: SelectionRect | null) => setSelectionRect(rect), []);
+  const handleSectionRectChange = useCallback((rect: SelectionRect | null) => setSectionRect(rect), []);
   const handleTextCommit = useCallback(
     (sectionId: string, textBinding: TextBinding, value: string) => {
       if (textBinding.settingId === PRODUCT_TITLE_SETTING) {
@@ -1411,10 +1490,15 @@ export default function EditorPage() {
               onTextCommit={handleTextCommit}
               resolveText={resolveText}
               onRectChange={handleRectChange}
+              onSectionRectChange={handleSectionRectChange}
               onUndo={undo}
               onRedo={redo}
             />
           </div>
+
+          {selection?.sectionId && sectionRect ? (
+            <SectionNameBadge rect={sectionRect} name={selectedSectionName} />
+          ) : null}
 
           {selection?.sectionId && !binding && !showRewrite ? (
             <SectionToolbar
@@ -1424,15 +1508,22 @@ export default function EditorPage() {
               onMagicBrush={magicBrush}
               onRewrite={() => setShowRewrite((v) => !v)}
               onEditSection={() => setPanelOpen(true)}
-              onMove={handleMove}
-              onDelete={() => setConfirmDelete("section")}
+              // A click that only resolved to blockScope (an image, or a plain non-text area of
+              // a block) still selects the whole section for Magic brush/Re-write/Edit section —
+              // but Move/Delete should act on that specific block instead of the section it
+              // lives in, same as a bound text field's block already does.
+              onMove={blockScope ? handleMoveBlock : handleMove}
+              onDelete={() => setConfirmDelete(blockScope ? "block" : "section")}
+              deleteLabel={blockScope ? "Delete block" : "Delete section"}
+              canAddBlock={Boolean((blockScope ? activeScopedBlockSchema : activeSchema)?.blocks?.length)}
+              onAddBlock={() => setBlockPickerOpen(true)}
             />
           ) : null}
 
-          {selection?.sectionId && !binding && !showRewrite && selectionRect ? (
+          {selection?.sectionId && !binding && !showRewrite && sectionRect ? (
             <div
               className="pointer-events-none absolute inset-x-0 z-10"
-              style={{ top: selectionRect.top + selectionRect.height }}
+              style={{ top: sectionRect.top + sectionRect.height }}
             >
               <div className="relative">
                 <div className="h-px w-full bg-emerald-500" />
@@ -1478,6 +1569,7 @@ export default function EditorPage() {
               }
               onAlign={(value) => textControls.align && writeBoundSettings(applyAlign(textControls.align, value))}
               onPickColor={(hex) => textControls.color && writeBoundSettings(applyColor(textControls.color, hex))}
+              onMoveBlock={handleMoveBlock}
               onDeleteBlock={() => setConfirmDelete("block")}
               onClose={() => {
                 setSelection(null);
@@ -1589,6 +1681,15 @@ export default function EditorPage() {
           setSectionPickerOpen(false);
           setInsertAfterId(null);
         }}
+      />
+
+      <BlockPicker
+        open={blockPickerOpen}
+        blocks={(blockScope ? activeScopedBlockSchema : activeSchema)?.blocks ?? []}
+        schemaLocale={schemaLocale}
+        readTemplate={readTemplate}
+        onSelect={addBlockToSection}
+        onClose={() => setBlockPickerOpen(false)}
       />
 
       {confirmDelete ? (

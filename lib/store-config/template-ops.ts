@@ -124,6 +124,58 @@ export function removeBlockAt(section: ShopifySection, blockPath: string[]): Sho
   };
 }
 
+/** Moves the block at the end of `blockPath` one step up (-1) or down (+1) within its parent's block_order. */
+export function moveBlockAt(section: ShopifySection, blockPath: string[], delta: -1 | 1): ShopifySection {
+  if (blockPath.length === 0) return section;
+  if (blockPath.length === 1) {
+    const [id] = blockPath;
+    if (!section.blocks?.[id]) return section;
+    const order = section.block_order ?? Object.keys(section.blocks);
+    const from = order.indexOf(id);
+    const to = from + delta;
+    if (from === -1 || to < 0 || to >= order.length) return section;
+    const next = [...order];
+    next.splice(from, 1);
+    next.splice(to, 0, id);
+    return { ...section, block_order: next };
+  }
+  const [head, ...rest] = blockPath;
+  const child = section.blocks?.[head];
+  if (!child) return section;
+  return {
+    ...section,
+    blocks: {
+      ...section.blocks,
+      [head]: moveBlockAt(child as ShopifySection, rest, delta) as ShopifyBlock,
+    },
+  };
+}
+
+/**
+ * Appends a new block to the end of the block list at `blockPath` (empty = the section's own
+ * top-level blocks), immutably. Mirrors `removeBlockAt`'s recursion, since a container block
+ * (e.g. a Custom Columns "Column") can itself declare a `blocks` schema one level deeper.
+ */
+export function addBlockAt(section: ShopifySection, blockPath: string[], id: string, block: ShopifyBlock): ShopifySection {
+  if (blockPath.length === 0) {
+    return {
+      ...section,
+      blocks: { ...section.blocks, [id]: block },
+      block_order: [...(section.block_order ?? Object.keys(section.blocks ?? {})), id],
+    };
+  }
+  const [head, ...rest] = blockPath;
+  const child = section.blocks?.[head];
+  if (!child) return section;
+  return {
+    ...section,
+    blocks: {
+      ...section.blocks,
+      [head]: addBlockAt(child as ShopifySection, rest, id, block) as ShopifyBlock,
+    },
+  };
+}
+
 /** Replaces one section object wholesale (what a rewrite response does client-side). */
 export function replaceSection(
   template: ShopifyTemplate,
