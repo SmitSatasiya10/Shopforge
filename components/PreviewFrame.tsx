@@ -45,6 +45,13 @@ interface PreviewFrameProps {
   /** Fired when the selected element's box moves (iframe scroll/resize, re-render), so toolbars track it. */
   onRectChange: (rect: SelectionRect | null) => void;
   /**
+   * Fired alongside `onRectChange` with the box of the selected section's own root element,
+   * regardless of what was actually clicked inside it (a field, a block, the section itself) —
+   * `onRectChange`'s rect is that specific clicked target's, too small/misplaced to anchor a
+   * name badge pinned to the whole section the way Shopify's own theme editor does.
+   */
+  onSectionRectChange?: (rect: SelectionRect | null) => void;
+  /**
    * Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or Ctrl+Y) inside the preview. A keydown fired while the
    * iframe holds focus (i.e. after any click inside it — the normal case, since selecting a
    * section or text focuses the iframe's browsing context) targets the iframe's own document
@@ -214,6 +221,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
     onTextCommit,
     resolveText,
     onRectChange,
+    onSectionRectChange,
     onUndo,
     onRedo,
     resetScrollKey,
@@ -251,6 +259,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
 
   const resolveTextRef = useRef(resolveText);
   const onRectChangeRef = useRef(onRectChange);
+  const onSectionRectChangeRef = useRef(onSectionRectChange);
   const selectedRef = useRef(selectedSectionId);
   const onUndoRef = useRef(onUndo);
   const onRedoRef = useRef(onRedo);
@@ -258,15 +267,26 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
   useEffect(() => {
     resolveTextRef.current = resolveText;
     onRectChangeRef.current = onRectChange;
+    onSectionRectChangeRef.current = onSectionRectChange;
     selectedRef.current = selectedSectionId;
     onUndoRef.current = onUndo;
     onRedoRef.current = onRedo;
   });
 
+  /** The selected section's own root element's box, or null if it's gone/nothing's selected. */
+  const reportSectionRect = useCallback((doc: Document) => {
+    const id = selectedRef.current;
+    const section = id
+      ? (doc.querySelector(`[data-sf-section-id="${id}"]`) as HTMLElement | null)
+      : null;
+    onSectionRectChangeRef.current?.(section ? toRect(section, iframeOffset(iframeRef.current)) : null);
+  }, []);
+
   /** Re-points the toolbars at the (possibly re-created) selected element and reports its box. */
   const reanchor = useCallback((doc: Document) => {
     const frame = iframeOffset(iframeRef.current);
     const tracked = trackedRef.current;
+    reportSectionRect(doc);
     if (tracked && doc.contains(tracked.el)) {
       onRectChangeRef.current(toRect(tracked.el, frame));
       return;
@@ -283,7 +303,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
     const el = (tracked?.text ? findByText(section, tracked.text) : null) ?? section;
     trackedRef.current = { el, text: el === section ? null : (tracked?.text ?? null) };
     onRectChangeRef.current(toRect(el, frame));
-  }, []);
+  }, [reportSectionRect]);
 
   // Apply html updates: in-place section swap when possible, full remount when structural
   // (the very first html lands through the remount path too — there is no document yet).
@@ -460,6 +480,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
         // actual clicked element instead, so the rect isn't a zero-size wrapper box.
         trackedRef.current = { el: target!, text: target!.textContent?.trim() ?? null };
         setFieldSelected(target);
+        onSectionRectChangeRef.current?.(toRect(settingSectionEl, iframeOffset(iframe)));
         onSelect({
           sectionId,
           sectionType: settingSectionEl.getAttribute("data-sf-section-type"),
@@ -485,6 +506,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
           const sectionId = sectionEl.getAttribute("data-sf-section-id")!;
           const sectionType = sectionEl.getAttribute("data-sf-section-type");
           const frame = iframeOffset(iframe);
+          onSectionRectChangeRef.current?.(toRect(sectionEl, frame));
 
           // No metadata — try to bind the clicked text to a setting by matching its
           // content against the section's JSON (docs/EDITOR-TOOLBARS.md).
@@ -545,6 +567,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
       onRectChangeRef.current(
         trackedRef.current ? toRect(trackedRef.current.el, iframeOffset(iframeRef.current)) : null,
       );
+      reportSectionRect(doc);
     };
 
     // Undo/redo: skipped while the key lands on a text field or the active inline edit — the
@@ -613,6 +636,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
     if (!selectedSectionId) {
       doc.querySelectorAll(".sf-field-selected").forEach((el) => el.classList.remove("sf-field-selected"));
       trackedRef.current = null;
+      onSectionRectChangeRef.current?.(null);
     }
   }, [selectedSectionId, html]);
 

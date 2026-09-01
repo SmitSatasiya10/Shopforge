@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createSectionInstance, generateInstanceId } from "./section-factory";
+import { createSectionInstance, generateInstanceId, presetBlockTypes } from "./section-factory";
 import type { ShopifySectionSchema } from "@/lib/preview/section-schema";
 
 const richTextSchema: ShopifySectionSchema = {
@@ -16,6 +16,34 @@ const richTextSchema: ShopifySectionSchema = {
 const headingBlockSchema: ShopifySectionSchema = {
   name: "Heading",
   settings: [{ id: "heading", type: "text", default: "Talk about your brand" }],
+};
+
+const columnsSchema: ShopifySectionSchema = {
+  name: "Custom columns V2",
+  settings: [],
+  presets: [
+    {
+      name: "Custom Columns V2",
+      blocks: [
+        {
+          type: "column",
+          settings: { desktop_width: 12, mobile_width: 4 },
+          blocks: [
+            { type: "heading", settings: { title: "Custom columns" } },
+            { type: "text" },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const columnBlockSchema: ShopifySectionSchema = {
+  name: "Column",
+  settings: [
+    { id: "desktop_width", type: "range", default: 3 },
+    { id: "mobile_width", type: "range", default: 4 },
+  ],
 };
 
 describe("createSectionInstance", () => {
@@ -52,6 +80,34 @@ describe("createSectionInstance", () => {
     const before = JSON.stringify(richTextSchema);
     createSectionInstance("rich-text", richTextSchema, new Map([["heading", headingBlockSchema]]));
     expect(JSON.stringify(richTextSchema)).toBe(before);
+  });
+
+  it("builds nested preset blocks (a container block's own child blocks), merging preset overrides onto schema defaults", () => {
+    const blockSchemas = new Map([
+      ["column", columnBlockSchema],
+      ["heading", headingBlockSchema],
+      ["text", null],
+    ]);
+    const section = createSectionInstance("custom-columns-new", columnsSchema, blockSchemas);
+    expect(section.block_order).toHaveLength(1);
+    const [columnId] = section.block_order!;
+    const column = section.blocks![columnId];
+    expect(column.type).toBe("column");
+    expect(column.settings).toEqual({ desktop_width: 12, mobile_width: 4 });
+    expect(column.block_order).toHaveLength(2);
+
+    const [headingId, textId] = column.block_order!;
+    expect(column.blocks![headingId]).toEqual({
+      type: "heading",
+      settings: { heading: "Talk about your brand", title: "Custom columns" },
+    });
+    expect(column.blocks![textId]).toEqual({ type: "text", settings: {} });
+  });
+});
+
+describe("presetBlockTypes", () => {
+  it("collects block types at every nesting depth", () => {
+    expect(presetBlockTypes(columnsSchema)).toEqual(["column", "heading", "text"]);
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   getBlockAt,
   insertSection,
+  moveBlockAt,
   moveSection,
   removeBlockAt,
   removeSection,
@@ -102,5 +103,52 @@ describe("removeBlockAt", () => {
     expect(getBlockAt(next, ["outer", "inner"])).toBeUndefined();
     expect((getBlockAt(next, ["outer"]) as ShopifySection).block_order).toEqual([]);
     expect(getBlockAt(section, ["outer", "inner"])).toBeDefined();
+  });
+});
+
+describe("moveBlockAt", () => {
+  const multiBlock: ShopifySection = {
+    type: "rich-text",
+    settings: {},
+    blocks: {
+      x: { type: "text", settings: {} },
+      y: { type: "text", settings: {} },
+      z: { type: "text", settings: {} },
+    },
+    block_order: ["x", "y", "z"],
+  };
+
+  it("moves a top-level block within block_order and is a no-op at the edges", () => {
+    expect(moveBlockAt(multiBlock, ["y"], 1).block_order).toEqual(["x", "z", "y"]);
+    expect(moveBlockAt(multiBlock, ["x"], -1)).toBe(multiBlock);
+    expect(moveBlockAt(multiBlock, ["z"], 1)).toBe(multiBlock);
+    expect(moveBlockAt(multiBlock, ["missing"], 1)).toBe(multiBlock);
+  });
+
+  it("moves a nested block within its parent's block_order, immutably", () => {
+    const nested: ShopifySection = {
+      type: "container",
+      settings: {},
+      blocks: {
+        outer: {
+          type: "container",
+          settings: {},
+          blocks: {
+            a: { type: "text", settings: {} },
+            b: { type: "text", settings: {} },
+          },
+          block_order: ["a", "b"],
+        },
+      },
+      block_order: ["outer"],
+    };
+    const next = moveBlockAt(nested, ["outer", "a"], 1);
+    expect((getBlockAt(next, ["outer"]) as ShopifySection).block_order).toEqual(["b", "a"]);
+    expect((getBlockAt(nested, ["outer"]) as ShopifySection).block_order).toEqual(["a", "b"]);
+  });
+
+  it("is a no-op for an empty path or a path that does not exist", () => {
+    expect(moveBlockAt(section, [], 1)).toBe(section);
+    expect(moveBlockAt(section, ["nope"], 1)).toBe(section);
   });
 });

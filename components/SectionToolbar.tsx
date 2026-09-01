@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp, Paintbrush, Settings2, Trash2, WandSparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, ListPlus, Paintbrush, Settings2, Trash2, WandSparkles } from "lucide-react";
 import type { SelectionRect } from "./PreviewFrame";
 
 interface SectionToolbarProps {
@@ -14,9 +14,19 @@ interface SectionToolbarProps {
   onEditSection: () => void;
   onMove: (delta: -1 | 1) => void;
   onDelete: () => void;
+  /** Omitted (or false) hides the button — the selected section's schema declares no block types. */
+  canAddBlock?: boolean;
+  onAddBlock: () => void;
+  /**
+   * Move/delete target a specific block within the section (a click that resolved to blockScope
+   * or a bound text field's block) rather than the section itself — same pill, same position
+   * (both anchor to `rect`, which is already the clicked block's own box in that case), just a
+   * different label on the destructive action so it's clear what's about to be removed.
+   */
+  deleteLabel?: string;
 }
 
-const PILL_HEIGHT = 240;
+const PILL_HEIGHT = 276;
 
 /**
  * The floating per-section toolbar (docs/EDITOR-TOOLBARS.md): magic brush, AI rewrite,
@@ -32,6 +42,9 @@ export function SectionToolbar({
   onEditSection,
   onMove,
   onDelete,
+  canAddBlock,
+  onAddBlock,
+  deleteLabel = "Delete section",
 }: SectionToolbarProps) {
   const top = Math.min(Math.max(rect?.top ?? 16, 8), Math.max(8, containerHeight - PILL_HEIGHT - 8));
 
@@ -41,11 +54,14 @@ export function SectionToolbar({
         <ToolButton label="Magic brush" busy={busy} onClick={onMagicBrush} icon={Paintbrush} />
         <ToolButton label="Re-write" busy={busy} onClick={onRewrite} icon={WandSparkles} />
         <ToolButton label="Edit section" busy={busy} onClick={onEditSection} icon={Settings2} />
+        {canAddBlock ? (
+          <ToolButton label="Add block" busy={busy} onClick={onAddBlock} icon={ListPlus} />
+        ) : null}
         <Divider />
         <ToolButton label="Move up" busy={busy} onClick={() => onMove(-1)} icon={ArrowUp} />
         <ToolButton label="Move down" busy={busy} onClick={() => onMove(1)} icon={ArrowDown} />
         <Divider />
-        <ToolButton label="Delete section" busy={busy} onClick={onDelete} icon={Trash2} danger />
+        <ToolButton label={deleteLabel} busy={busy} onClick={onDelete} icon={Trash2} danger />
       </div>
     </div>
   );
