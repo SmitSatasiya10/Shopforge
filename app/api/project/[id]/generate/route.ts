@@ -59,10 +59,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }),
     );
 
+    // Regenerating content replaces the templates, but a merchant's Design panel changes
+    // (global theme settings) aren't part of what "Generate content" regenerates — carry them
+    // forward rather than silently resetting them to defaults.
+    const previousThemeSettings = (() => {
+      try {
+        return parseConfiguration(project.configurationJson).themeSettings;
+      } catch {
+        return {};
+      }
+    })();
+
     const configuration: StoreConfiguration = {
       version: 2,
       templates: { index: generated.index.template, product: generated.product.template },
       generatedAt: new Date().toISOString(),
+      themeSettings: previousThemeSettings,
     };
 
     const updated = await prisma.project.update({

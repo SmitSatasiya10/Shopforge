@@ -15,6 +15,7 @@ const config: StoreConfiguration = {
     },
   },
   generatedAt: null,
+  themeSettings: {},
 };
 
 describe("buildTemplateFiles", () => {
