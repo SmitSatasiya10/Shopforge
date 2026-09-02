@@ -6,6 +6,7 @@ import type { ProductDTO } from "@/lib/product/db-mapping";
 import { ProgressSteps } from "@/components/ProgressSteps";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductAnalysis } from "@/components/product-analysis/ProductAnalysis";
+import { GenerationOverlay } from "@/components/GenerationOverlay";
 import { validateProductUrl } from "@/lib/product/url-validation";
 import { SUPPORTED_SUPPLIER_LABEL_LIST, type ProductImportSource } from "@/lib/product/source";
 import { formatProductPrice } from "@/lib/product/price-format";
@@ -1366,15 +1367,13 @@ function PersonaScreen({
               )}
 
               {!angleError && !angleOptions && (
-                <div className="mt-8" aria-hidden="true">
+                <div className="relative mt-8" aria-hidden="true">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {[0, 1, 2, 3].map((i) => (
                       <div key={i} className="h-36 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900" />
                     ))}
                   </div>
-                  <p className="mt-4 text-center text-sm text-neutral-500">
-                    Crafting your marketing angles…
-                  </p>
+                  <GenerationOverlay visible label="Generating…" scope="page" />
                 </div>
               )}
 
@@ -1519,13 +1518,11 @@ function PersonaScreen({
             )}
 
             {!error && !options && (
-              <div className="mt-8 flex flex-col gap-3" aria-hidden="true">
+              <div className="relative mt-8 flex flex-col gap-3" aria-hidden="true">
                 {[0, 1, 2, 3].map((i) => (
                   <div key={i} className="h-[76px] animate-pulse rounded-xl border border-neutral-800 bg-neutral-900" />
                 ))}
-                <p className="mt-2 text-center text-sm text-neutral-500">
-                  Finding your ideal customers…
-                </p>
+                <GenerationOverlay visible label="Generating…" scope="page" />
               </div>
             )}
 
