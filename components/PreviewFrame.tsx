@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { morphChildren } from "@/lib/editor/dom-morph";
+import { trySwapSections } from "@/lib/editor/section-patch";
 import { createDictationInsertSession, insertDictatedText as applyDictatedTextInsert } from "@/lib/editor/dictation-insert";
 import type { TextBinding } from "@/lib/editor/setting-locator";
 
@@ -41,7 +41,7 @@ interface PreviewFrameProps {
    * Synchronously names the setting a piece of rendered text belongs to, or null when it is
    * theme copy / ambiguous. Lives in the editor because only it holds the template JSON.
    */
-  resolveText: (sectionId: string, text: string) => TextBinding | null;
+  resolveText: (sectionId: string, text: string, blockPath?: string[]) => TextBinding | null;
   /** Fired when the selected element's box moves (iframe scroll/resize, re-render), so toolbars track it. */
   onRectChange: (rect: SelectionRect | null) => void;
   /**
@@ -131,6 +131,24 @@ function toRect(el: Element, frame?: SelectionRect | null): SelectionRect {
   };
 }
 
+/**
+ * Every `data-shopify-editor-block` id between `start` and `sectionEl`, outermost first — the
+ * block path a click/hover at `start` falls inside, or `[]` outside any block.
+ */
+function blockPathAt(start: HTMLElement, sectionEl: HTMLElement): string[] {
+  const blockEl = start.closest("[data-shopify-editor-block]") as HTMLElement | null;
+  const path: string[] = [];
+  if (blockEl && sectionEl.contains(blockEl)) {
+    let n: HTMLElement | null = blockEl;
+    while (n && n !== sectionEl) {
+      const id = n.getAttribute("data-shopify-editor-block");
+      if (id) path.unshift(id);
+      n = n.parentElement;
+    }
+  }
+  return path;
+}
+
 /** The deepest ancestor-chain element that directly owns text — what a text click/hover "means". */
 function textElementAt(start: HTMLElement, boundary: HTMLElement): HTMLElement | null {
   let node: HTMLElement | null = start;
@@ -152,52 +170,6 @@ function findByText(root: HTMLElement, text: string): HTMLElement | null {
     (el) => (el.textContent ?? "").trim() === text,
   );
   return matches.filter((el) => !matches.some((other) => other !== el && el.contains(other))).pop() ?? null;
-}
-
-/**
- * Applies a freshly rendered page to the live document by swapping only the sections whose
- * markup changed, leaving everything else — above all the scroll position — untouched.
- * Returns false when the change is structural (sections added/removed/reordered, or the
- * head/layout changed), which needs a full reload instead. This is what keeps an inline
- * edit from "blinking and jumping to the top": the render is still always produced fresh
- * from the template JSON; only its *application* to the DOM is surgical.
- */
-function trySwapSections(doc: Document, nextHtml: string): boolean {
-  const next = new DOMParser().parseFromString(nextHtml, "text/html");
-  const currentSections = Array.from(doc.querySelectorAll<HTMLElement>("[data-sf-section-id]"));
-  const nextSections = Array.from(next.querySelectorAll<HTMLElement>("[data-sf-section-id]"));
-
-  const ids = (els: HTMLElement[]) => els.map((el) => el.getAttribute("data-sf-section-id")).join("|");
-  if (ids(currentSections) !== ids(nextSections)) return false;
-  // The editor injects its own style element into head; ignore it when comparing.
-  const headWithoutEditorStyles = (head: HTMLElement) => {
-    const clone = head.cloneNode(true) as HTMLElement;
-    clone.querySelector("#sf-editor-styles")?.remove();
-    return clone.innerHTML;
-  };
-  if (headWithoutEditorStyles(doc.head) !== headWithoutEditorStyles(next.head)) return false;
-
-  // Everything outside section bodies must be identical for a swap to be safe.
-  const skeleton = (body: HTMLElement) => {
-    const clone = body.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll("[data-sf-section-id]").forEach((el) => {
-      el.innerHTML = "";
-      el.removeAttribute("class");
-    });
-    return clone.innerHTML;
-  };
-  if (skeleton(doc.body) !== skeleton(next.body)) return false;
-
-  nextSections.forEach((section, i) => {
-    if (currentSections[i].innerHTML !== section.innerHTML) {
-      // Morph, don't replace: patching only the differing nodes keeps every unchanged
-      // element alive — the wrapper (so its selection class and held references survive),
-      // and above all the section's <img>/<video> elements, which would re-decode and
-      // visibly blink if the whole innerHTML were rewritten for a one-setting change.
-      morphChildren(currentSections[i], section);
-    }
-  });
-  return true;
 }
 
 interface Tracked {
@@ -305,8 +277,10 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
     onRectChangeRef.current(toRect(el, frame));
   }, [reportSectionRect]);
 
-  // Apply html updates: in-place section swap when possible, full remount when structural
-  // (the very first html lands through the remount path too — there is no document yet).
+  // Apply html updates: patch the live document in place when possible (a setting edit, but
+  // also moving, adding or deleting a section — lib/editor/section-patch.ts), full remount only
+  // when the page around the sections changed. The very first html lands through the remount
+  // path too — there is no document to patch yet.
   useEffect(() => {
     if (!html || appliedHtmlRef.current === html) return;
     appliedHtmlRef.current = html;
@@ -378,7 +352,8 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
       if (!textEl || !text) return null;
       let ok = bindableCache.get(textEl);
       if (ok === undefined) {
-        ok = resolveTextRef.current(sectionEl.getAttribute("data-sf-section-id")!, text) !== null;
+        const blockPath = blockPathAt(textEl, sectionEl);
+        ok = resolveTextRef.current(sectionEl.getAttribute("data-sf-section-id")!, text, blockPath) !== null;
         bindableCache.set(textEl, ok);
       }
       return ok ? textEl : null;
@@ -509,11 +484,23 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
           const frame = iframeOffset(iframe);
           onSectionRectChangeRef.current?.(toRect(sectionEl, frame));
 
+          // Themes mark each block's own wrapper with the (otherwise-inert) Shopify editor
+          // attribute — walk up to the nearest one, then collect every such id between it and
+          // the section root, so a click inside a nested block resolves the whole chain.
+          // Computed up front so the text-binding attempt below can scope its search to this
+          // block: two sibling blocks with identical copy (e.g. unedited "Result row" defaults)
+          // would otherwise be ambiguous at the section level even though the click landed
+          // unambiguously on one of them.
+          const blockEl = (e.target as HTMLElement).closest(
+            "[data-shopify-editor-block]",
+          ) as HTMLElement | null;
+          const blockPath = blockPathAt(e.target as HTMLElement, sectionEl);
+
           // No metadata — try to bind the clicked text to a setting by matching its
           // content against the section's JSON (docs/EDITOR-TOOLBARS.md).
           const textEl = textElementAt(e.target as HTMLElement, sectionEl);
           const text = textEl?.textContent?.trim();
-          const binding = textEl && text ? resolveTextRef.current(sectionId, text) : null;
+          const binding = textEl && text ? resolveTextRef.current(sectionId, text, blockPath) : null;
           if (textEl && binding) {
             trackedRef.current = { el: textEl, text: text! };
             setFieldSelected(textEl);
@@ -522,25 +509,10 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
             return;
           }
 
-          // Text didn't resolve to a unique setting (an image/icon area, ambiguous copy, …).
-          // Themes mark each block's own wrapper with the (otherwise-inert) Shopify editor
-          // attribute — walk up to the nearest one, then collect every such id between it and
-          // the section root, so a click inside a nested block resolves the whole chain. This
-          // is what lets a block-level click scope a rewrite to just that block instead of
-          // silently falling back to the whole section.
-          const blockEl = (e.target as HTMLElement).closest(
-            "[data-shopify-editor-block]",
-          ) as HTMLElement | null;
-          const blockPath: string[] = [];
-          if (blockEl && sectionEl.contains(blockEl)) {
-            let n: HTMLElement | null = blockEl;
-            while (n && n !== sectionEl) {
-              const id = n.getAttribute("data-shopify-editor-block");
-              if (id) blockPath.unshift(id);
-              n = n.parentElement;
-            }
-          }
-
+          // Text didn't resolve to a unique setting even scoped to its own block (an image/icon
+          // area, or copy that's ambiguous within the block itself) — fall back to selecting the
+          // whole block, letting a rewrite target it instead of silently falling back further to
+          // the whole section.
           if (blockPath.length > 0 && blockEl) {
             trackedRef.current = { el: blockEl, text: null };
             setFieldSelected(blockEl);

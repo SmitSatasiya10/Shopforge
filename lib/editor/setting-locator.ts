@@ -61,6 +61,19 @@ export function locateBlockPathByType(section: ShopifySection, type: string): st
   return matches.length === 1 ? matches[0] : null;
 }
 
+type SettingsNode = { settings?: Record<string, unknown>; blocks?: Record<string, unknown> };
+
+function collectTextMatches(node: SettingsNode, path: string[], needle: string, matches: TextBinding[]): void {
+  for (const [settingId, value] of Object.entries(node.settings ?? {})) {
+    if (typeof value === "string" && normalizeText(value) === needle) {
+      matches.push({ blockPath: path, settingId });
+    }
+  }
+  for (const [blockId, block] of Object.entries(node.blocks ?? {})) {
+    collectTextMatches(block as SettingsNode, [...path, blockId], needle, matches);
+  }
+}
+
 /**
  * Finds the setting whose value renders as `text`. Returns the binding on exactly one
  * match; null on zero (theme copy, product data) or several (ambiguous — safer not to bind).
@@ -70,17 +83,35 @@ export function locateTextSetting(section: ShopifySection, text: string): TextBi
   if (!needle) return null;
 
   const matches: TextBinding[] = [];
-  const visit = (node: { settings?: Record<string, unknown>; blocks?: Record<string, unknown> }, path: string[]) => {
-    for (const [settingId, value] of Object.entries(node.settings ?? {})) {
-      if (typeof value === "string" && normalizeText(value) === needle) {
-        matches.push({ blockPath: path, settingId });
-      }
-    }
-    for (const [blockId, block] of Object.entries(node.blocks ?? {})) {
-      visit(block as { settings?: Record<string, unknown> }, [...path, blockId]);
-    }
-  };
-  visit(section, []);
+  collectTextMatches(section, [], needle, matches);
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/**
+ * Same as `locateTextSetting`, but searches only the block at `blockPath` (and its own nested
+ * blocks) instead of the whole section. Used when a click already resolved to a specific block
+ * via `data-shopify-editor-block`: identical copy in a SIBLING block (e.g. unedited "Result row"
+ * defaults, which all start with the same literal text) can then no longer make the match
+ * ambiguous, since the click already told us structurally which block it landed on.
+ */
+export function locateTextSettingInBlock(
+  section: ShopifySection,
+  blockPath: string[],
+  text: string,
+): TextBinding | null {
+  const needle = normalizeText(text);
+  if (!needle) return null;
+
+  let node: SettingsNode = section;
+  for (const blockId of blockPath) {
+    const next = node.blocks?.[blockId] as SettingsNode | undefined;
+    if (!next) return null;
+    node = next;
+  }
+
+  const matches: TextBinding[] = [];
+  collectTextMatches(node, blockPath, needle, matches);
 
   return matches.length === 1 ? matches[0] : null;
 }

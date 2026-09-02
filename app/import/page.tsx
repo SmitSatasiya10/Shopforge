@@ -1691,6 +1691,34 @@ function ImagesScreen({
           setResult({ key: requestKey, candidates: null, error: data.error ?? "Could not find images for this product" });
           return;
         }
+        // A wizard URL outlives the persona/angle set it names — back/forward, a restored tab,
+        // or a re-import (every import creates a new Product row, and its regenerated persona/
+        // angle sets have different ids). The persona step already refuses to render its angle
+        // substep behind a stale persona; this is that same guard for the last screen, which
+        // would otherwise look fine and then fail on "Generate my store", because POST
+        // /api/project rejects an id it can't resolve. Send the merchant back to the step that
+        // owns the stale value: an unresolvable persona invalidates the angle chosen under it,
+        // so that case restarts at the persona itself. replace(), not push(), so the dead URL
+        // doesn't sit in history waiting for the Back button.
+        // The image candidate set is cached per product, not per persona/angle, so any
+        // selection already made stays valid across this bounce — carry it back so re-picking
+        // a persona doesn't silently cost the merchant their chosen images.
+        const imagesQuery = initialImageIds ? `&images=${encodeURIComponent(initialImageIds)}` : "";
+        const personaHref = `/import?source=${source}&${backParam}&selected=${selectedProductId}&step=persona${language ? `&language=${language}` : ""}`;
+        if (data.personaStatus === "stale") {
+          router.replace(`${personaHref}${imagesQuery}`);
+          return;
+        }
+        if (data.angleStatus === "stale") {
+          const personaQuery =
+            personaParam === "custom" && personaTextParam
+              ? `&persona=custom&personaText=${encodeURIComponent(personaTextParam)}`
+              : personaParam
+                ? `&persona=${encodeURIComponent(personaParam)}`
+                : "";
+          router.replace(`${personaHref}&substep=angle${personaQuery}${imagesQuery}`);
+          return;
+        }
         const candidates = data as ImageCandidatesCache;
         setResult({ key: requestKey, candidates, error: null });
         const validIds = new Set([...candidates.primary, ...candidates.other].map((c) => c.id));
@@ -1704,7 +1732,7 @@ function ImagesScreen({
     return () => {
       cancelled = true;
     };
-  }, [requestKey, selectedProductId, personaParam, personaTextParam, angleId]);
+  }, [requestKey, selectedProductId, personaParam, personaTextParam, angleId, source, backParam, language, initialImageIds, router]);
 
   const current = result?.key === requestKey ? result : null;
   const candidates = current?.candidates ?? null;

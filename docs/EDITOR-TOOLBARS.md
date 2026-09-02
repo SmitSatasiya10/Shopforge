@@ -117,16 +117,82 @@ schema actually has them ([lib/editor/text-controls.ts](../lib/editor/text-contr
 | Control | Schema heuristic | Example |
 | --- | --- | --- |
 | Rewrite (wand icon) | always | opens the AI popover **scoped to this one setting** |
-| − size + | select/range whose id matches `size` (excluding mobile) | heading's `heading_size` (h3→h0), text's `text_size` range |
+| − size + | select/range whose id matches `size`; the block's matching mobile size, when it has one, is paired with it and used while the mobile preview is on (see [Size follows the previewed viewport](#size-follows-the-previewed-viewport)) | heading's `heading_size` (h3→h0), text's `text_size` range, product_title's `desktop_size` + `mobile_size` |
 | Align | select whose id matches `align` (excluding mobile) | heading/text/product_title's `alignment` (left/center/right); the matching `mobile_alignment` follows by option index — alignment is directional intent, so unlike size it moves mobile too |
 | Weight | select whose id matches `weight` | hidden for this theme's heading/text (no weight setting) |
-| Color swatch | `custom_color`/`custom_text_color` (+ its `enable_custom_color` checkbox) | heading, text |
+| Color swatch | `custom_color`/`custom_text_color`/`text_color`/`color` exactly, or any `*_text_color` (+ its `enable_custom_color` checkbox) | heading, text, `product_tabs`' `content_text_color` |
 | Delete (trash icon) | binding is inside a block | deletes that block from the section |
 | Close (X icon) | always | close |
 
 Block schemas come from the section's own `{% schema %}` when declared there, else from the
 theme-block file `blocks/<type>.liquid` (same `extractSectionSchema` parser, new
 `loadBlockSchema` cache).
+
+A control is only ever as good as the *theme*: where a block declares no setting at all, the
+control cannot appear. `blocks/product_title.liquid` is the one merchants notice — it has
+`desktop_size`, `alignment` and margins but **no color setting**, the `<h1>` taking its color
+from the global heading scheme, so a product title offers no swatch. That is a theme gap, not
+an editor one; closing it means adding `enable_custom_color`/`custom_text_color` plus the
+matching CSS to that block.
+
+### Which setting a control writes to
+
+Matching by shape (`/size/`, `/align/`, a color id) routinely turns up several candidates in
+one schema, because a section holds several independently-bound text fields. `pick()` chooses
+between them on two signals, in this order:
+
+1. **Position.** A candidate declared inside `[owner, next content field)` is vouched for
+   outright — whatever it is called. This is what keeps parallax-hero's `heading_prefix_size`
+   bound to `heading_suffix`, which it genuinely styles despite the "prefix" in its name.
+2. **Naming.** Outside that zone, ids are compared word-by-word (digits dropped, plurals and
+   `heading`/`title` folded together). A candidate is kept only if every *element* word in it
+   is one the owner's id also uses; among survivors, the one dragging in no foreign word wins,
+   then the one echoing the owner's own words most strongly.
+
+Position alone is not enough, because a theme may declare a field's companions *above* it:
+`product_tabs` styles `tab_N_content` with `content_size` and `content_text_color`, both
+declared before the field. Naming alone is not enough either, hence the ordering above.
+
+The naming rule is deliberately weaker for **alignment**. Size and color are per-field by
+convention, but alignment in this theme is overwhelmingly a *container* property —
+`vertical_items_align`, `icon_text_alignment`, `content_text_alignment` are all named after a
+wrapper yet genuinely align the text inside it. Rejecting every unshared qualifier there
+stripped ~147 working alignment controls across the base theme, so alignment only refuses
+settings qualified by a control-row word (`button`, `btn`, `cta`) the owner does not share.
+That is what stops `product_tabs`' lone `button_alignment` — which positions the tab BUTTON
+row — from being offered as the alignment of a tab's body copy; it stays reachable in the
+block's own settings panel, where it belongs.
+
+When nothing survives, no control is shown. A missing control is recoverable; one that
+quietly edits a different field's setting is not.
+
+### Size follows the previewed viewport
+
+Alignment is one intent mirrored onto a second setting, but a size *pair* is two independent
+values the theme reads in different media queries. `blocks/product_title.liquid` sizes its
+`<h1>` from `desktop_size`, then overrides that from `mobile_size` under `max-width: 749px`:
+
+```liquid
+.product__title-{{ block.id }} h1 { font-size: … block.settings.desktop_size … }
+@media screen and (max-width: 749px) {
+  .product__title-{{ block.id }} h1 { font-size: … block.settings.mobile_size … }
+}
+```
+
+So with the mobile preview on, a step written to `desktop_size` changes a declaration the media
+query is overriding and nothing moves on screen — the bug this pairing fixes. `findTextControls`
+hangs the mobile half off the desktop control as `size.mobile`, and `sizeSettingFor(size,
+viewport)` hands the toolbar whichever half is actually rendering; each keeps its own min/max/step,
+so the −/+ stops at the mobile slider's own bounds. Blocks that declare a single size setting are
+unchanged — that one setting governs both viewports.
+
+A mobile-named candidate is only adopted when it is genuinely this control's other half
+(`pairsWith`): the two ids must name the same element once control words are stripped — so
+`product_tabs`' `tab_text_size_mobile` (its BUTTON labels) is refused for a tab's `content_size`
+body copy — and the theme must read them the same way, same kind and same `visible_if`. That
+last test is what keeps `blocks/heading.liquid`'s `custom_mobile_size` out: it is a number that
+applies only while `heading_size == 'custom'`, and in every other mode the h0→h3 select governs
+mobile too, its classes being responsive in the theme's own CSS.
 
 ### Picked colors move the strong/em highlight colors too
 
@@ -224,7 +290,9 @@ The header carries two more control groups now, both in
   that narrower layout viewport the same way it would on a phone. Because the iframe no
   longer necessarily fills its container, `PreviewFrame`'s `toRect()` folds the iframe's own
   `getBoundingClientRect()` back into every selection rect — without that offset, the section/
-  text toolbars would still be positioned as if the iframe were full width.
+  text toolbars would still be positioned as if the iframe were full width. The toggle also
+  feeds the inline toolbar: with it on, the −/+ edits the block's mobile size setting rather
+  than its desktop one (see [Size follows the previewed viewport](#size-follows-the-previewed-viewport)).
 
 ## Deliberately not built yet
 

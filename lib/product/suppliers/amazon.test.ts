@@ -41,6 +41,14 @@ describe("Amazon URL parsing", () => {
 // #landingImage <img src> and a .a-price .a-offscreen price string — this is what the
 // generic extractor misses and the supplier import path backfills from.
 describe("extractAmazonHtmlFallback", () => {
+  /** Encodes a {url: [w, h]} map the way it appears in the HTML attribute. */
+  const dynamicAttr = (map: Record<string, [number, number]>) =>
+    JSON.stringify(map).replace(/"/g, "&quot;");
+
+  /** The ImageBlockATF inline script that carries Amazon's real gallery. */
+  const galleryScript = (entries: { hiRes: string | null; large: string | null; variant: string }[]) =>
+    `<script>var data = { 'colorImages': { 'initial': A.$.parseJSON('${JSON.stringify(entries)}') } };</script>`;
+
   it("reads the landing image src and the offscreen price/currency", () => {
     const html = `
       <html><body>
@@ -59,7 +67,7 @@ describe("extractAmazonHtmlFallback", () => {
     expect(extractAmazonHtmlFallback(html).image).toBe("https://m.media-amazon.com/images/I/hires.jpg");
   });
 
-  it("reads the full gallery from data-a-dynamic-image, landing image first", () => {
+  it("falls back to data-a-dynamic-image when the page has no colorImages payload", () => {
     const dynamicImage = JSON.stringify({
       "https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg": [1200, 1200],
       "https://m.media-amazon.com/images/I/71ABCDEF-L._SL1200_.jpg": [1200, 1200],
@@ -86,6 +94,62 @@ describe("extractAmazonHtmlFallback", () => {
     const html = `<img id="landingImage" src="https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg" />`;
     const result = extractAmazonHtmlFallback(html);
     expect(result.images).toEqual(["https://m.media-amazon.com/images/I/61OB0B7FA-L._SL1200_.jpg"]);
+  });
+
+  // The bug this guards against: data-a-dynamic-image is the responsive srcset for whichever
+  // photo is on screen, so a real product page's map is one photo at seven widths. Harvesting
+  // it made the wizard's image picker offer the same picture eight times.
+  it("prefers the colorImages gallery over the srcset map", () => {
+    const html = `
+      <img id="landingImage" src="https://m.media-amazon.com/images/I/51THUMB-L._SY300_QL70_.jpg"
+           data-a-dynamic-image="${dynamicAttr({
+             "https://m.media-amazon.com/images/I/61AAA-L._SX466_.jpg": [466, 466],
+             "https://m.media-amazon.com/images/I/61AAA-L._SX679_.jpg": [679, 679],
+           })}" />
+      ${galleryScript([
+        { hiRes: "https://m.media-amazon.com/images/I/61AAA-L._SL1024_.jpg", large: null, variant: "MAIN" },
+        { hiRes: "https://m.media-amazon.com/images/I/71BBB-L._SL1024_.jpg", large: null, variant: "PT01" },
+      ])}
+    `;
+    const result = extractAmazonHtmlFallback(html);
+    expect(result.images).toEqual([
+      "https://m.media-amazon.com/images/I/61AAA-L._SL1024_.jpg",
+      "https://m.media-amazon.com/images/I/71BBB-L._SL1024_.jpg",
+    ]);
+    // The full-size main photo also replaces the low-res landing thumbnail as `image`.
+    expect(result.image).toBe("https://m.media-amazon.com/images/I/61AAA-L._SL1024_.jpg");
+  });
+
+  it("uses `large` when a gallery entry has no hiRes, and drops colour swatches", () => {
+    const html = galleryScript([
+      { hiRes: null, large: "https://m.media-amazon.com/images/I/51AAA-L.jpg", variant: "MAIN" },
+      { hiRes: "https://m.media-amazon.com/images/I/71CHIP-L._SL1024_.jpg", large: null, variant: "SWATCH" },
+    ]);
+    expect(extractAmazonHtmlFallback(html).images).toEqual([
+      "https://m.media-amazon.com/images/I/51AAA-L.jpg",
+    ]);
+  });
+
+  it("keeps only the widest URL per photo when it falls back to the srcset map", () => {
+    const html = `<img id="landingImage" src="https://m.media-amazon.com/images/I/61AAA-L._SY355_.jpg"
+      data-a-dynamic-image="${dynamicAttr({
+        "https://m.media-amazon.com/images/I/61AAA-L._SX466_.jpg": [466, 466],
+        "https://m.media-amazon.com/images/I/61AAA-L._SX679_.jpg": [679, 679],
+        "https://m.media-amazon.com/images/I/61AAA-L._SY355_.jpg": [355, 355],
+      })}" />`;
+    expect(extractAmazonHtmlFallback(html).images).toEqual([
+      "https://m.media-amazon.com/images/I/61AAA-L._SX679_.jpg",
+    ]);
+  });
+
+  it("falls back to the srcset map when the colorImages payload is truncated", () => {
+    const html = `
+      <img id="landingImage" src="https://m.media-amazon.com/images/I/61AAA-L._SX679_.jpg" />
+      <script>var data = { 'colorImages': { 'initial': A.$.parseJSON('[{"hiRes":"https://m.med</script>
+    `;
+    expect(extractAmazonHtmlFallback(html).images).toEqual([
+      "https://m.media-amazon.com/images/I/61AAA-L._SX679_.jpg",
+    ]);
   });
 
   it("returns nulls when neither element is present", () => {

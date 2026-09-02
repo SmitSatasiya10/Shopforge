@@ -39,6 +39,20 @@ export const ImageCandidatesCacheSchema = z.object({
 });
 export type ImageCandidatesCache = z.infer<typeof ImageCandidatesCacheSchema>;
 
+/**
+ * Whether a persona/marketing-angle id carried in the wizard URL still names one of THIS
+ * product's cached options. A wizard URL outlives the sets it names: back/forward, a restored
+ * tab, or a re-import (every import creates a new Product row, whose freshly generated persona
+ * and angle sets have different ids) all leave an id behind that no longer resolves.
+ *
+ * The images endpoint reports this so the wizard can send the merchant back to re-pick, rather
+ * than letting a stale id ride silently through the last screen — image candidates themselves
+ * don't need a persona, but POST /api/project rejects an unresolvable one, which would surface
+ * only on "Generate my store" after the images have already been chosen.
+ */
+export const SELECTION_STATUSES = ["resolved", "stale", "none"] as const;
+export type SelectionStatus = (typeof SELECTION_STATUSES)[number];
+
 /** The persisted selection (Project.selectedImagesJson): at most five, order = gallery order, first = featured. */
 export const SelectedImagesSchema = z.object({
   images: z.array(ImageCandidateSchema).max(MAX_SELECTED_IMAGES),
