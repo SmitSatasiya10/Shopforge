@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, Minus, Plus, Trash2, WandSparkles, X } from "lucide-react";
 import type { SelectionRect } from "./PreviewFrame";
-import { sizeLabel, type TextControls } from "@/lib/editor/text-controls";
+import { sizeLabel, sizeSettingFor, type TextControls } from "@/lib/editor/text-controls";
 import type { NamedColor, ThemeColorRow } from "@/lib/editor/color-palette";
 import { ColorPickerPopover } from "./ColorPickerPopover";
 import { VoiceDictationButton } from "./VoiceDictationButton";
@@ -13,6 +13,11 @@ interface InlineTextToolbarProps {
   controls: TextControls;
   /** Current values at the bound path, for showing the active size/weight/color. */
   values: Record<string, unknown>;
+  /**
+   * Which preview the merchant is looking at. Size is per-viewport in this theme, so the −/+
+   * reads and writes the mobile setting while the mobile preview is on — see `sizeSettingFor`.
+   */
+  viewport: "desktop" | "mobile";
   busy: boolean;
   /** The binding sits inside a block, so it can be deleted and reordered. */
   canDeleteBlock: boolean;
@@ -59,6 +64,7 @@ export function InlineTextToolbar({
   rect,
   controls,
   values,
+  viewport,
   busy,
   canDeleteBlock,
   themeColorRows,
@@ -80,6 +86,7 @@ export function InlineTextToolbar({
   const top = rect.top > 56 ? rect.top - 48 : rect.top + rect.height + 8;
   const left = Math.max(8, rect.left);
 
+  const sizeSetting = controls.size ? sizeSettingFor(controls.size, viewport) : null;
   const alignValue = controls.align ? String(values[controls.align.settingId] ?? "") : "";
   const weightValue = controls.weight ? String(values[controls.weight.settingId] ?? "") : "";
   const colorValue = controls.color ? String(values[controls.color.settingId] ?? "#000000") : "#000000";
@@ -131,13 +138,13 @@ export function InlineTextToolbar({
         </span>
       ) : null}
 
-      {controls.size ? (
+      {sizeSetting ? (
         <span className="flex items-center gap-0.5 rounded-lg border border-neutral-700 px-1">
           <button onClick={() => onStepSize(-1)} disabled={busy} aria-label="Smaller" className="grid h-6 w-6 place-items-center rounded hover:bg-neutral-700 disabled:opacity-40">
             <Minus className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
           <span className="min-w-8 text-center font-mono text-[11px] text-neutral-300 uppercase">
-            {sizeLabel(controls.size, values[controls.size.settingId])}
+            {sizeLabel(sizeSetting, values[sizeSetting.settingId])}
           </span>
           <button onClick={() => onStepSize(1)} disabled={busy} aria-label="Larger" className="grid h-6 w-6 place-items-center rounded hover:bg-neutral-700 disabled:opacity-40">
             <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />

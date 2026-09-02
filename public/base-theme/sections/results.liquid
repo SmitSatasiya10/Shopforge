@@ -156,7 +156,10 @@
             data-delay="{{ delay }}"
           >
             {%- for row in section.blocks -%}
-              <div class="results__row results__row--{{ section.settings.style }}{% if section.settings.result_layout == 'vertical' %} results__row--vertical{% endif %}">
+              <div
+                class="results__row results__row--{{ section.settings.style }}{% if section.settings.result_layout == 'vertical' %} results__row--vertical{% endif %}"
+                {{ row.shopify_attributes }}
+              >
                 <div
                   class="results__percentage flex-center center{% if section.settings.style == 'number' and section.settings.enable_animations %} results__percentage--width-fix{% endif %}"
                   style="--percentage: {% if section.settings.enable_animations %}0{% else %}{{ row.settings.percentage }}{% endif %}%"
@@ -1489,6 +1492,7 @@
         {
           "type": "text",
           "id": "row_heading",
+          "default": "Heading",
           "label": "Heading"
         },
         {

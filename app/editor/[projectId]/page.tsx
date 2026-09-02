@@ -68,12 +68,20 @@ import { syncColorsChangerSections } from "@/lib/editor/colors-changer-sync";
 import {
   locateBlockPathByType,
   locateTextSetting,
+  locateTextSettingInBlock,
   normalizeText,
   PRODUCT_TITLE_SETTING,
   PRODUCT_DESCRIPTION_SETTING,
   TextBinding,
 } from "@/lib/editor/setting-locator";
-import { applyAlign, applyColor, cycleWeight, findTextControls, stepSize } from "@/lib/editor/text-controls";
+import {
+  applyAlign,
+  applyColor,
+  cycleWeight,
+  findTextControls,
+  sizeSettingFor,
+  stepSize,
+} from "@/lib/editor/text-controls";
 import { buildThemePalette, parsePredefinedSwatches, FALLBACK_COMMON_COLORS } from "@/lib/editor/color-palette";
 import { classifySaveResponseStatus } from "@/lib/editor/save-state";
 import { loadThemeSettings } from "@/lib/preview/theme-settings";
@@ -1262,20 +1270,28 @@ export default function EditorPage() {
   // }}` in the theme), so editing it means updating the product record — even if some section
   // setting happens to hold the same string.
   const resolveText = useCallback(
-    (sectionId: string, text: string): TextBinding | null => {
+    (sectionId: string, text: string, blockPath?: string[]): TextBinding | null => {
       const section = currentTemplate?.sections[sectionId];
       if (product?.title && normalizeText(product.title) === normalizeText(text)) {
         // Anchor to the section's product_title block when it has exactly one, so the
         // toolbar can offer that block's schema controls (size, alignment) alongside
         // the rename; text commits still go to the Product record either way.
-        const blockPath = section ? locateBlockPathByType(section, "product_title") : null;
-        return { blockPath: blockPath ?? [], settingId: PRODUCT_TITLE_SETTING };
+        const titleBlockPath = section ? locateBlockPathByType(section, "product_title") : null;
+        return { blockPath: titleBlockPath ?? [], settingId: PRODUCT_TITLE_SETTING };
       }
       if (product?.description && normalizeText(product.description) === normalizeText(text)) {
-        const blockPath = section ? locateBlockPathByType(section, "product_description") : null;
-        return { blockPath: blockPath ?? [], settingId: PRODUCT_DESCRIPTION_SETTING };
+        const descBlockPath = section ? locateBlockPathByType(section, "product_description") : null;
+        return { blockPath: descBlockPath ?? [], settingId: PRODUCT_DESCRIPTION_SETTING };
       }
-      return section ? locateTextSetting(section, text) : null;
+      if (!section) return null;
+      // The click already told us which block it landed on — try that block alone first, so
+      // identical unedited copy in a sibling block (e.g. several never-edited "Result row"
+      // blocks) can't make an otherwise-unambiguous match look ambiguous.
+      if (blockPath && blockPath.length > 0) {
+        const scoped = locateTextSettingInBlock(section, blockPath, text);
+        if (scoped) return scoped;
+      }
+      return locateTextSetting(section, text);
     },
     [currentTemplate, product?.title, product?.description],
   );
@@ -1792,6 +1808,7 @@ export default function EditorPage() {
               rect={selectionRect}
               controls={textControls}
               values={boundValues}
+              viewport={viewport}
               busy={rewriting}
               canDeleteBlock={binding.blockPath.length > 0}
               themeColorRows={themeColorRows}
@@ -1801,7 +1818,10 @@ export default function EditorPage() {
               onRewrite={() => setShowRewrite(true)}
               onStepSize={(direction) => {
                 if (!textControls.size) return;
-                const patch = stepSize(textControls.size, boundValues[textControls.size.settingId], direction);
+                // The setting the previewed viewport actually renders: on mobile that is the
+                // block's own mobile size, which the theme's media query gives the last word.
+                const size = sizeSettingFor(textControls.size, viewport);
+                const patch = stepSize(size, boundValues[size.settingId], direction);
                 if (!patch) {
                   setSizeLimitNotice(direction === 1 ? "Cannot make text bigger" : "Cannot make text smaller");
                   return;

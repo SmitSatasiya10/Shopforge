@@ -17,6 +17,12 @@ export interface ShopifySettingDef {
   step?: number;
   unit?: string;
   placeholder?: string;
+  /**
+   * The theme's own Liquid condition for when this setting applies at all (Shopify's
+   * `visible_if`). Kept verbatim rather than evaluated: the toolbar only needs to know that a
+   * setting is conditional before treating it as a field's unconditional mobile size.
+   */
+  visible_if?: string;
 }
 
 export interface ShopifySectionSchema {
