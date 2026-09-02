@@ -1,10 +1,10 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Images, LayoutGrid, Palette, Sparkles } from "lucide-react";
+import { Images, LayoutGrid, LayoutTemplate, Palette, Sparkles } from "lucide-react";
 
 interface RailTool {
-  id: "sections" | "ai" | "media" | "design";
+  id: "sections" | "ai" | "media" | "design" | "templates";
   label: string;
   icon: LucideIcon;
   active: boolean;
@@ -16,10 +16,12 @@ interface EditorRailProps {
   aiActive: boolean;
   mediaActive: boolean;
   designActive: boolean;
+  templatesActive: boolean;
   onSections: () => void;
   onAI: () => void;
   onMedia: () => void;
   onDesign: () => void;
+  onTemplates: () => void;
 }
 
 /**
@@ -33,27 +35,30 @@ export function EditorRail({
   aiActive,
   mediaActive,
   designActive,
+  templatesActive,
   onSections,
   onAI,
   onMedia,
   onDesign,
+  onTemplates,
 }: EditorRailProps) {
   const tools: RailTool[] = [
     { id: "sections", label: "Sections", icon: LayoutGrid, active: sectionsActive, onClick: onSections },
     { id: "ai", label: "AI", icon: Sparkles, active: aiActive, onClick: onAI },
     { id: "media", label: "Media", icon: Images, active: mediaActive, onClick: onMedia },
     { id: "design", label: "Design", icon: Palette, active: designActive, onClick: onDesign },
+    { id: "templates", label: "Templates", icon: LayoutTemplate, active: templatesActive, onClick: onTemplates },
   ];
 
   return (
-    <div className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-neutral-800 bg-neutral-900 pt-3">
+    <div className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-neutral-800 bg-neutral-900 pt-3">
       {tools.map(({ id, label, icon: Icon, active, onClick }) => (
         <button
           key={id}
           onClick={onClick}
           title={label}
           aria-pressed={active}
-          className={`flex w-11 flex-col items-center gap-1 rounded-lg py-2 text-[10px] font-medium ${
+          className={`flex w-14 flex-col items-center gap-1 rounded-lg py-2 text-[10px] font-medium ${
             active ? "bg-white text-neutral-900" : "text-neutral-400 hover:bg-white/10 hover:text-white"
           }`}
         >

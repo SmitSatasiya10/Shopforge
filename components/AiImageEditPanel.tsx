@@ -42,6 +42,9 @@ interface AiImageEditPanelProps {
   /** Writes the accepted result into the currently targeted image_picker setting via the existing updateSetting path. */
   onUseImage: (url: string) => void;
   onClose: () => void;
+  /** Mirrors this panel's own `busy` state out to the caller, so the shared GenerationOverlay
+   *  over the live preview's selected image can track the same request lifecycle. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 /**
@@ -58,6 +61,7 @@ export function AiImageEditPanel({
   onGenerated,
   onUseImage,
   onClose,
+  onBusyChange,
 }: AiImageEditPanelProps) {
   const [mode, setMode] = useState<ImageEditMode>("edit");
   const [instruction, setInstruction] = useState("");
@@ -80,6 +84,7 @@ export function AiImageEditPanel({
   const generate = async () => {
     if (busy || !instruction.trim() || !productId || referenceRequired) return;
     setBusy(true);
+    onBusyChange?.(true);
     setError(null);
     setResult(null);
     const controller = new AbortController();
@@ -111,6 +116,7 @@ export function AiImageEditPanel({
       setError("Generation failed. Try again.");
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   };
 

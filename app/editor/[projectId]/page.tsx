@@ -21,7 +21,10 @@ import { ImageChangeButton } from "@/components/ImageChangeButton";
 import { IconChangeButton } from "@/components/IconChangeButton";
 import { IconPanel } from "@/components/IconPanel";
 import { AiImageEditPanel } from "@/components/AiImageEditPanel";
+import { GenerationOverlay } from "@/components/GenerationOverlay";
 import { DesignPanel } from "@/components/DesignPanel";
+import { TemplatesPanel } from "@/components/TemplatesPanel";
+import { StoreSwitcherMenu } from "@/components/StoreSwitcherMenu";
 import { DesignCategoryKey, SchemaGroup } from "@/lib/editor/design-categories";
 import { collectKnownFontHandles, describeFontHandle } from "@/lib/editor/font-options";
 import type { GeneratedImage } from "@/lib/product/generated-images";
@@ -61,6 +64,7 @@ import {
 import type { SectionSchema } from "@/lib/ai/catalog";
 import { applyMagicBrush, cycleColorScheme, rollPalette, PALETTES } from "@/lib/editor/magic-brush";
 import { shufflePaletteColors } from "@/lib/editor/palette-shuffle";
+import { syncColorsChangerSections } from "@/lib/editor/colors-changer-sync";
 import {
   locateBlockPathByType,
   locateTextSetting,
@@ -80,6 +84,17 @@ interface Snapshot {
   configuration: StoreConfiguration;
   product: ProductDTO | null;
 }
+
+/**
+ * Which AI request is currently in flight and how much of the preview it affects — drives the
+ * single shared GenerationOverlay rather than each operation inventing its own loading visual.
+ * Set alongside the existing `generating`/`rewriting`/image-panel busy flags (never replacing
+ * them — those still gate their own buttons), so this is purely additive scoping information.
+ */
+type AiOperation = {
+  kind: "generate" | "rewrite-section" | "rewrite-title" | "rewrite-description" | "image";
+  scope: "page" | "section" | "element" | "image";
+};
 
 const HISTORY_LIMIT = 50;
 // Edits within this window of the previous one ride on the same undo step, so dragging a
@@ -129,6 +144,7 @@ export default function EditorPage() {
   const [conflict, setConflict] = useState<{ currentUpdatedAt: string } | null>(null);
   const [generating, setGenerating] = useState(false);
   const [rewriting, setRewriting] = useState(false);
+  const [aiOperation, setAiOperation] = useState<AiOperation | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [showRewrite, setShowRewrite] = useState(false);
   const [generateImages, setGenerateImages] = useState(false);
@@ -226,6 +242,10 @@ export default function EditorPage() {
   // category list (null) whenever the panel closes.
   const [designPanelOpen, setDesignPanelOpen] = useState(false);
   const [designActiveCategory, setDesignActiveCategory] = useState<DesignCategoryKey | null>(null);
+  // Templates' rail entry — a sixth view of the same left sidebar slot, applying a whole-theme
+  // design preset (lib/editor/design-templates.ts) via the same updateThemeSettings path Design's
+  // style-preset cards use.
+  const [templatesPanelOpen, setTemplatesPanelOpen] = useState(false);
   // config/settings_schema.json's raw groups, fetched once — drives which controls the Design
   // panel renders per category (lib/editor/design-categories.ts).
   const [themeSchemaGroups, setThemeSchemaGroups] = useState<SchemaGroup[]>([]);
@@ -897,23 +917,28 @@ export default function EditorPage() {
   );
 
   /** Design panel edits — global, not scoped to the current page's templates, so this writes
-   *  directly via commitConfiguration rather than through updateTemplate. */
+   *  directly via commitConfiguration rather than through updateTemplate. Also mirrors the
+   *  change into any "colors-changer" section instance's matching settings (any page/template),
+   *  so a page-scoped color override left at its seeded defaults doesn't silently shadow this
+   *  global edit — see lib/editor/colors-changer-sync.ts. */
   const updateThemeSetting = useCallback(
     (settingId: string, value: unknown) => {
       const prev = configRef.current;
       if (!prev) return;
-      commitConfiguration({ ...prev, themeSettings: { ...prev.themeSettings, [settingId]: value } });
+      const patch = { [settingId]: value };
+      commitConfiguration(syncColorsChangerSections({ ...prev, themeSettings: { ...prev.themeSettings, ...patch } }, patch));
     },
     [commitConfiguration],
   );
 
   /** Applies several theme settings together as one undo step — e.g. a Buttons style preset,
-   *  which is a bundle of real settings rather than a single stored value. */
+   *  which is a bundle of real settings rather than a single stored value. Same colors-changer
+   *  mirroring as updateThemeSetting above. */
   const updateThemeSettings = useCallback(
     (patch: Record<string, unknown>) => {
       const prev = configRef.current;
       if (!prev) return;
-      commitConfiguration({ ...prev, themeSettings: { ...prev.themeSettings, ...patch } });
+      commitConfiguration(syncColorsChangerSections({ ...prev, themeSettings: { ...prev.themeSettings, ...patch } }, patch));
     },
     [commitConfiguration],
   );
@@ -928,6 +953,7 @@ export default function EditorPage() {
 
   const generate = useCallback(async () => {
     setGenerating(true);
+    setAiOperation({ kind: "generate", scope: "page" });
     setNotice(null);
     try {
       const res = await fetch(`/api/project/${projectId}/generate`, {
@@ -950,6 +976,7 @@ export default function EditorPage() {
       setNotice("Generation failed");
     } finally {
       setGenerating(false);
+      setAiOperation(null);
     }
   }, [projectId, generateImages, commitConfiguration]);
 
@@ -1019,6 +1046,13 @@ export default function EditorPage() {
     async (options: { prompt?: string; preset?: string }) => {
       if (!selectedSectionId) return;
       setRewriting(true);
+      // Title/description and any other bound text field are single-element rewrites — animate
+      // just that field. No binding (a section/block-level "Re-write") animates the whole
+      // selected section instead.
+      setAiOperation({
+        kind: isProductTitleBinding ? "rewrite-title" : isProductDescriptionBinding ? "rewrite-description" : "rewrite-section",
+        scope: binding ? "element" : "section",
+      });
       setNotice(null);
       try {
         // The product title/description are product data, not template settings
@@ -1068,6 +1102,7 @@ export default function EditorPage() {
         setNotice("Rewrite failed");
       } finally {
         setRewriting(false);
+        setAiOperation(null);
       }
     },
     [
@@ -1294,6 +1329,7 @@ export default function EditorPage() {
     <div className="flex min-h-0 flex-1 flex-col bg-white text-neutral-900">
       <header className="flex items-center justify-between gap-4 border-b border-neutral-800 bg-neutral-900 px-4 py-2 text-sm text-white">
         <span className="flex min-w-0 items-center gap-1.5 text-neutral-400">
+          <StoreSwitcherMenu currentStoreId={storeId} />
           {storeId ? (
             <a href={`/store/${storeId}`} className="truncate hover:text-white hover:underline">
               {storeName ?? product?.title ?? "Untitled store"}
@@ -1485,19 +1521,30 @@ export default function EditorPage() {
           aiActive={aiPanelOpen}
           mediaActive={mediaPickerTarget !== null || mediaPanelOpen}
           designActive={designPanelOpen}
+          templatesActive={templatesPanelOpen}
           onSections={() => {
             setInsertAfterId(null);
             setSectionPickerOpen(true);
+            setAiPanelOpen(false);
+            setMediaPickerTarget(null);
+            setMediaPanelOpen(false);
+            setIconPickerTarget(null);
+            setAiImagePanelOpen(false);
+            setDesignPanelOpen(false);
+            setDesignActiveCategory(null);
+            setTemplatesPanelOpen(false);
           }}
           onAI={() =>
             setAiPanelOpen((v) => {
               const next = !v;
               if (next) {
+                setSectionPickerOpen(false);
                 setMediaPickerTarget(null);
                 setMediaPanelOpen(false);
                 setAiImagePanelOpen(false);
                 setIconPickerTarget(null);
                 setDesignPanelOpen(false);
+                setTemplatesPanelOpen(false);
               }
               return next;
             })
@@ -1508,22 +1555,42 @@ export default function EditorPage() {
               setMediaPanelOpen(false);
             } else {
               setMediaPanelOpen(true);
+              setSectionPickerOpen(false);
               setAiPanelOpen(false);
               setAiImagePanelOpen(false);
               setIconPickerTarget(null);
               setDesignPanelOpen(false);
+              setTemplatesPanelOpen(false);
             }
           }}
           onDesign={() =>
             setDesignPanelOpen((v) => {
               const next = !v;
               if (next) {
+                setSectionPickerOpen(false);
                 setAiPanelOpen(false);
                 setMediaPickerTarget(null);
                 setMediaPanelOpen(false);
                 setIconPickerTarget(null);
                 setAiImagePanelOpen(false);
+                setTemplatesPanelOpen(false);
               } else {
+                setDesignActiveCategory(null);
+              }
+              return next;
+            })
+          }
+          onTemplates={() =>
+            setTemplatesPanelOpen((v) => {
+              const next = !v;
+              if (next) {
+                setSectionPickerOpen(false);
+                setAiPanelOpen(false);
+                setMediaPickerTarget(null);
+                setMediaPanelOpen(false);
+                setIconPickerTarget(null);
+                setAiImagePanelOpen(false);
+                setDesignPanelOpen(false);
                 setDesignActiveCategory(null);
               }
               return next;
@@ -1531,8 +1598,8 @@ export default function EditorPage() {
           }
         />
 
-        {/* Sections, AI, Media, AI-image-edit, and Design are five views of the same left
-            sidebar slot — only one renders at a time, right beside the rail, never as a
+        {/* Sections, AI, Media, AI-image-edit, Design, and Templates are six views of the same
+            left sidebar slot — only one renders at a time, right beside the rail, never as a
             separate floating overlay. */}
         {mediaPickerTarget !== null || mediaPanelOpen || aiReferencePicking ? (
           <MediaPanel
@@ -1584,6 +1651,7 @@ export default function EditorPage() {
               setAiImagePanelOpen(false);
             }}
             onClose={() => setAiImagePanelOpen(false)}
+            onBusyChange={(busy) => setAiOperation(busy ? { kind: "image", scope: "image" } : null)}
           />
         ) : aiPanelOpen ? (
           <div className="flex w-72 shrink-0 flex-col gap-3 border-r border-neutral-200 bg-white p-4">
@@ -1629,6 +1697,12 @@ export default function EditorPage() {
               setDesignActiveCategory(null);
             }}
           />
+        ) : templatesPanelOpen ? (
+          <TemplatesPanel
+            values={effectiveThemeSettings}
+            onApply={updateThemeSettings}
+            onClose={() => setTemplatesPanelOpen(false)}
+          />
         ) : null}
 
         <div
@@ -1637,7 +1711,9 @@ export default function EditorPage() {
             viewport === "mobile" ? "flex justify-center overflow-auto bg-neutral-200" : "overflow-hidden"
           }`}
         >
-          <div className={viewport === "mobile" ? "h-full w-97.5 shrink-0 border-x border-neutral-300 bg-white" : "h-full w-full"}>
+          <div
+            className={`relative ${viewport === "mobile" ? "h-full w-97.5 shrink-0 border-x border-neutral-300 bg-white" : "h-full w-full"}`}
+          >
             <PreviewFrame
               ref={previewFrameRef}
               html={html}
@@ -1651,7 +1727,20 @@ export default function EditorPage() {
               onUndo={undo}
               onRedo={redo}
             />
+            {/* Full-page generation animates the whole preview surface — rendered here (not as
+                a previewRef sibling like the section/element/image cases below) so it matches
+                the actual phone-sized frame in mobile viewport too, not previewRef's wider
+                centering row. */}
+            <GenerationOverlay visible={aiOperation?.scope === "page"} scope="page" />
           </div>
+
+          {/* Section/element/image-scoped generation reuses the same rect-anchoring convention
+              as every other floating toolbar below (SectionToolbar, AiRewritePopover…). */}
+          <GenerationOverlay
+            visible={aiOperation != null && aiOperation.scope !== "page"}
+            scope={aiOperation?.scope ?? "section"}
+            rect={aiOperation?.scope === "section" ? sectionRect : selectionRect}
+          />
 
           {selection?.sectionId && sectionRect ? (
             <SectionNameBadge rect={sectionRect} name={selectedSectionName} />
