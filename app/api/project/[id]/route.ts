@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { toProductDTOWithOverrides } from "@/lib/product/db-mapping";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProjectOwnership } from "@/lib/auth/authorize";
 
 // GET /api/project/:id — Project + nested Product, the reload/restore path
 // (prototype-phase-plan.md §17/§20 persistence test).
@@ -10,8 +12,13 @@ import { toProductDTOWithOverrides } from "@/lib/product/db-mapping";
 // is the one place the curated selection becomes what the editor/theme preview renders
 // (lib/shopify-compat/drops.ts builds the gallery straight from `images`), while
 // Product.images in the database stays the untouched original import.
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProjectOwnership(id, userId);
+  if (authError) return authError;
+
   const project = await prisma.project.findUnique({
     where: { id },
     include: { store: { include: { product: true, shopifyStore: true } } },
@@ -33,6 +40,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       installedThemeShopifyId: project.installedThemeShopifyId,
       publicPreviewEnabled: project.publicPreviewEnabled,
       publicPreviewToken: project.publicPreviewToken,
+      publicPreviewExpiresAt: project.publicPreviewExpiresAt,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     },
@@ -43,7 +51,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // PATCH /api/project/:id — { name } — renames this theme (Project.name; not the store name,
 // which is PATCH /api/store/:id).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProjectOwnership(id, userId);
+  if (authError) return authError;
+
   const body = await req.json().catch(() => null);
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   if (!name) return NextResponse.json({ error: "Provide { name: string }" }, { status: 400 });

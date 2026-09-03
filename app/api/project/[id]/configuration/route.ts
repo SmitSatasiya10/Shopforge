@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { recordCheckpoint } from "@/lib/history/checkpoint";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProjectOwnership } from "@/lib/auth/authorize";
 
 // PATCH /api/project/:id/configuration — { configuration, expectedUpdatedAt } -> replaces
 // configurationJson, guarded by optimistic concurrency on Project.updatedAt: the write only
@@ -12,7 +14,12 @@ import { recordCheckpoint } from "@/lib/history/checkpoint";
 // Also exported as POST — identical body/behavior — solely so `navigator.sendBeacon` (used to
 // flush a pending save during page unload) has a method it supports; sendBeacon can only POST.
 async function handlePatch(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProjectOwnership(id, userId);
+  if (authError) return authError;
+
   const body = await req.json().catch(() => null);
   if (!body || typeof body.configuration !== "object" || body.configuration === null) {
     return NextResponse.json({ error: "Provide { configuration: StoreConfiguration }" }, { status: 400 });

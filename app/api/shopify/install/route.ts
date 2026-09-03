@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { loadShopifyConfig, requireShopifyCredentials, ShopifyConfigError } from "@/lib/shopify/config";
 import { normalizeShopDomain } from "@/lib/shopify/shop-domain";
+import { requireUserId } from "@/lib/auth/session";
 
 const STATE_COOKIE = "shopify_oauth_state";
 const PROJECT_ID_COOKIE = "shopify_oauth_project_id";
@@ -13,6 +14,9 @@ const STATE_MAX_AGE_SECONDS = 600; // 10 minutes — long enough for the OAuth c
 // optional projectId (set when connecting from the editor's Publish flow rather than the import
 // wizard) rides along in its own short-lived cookie so the callback can link the two.
 export async function GET(req: NextRequest) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
+
   const shop = normalizeShopDomain(req.nextUrl.searchParams.get("shop") ?? "");
   const projectId = req.nextUrl.searchParams.get("projectId");
   if (!shop) {

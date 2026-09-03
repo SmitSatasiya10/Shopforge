@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProjectOwnership } from "@/lib/auth/authorize";
 
 // GET /api/project/:id/history/:versionId — full snapshot for one checkpoint, used to restore
 // the editor to that point in time.
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; versionId: string }> }
 ) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id, versionId } = await params;
+  const authError = await assertProjectOwnership(id, userId);
+  if (authError) return authError;
 
   const version = await prisma.projectVersion.findFirst({
     where: { id: versionId, projectId: id },

@@ -25,6 +25,7 @@ import { GenerationOverlay } from "@/components/GenerationOverlay";
 import { DesignPanel } from "@/components/DesignPanel";
 import { TemplatesPanel } from "@/components/TemplatesPanel";
 import { StoreSwitcherMenu } from "@/components/StoreSwitcherMenu";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import { DesignCategoryKey, SchemaGroup } from "@/lib/editor/design-categories";
 import { collectKnownFontHandles, describeFontHandle } from "@/lib/editor/font-options";
 import type { GeneratedImage } from "@/lib/product/generated-images";
@@ -103,6 +104,35 @@ type AiOperation = {
   kind: "generate" | "rewrite-section" | "rewrite-title" | "rewrite-description" | "image";
   scope: "page" | "section" | "element" | "image";
 };
+
+function EditorUserMenu() {
+  const router = useRouter();
+  const { user } = useCurrentUser();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function logout() {
+    setLoggingOut(true);
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
+
+  if (!user) return null;
+  return (
+    <span className="flex items-center gap-2 text-xs text-neutral-400">
+      <span className="max-w-[12rem] truncate" title={user.email}>
+        {user.email}
+      </span>
+      <button
+        type="button"
+        onClick={logout}
+        disabled={loggingOut}
+        className="rounded border border-neutral-700 px-2 py-1 text-neutral-300 hover:bg-white/10 hover:text-white disabled:opacity-50"
+      >
+        {loggingOut ? "Logging out…" : "Log out"}
+      </button>
+    </span>
+  );
+}
 
 const HISTORY_LIMIT = 50;
 // Edits within this window of the previous one ride on the same undo step, so dragging a
@@ -192,23 +222,25 @@ export default function EditorPage() {
   const [showDuplicateTheme, setShowDuplicateTheme] = useState(false);
   const [publicPreviewEnabled, setPublicPreviewEnabled] = useState(false);
   const [publicPreviewToken, setPublicPreviewToken] = useState<string | null>(null);
+  const [publicPreviewExpiresAt, setPublicPreviewExpiresAt] = useState<string | null>(null);
   const [showPublicLink, setShowPublicLink] = useState(false);
   const [publicLinkBusy, setPublicLinkBusy] = useState(false);
 
   const setPublicPreview = useCallback(
-    async (enabled: boolean) => {
+    async (enabled: boolean, rotate = false) => {
       if (!storeId) return;
       setPublicLinkBusy(true);
       try {
         const res = await fetch(`/api/store/${storeId}/theme/${projectId}/public-link`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ enabled }),
+          body: JSON.stringify({ enabled, ...(rotate ? { rotate: true } : {}) }),
         });
         if (res.ok) {
           const data = await res.json();
           setPublicPreviewEnabled(data.publicPreviewEnabled);
           setPublicPreviewToken(data.publicPreviewToken);
+          setPublicPreviewExpiresAt(data.publicPreviewExpiresAt);
         }
       } finally {
         setPublicLinkBusy(false);
@@ -331,6 +363,7 @@ export default function EditorPage() {
         setStoreActiveThemeId(data.project.storeActiveThemeId ?? null);
         setPublicPreviewEnabled(data.project.publicPreviewEnabled ?? false);
         setPublicPreviewToken(data.project.publicPreviewToken ?? null);
+        setPublicPreviewExpiresAt(data.project.publicPreviewExpiresAt ?? null);
         lastKnownUpdatedAtRef.current = data.project.updatedAt;
         try {
           const parsed = parseConfiguration(data.project.configurationJson);
@@ -1395,7 +1428,12 @@ export default function EditorPage() {
             </button>
           </div>
 
-          <HistoryPanel projectId={projectId} onRestore={restoreFromHistory} />
+          <HistoryPanel
+            projectId={projectId}
+            configuration={configuration}
+            productTitle={product?.title ?? null}
+            onRestore={restoreFromHistory}
+          />
 
           <button
             onClick={() => setShowDuplicateTheme(true)}
@@ -1524,6 +1562,9 @@ export default function EditorPage() {
               </button>
             </form>
           )}
+
+          <div className="h-4 w-px bg-neutral-700" aria-hidden="true" />
+          <EditorUserMenu />
         </div>
       </header>
 
@@ -2030,9 +2071,11 @@ export default function EditorPage() {
           themeName={themeName ?? "This theme"}
           enabled={publicPreviewEnabled}
           token={publicPreviewToken}
+          expiresAt={publicPreviewExpiresAt}
           busy={publicLinkBusy}
           onClose={() => setShowPublicLink(false)}
           onToggle={setPublicPreview}
+          onRotate={() => setPublicPreview(true, true)}
         />
       ) : null}
 

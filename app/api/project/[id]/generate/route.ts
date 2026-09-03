@@ -9,6 +9,8 @@ import { parseConfiguration, StoreConfiguration } from "@/lib/store-config/store
 import { parseCustomerPersona } from "@/lib/store-config/persona";
 import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
 import { parseSelectedImages } from "@/lib/store-config/product-images";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProjectOwnership } from "@/lib/auth/authorize";
 
 // POST /api/project/:id/generate — regenerates both page templates from the project's
 // imported product using OpenRouter, and replaces the project's Store Configuration.
@@ -20,7 +22,12 @@ import { parseSelectedImages } from "@/lib/store-config/product-images";
 //                                  no image model; true generates images instead.
 //   { "model": string }            overrides OPENROUTER_MODEL for this one run.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProjectOwnership(id, userId);
+  if (authError) return authError;
+
   const body = (await req.json().catch(() => ({}))) as {
     generateImages?: unknown;
     model?: unknown;
@@ -115,8 +122,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 /** GET — reports whether generation has run for this project and what the image toggle default is. */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProjectOwnership(id, userId);
+  if (authError) return authError;
+
   const project = await prisma.project.findUnique({ where: { id } });
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

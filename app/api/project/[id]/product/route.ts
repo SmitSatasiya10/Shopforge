@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { toProductDTO } from "@/lib/product/db-mapping";
 import { recordCheckpoint } from "@/lib/history/checkpoint";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProjectOwnership } from "@/lib/auth/authorize";
 
 // PATCH /api/project/:id/product — { title?, description? } -> updates the imported product.
 // The product page's <h1> and description block render `{{ product.title }}`/
 // `{{ product.description }}` (product data, not template settings), so the editor's inline
 // edits to either land here instead of in configurationJson.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProjectOwnership(id, userId);
+  if (authError) return authError;
+
   const body = await req.json().catch(() => null);
   const hasTitle = typeof body?.title === "string";
   const hasDescription = typeof body?.description === "string" || body?.description === null;

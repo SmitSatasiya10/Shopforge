@@ -12,6 +12,20 @@ datasource db {
   provider = "postgresql"
 }
 
+/// An account that can sign in to the builder app and own Stores. Email/password only for now —
+/// see docs/product-spec/21-security-and-multi-tenancy.md §2 for the future authProvider/OAuth
+/// (google/shopify) shape and the Organization/role model layered on top of this later.
+model User {
+  id           String @id @default(uuid())
+  email        String @unique
+  passwordHash String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stores Store[]
+}
+
 model Product {
   id                    String   @id @default(uuid())
   sourceUrl             String
@@ -65,6 +79,9 @@ model Store {
   id   String @id @default(uuid())
   name String
 
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   productId String  @unique
   product   Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
@@ -112,10 +129,13 @@ model Project {
   selectedImagesJson Json? // selected product images from the wizard's Product Images step: { images: ImageCandidate[] } (max 5, order = gallery order, first = featured). Never overwrites Product.images.
 
   // Public, unauthenticated storefront preview link (/preview/<publicPreviewToken>). Token is
-  // generated once, on first enable, and never cleared on disable — re-enabling restores the
-  // same URL. Disabling just flips the flag; the theme and its configuration are untouched.
-  publicPreviewEnabled Boolean @default(false)
-  publicPreviewToken   String? @unique
+  // generated on first enable and expires publicPreviewExpiresAt after that (see
+  // PUBLIC_PREVIEW_LINK_TTL_DAYS) — re-enabling before expiry restores the same URL; re-enabling
+  // (or rotating) after expiry mints a fresh token/expiry. Disabling just flips the flag; the
+  // theme, its configuration, and the token are untouched.
+  publicPreviewEnabled   Boolean   @default(false)
+  publicPreviewToken     String?   @unique
+  publicPreviewExpiresAt DateTime?
 
   versions ProjectVersion[]
 

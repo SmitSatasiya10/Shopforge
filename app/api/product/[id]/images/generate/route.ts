@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db/prisma";
 import { editProductImage, IMAGE_EDIT_ASPECTS, IMAGE_EDIT_MODES, type ImageEditAspect, type ImageEditMode } from "@/lib/ai/image-editor";
 import { withAIContext } from "@/lib/ai/debug-logger";
 import { appendGeneratedImage, type GeneratedImage } from "@/lib/product/generated-images";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProductOwnership } from "@/lib/auth/authorize";
 
 // POST /api/product/:id/images/generate — { instruction, mode, sourceImageUrl?, aspect?,
 // stylePreset?, claim? } -> { image: GeneratedImage }. The editor's "Edit with AI" panel
@@ -13,7 +15,12 @@ import { appendGeneratedImage, type GeneratedImage } from "@/lib/product/generat
 // independent of whether the merchant goes on to click "Use image", so a paid-for generation
 // is never silently lost even if they close the panel.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProductOwnership(id, userId);
+  if (authError) return authError;
+
   const body = (await req.json().catch(() => ({}))) as {
     instruction?: unknown;
     mode?: unknown;

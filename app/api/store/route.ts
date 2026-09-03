@@ -1,9 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { requireUserId } from "@/lib/auth/session";
 
-// GET /api/store — lists every store for the dashboard, newest-activity first.
-export async function GET() {
+// GET /api/store — lists the caller's own stores for the dashboard, newest-activity first.
+export async function GET(req: NextRequest) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
+
   const stores = await prisma.store.findMany({
+    where: { ownerId: userId },
     include: {
       product: { select: { title: true, images: true } },
       shopifyStore: { select: { shopDomain: true } },

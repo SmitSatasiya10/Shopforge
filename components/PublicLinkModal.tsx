@@ -39,18 +39,25 @@ export function PublicLinkModal({
   themeName,
   enabled,
   token,
+  expiresAt,
   busy,
   onClose,
   onToggle,
+  onRotate,
 }: {
   themeName: string;
   enabled: boolean;
   token: string | null;
+  expiresAt: string | null;
   busy: boolean;
   onClose: () => void;
   onToggle: (enabled: boolean) => void;
+  onRotate: () => void;
 }) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const expiresLabel = expiresAt
+    ? new Date(expiresAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+    : null;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-neutral-950/50 p-4" onMouseDown={onClose}>
@@ -89,6 +96,20 @@ export function PublicLinkModal({
             </p>
             <LinkRow label="Homepage" url={`${origin}/preview/${token}`} />
             <LinkRow label="Product page" url={`${origin}/preview/${token}/product`} />
+            <div className="mt-3 flex items-center justify-between gap-3">
+              {expiresLabel ? (
+                <span className="text-[11px] text-neutral-500">Expires {expiresLabel}</span>
+              ) : (
+                <span />
+              )}
+              <button
+                onClick={onRotate}
+                disabled={busy}
+                className="shrink-0 text-[11px] font-medium text-neutral-300 hover:text-white disabled:opacity-50"
+              >
+                Get a new link
+              </button>
+            </div>
           </>
         ) : (
           <p className="mt-3 text-[11px] text-neutral-400">

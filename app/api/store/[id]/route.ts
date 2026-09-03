@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { requireUserId } from "@/lib/auth/session";
+import { assertStoreOwnership } from "@/lib/auth/authorize";
 
 // GET /api/store/:id — one store with its full theme list, for the theme-management page.
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertStoreOwnership(id, userId);
+  if (authError) return authError;
+
   const store = await prisma.store.findUnique({
     where: { id },
     include: {
@@ -17,6 +24,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           updatedAt: true,
           publicPreviewEnabled: true,
           publicPreviewToken: true,
+          publicPreviewExpiresAt: true,
         },
         orderBy: { updatedAt: "desc" },
       },
@@ -41,7 +49,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // which theme is "the" active one without publishing (mainly for pre-Shopify-connection use;
 // once connected, activeThemeId is normally driven by a successful publish instead).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertStoreOwnership(id, userId);
+  if (authError) return authError;
+
   const body = await req.json().catch(() => null);
 
   const hasName = typeof body?.name === "string";
@@ -77,8 +90,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 // DELETE /api/store/:id — deletes the store and all of its themes (configuration, edit
 // history, publish records cascade). The shared Product row is left in place, not deleted.
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertStoreOwnership(id, userId);
+  if (authError) return authError;
+
   try {
     await prisma.store.delete({ where: { id } });
     return NextResponse.json({ deleted: true });

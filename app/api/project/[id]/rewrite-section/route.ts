@@ -9,6 +9,8 @@ import { OpenRouterError } from "@/lib/ai/openrouter";
 import { PAGE_TEMPLATES, PageTemplate, parseConfiguration } from "@/lib/store-config/store";
 import { parseCustomerPersona } from "@/lib/store-config/persona";
 import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProjectOwnership } from "@/lib/auth/authorize";
 
 // POST /api/project/:id/rewrite-section — rewrites ONE section of one page template with AI
 // and persists the result (docs/SECTION-AI-EDITING.md). Unlike /generate this never touches
@@ -25,7 +27,12 @@ import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
 //                              result is the stored section with only that block's settings changed
 //     "model"?: string }     overrides OPENROUTER_MODEL for this one run
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProjectOwnership(id, userId);
+  if (authError) return authError;
+
   const body = (await req.json().catch(() => ({}))) as {
     page?: unknown;
     sectionId?: unknown;

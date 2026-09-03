@@ -18,9 +18,10 @@ export interface PublicStorefrontResult {
  * accessTokenCipher/refreshTokenCipher) — do not add that include here, this route has no
  * auth layer to fall back on and this query shape is the actual security boundary.
  *
- * Returns null (never throws) for: unknown token, a disabled link, or an unrenderable
- * project (e.g. configurationJson that fails validation) — the caller turns every case into
- * the same 404, so an anonymous visitor can never distinguish "not enabled" from "broken".
+ * Returns null (never throws) for: unknown token, a disabled link, an expired link, or an
+ * unrenderable project (e.g. configurationJson that fails validation) — the caller turns every
+ * case into the same 404, so an anonymous visitor can never distinguish "not enabled" from
+ * "expired" from "broken".
  */
 export async function renderPublicStorefront(
   token: string,
@@ -33,6 +34,7 @@ export async function renderPublicStorefront(
     include: { store: { include: { product: true } } },
   });
   if (!project || !project.publicPreviewEnabled) return null;
+  if (project.publicPreviewExpiresAt !== null && project.publicPreviewExpiresAt < new Date()) return null;
 
   try {
     const configuration = parseConfiguration(project.configurationJson);

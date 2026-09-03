@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
+import { signedSessionCookieHeader } from "@/lib/auth/test-helpers";
+
+const OWNER_ID = "user-1";
 
 const productFindUnique = vi.fn();
 const productUpdate = vi.fn();
@@ -68,10 +71,10 @@ function productRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function postRequest(body: unknown) {
+async function postRequest(body: unknown) {
   return new NextRequest("http://localhost/api/product/product-1/images", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", cookie: await signedSessionCookieHeader(OWNER_ID) },
     body: JSON.stringify(body),
   });
 }
@@ -89,7 +92,7 @@ beforeEach(() => {
 // still names options this product actually has — see the guard in app/import/page.tsx.
 describe("POST /api/product/:id/images — persona/angle resolution status", () => {
   it("reports a persona id that isn't one of this product's options as stale", async () => {
-    const res = await POST(postRequest({ personaId: "special-occasion-gifter", angleId: "safety-first" }), { params });
+    const res = await POST(await postRequest({ personaId: "special-occasion-gifter", angleId: "safety-first" }), { params });
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(data.personaStatus).toBe("stale");
@@ -97,7 +100,7 @@ describe("POST /api/product/:id/images — persona/angle resolution status", () 
   });
 
   it("reports a known persona id as resolved and passes it to candidate generation", async () => {
-    const res = await POST(postRequest({ personaId: "milestone-gift-giver" }), { params });
+    const res = await POST(await postRequest({ personaId: "milestone-gift-giver" }), { params });
     expect((await res.json()).personaStatus).toBe("resolved");
     expect(buildImageCandidates.mock.calls[0][1].persona).toMatchObject({
       type: "generated",
@@ -106,25 +109,25 @@ describe("POST /api/product/:id/images — persona/angle resolution status", () 
   });
 
   it("reports \"none\" when the request names no persona or angle", async () => {
-    const data = await (await POST(postRequest({}), { params })).json();
+    const data = await (await POST(await postRequest({}), { params })).json();
     expect(data.personaStatus).toBe("none");
     expect(data.angleStatus).toBe("none");
   });
 
   it("treats a merchant's own persona text as resolved — it can never be stale", async () => {
-    const data = await (await POST(postRequest({ personaText: "parents of toddlers" }), { params })).json();
+    const data = await (await POST(await postRequest({ personaText: "parents of toddlers" }), { params })).json();
     expect(data.personaStatus).toBe("resolved");
   });
 
   it("reports an angle id that isn't one of this product's options as stale", async () => {
-    const data = await (await POST(postRequest({ personaId: "milestone-gift-giver", angleId: "gone-angle" }), { params })).json();
+    const data = await (await POST(await postRequest({ personaId: "milestone-gift-giver", angleId: "gone-angle" }), { params })).json();
     expect(data.personaStatus).toBe("resolved");
     expect(data.angleStatus).toBe("stale");
   });
 
   it("treats every persona id as stale when the product has no cached options at all", async () => {
     productFindUnique.mockResolvedValue(productRow({ personaOptionsJson: null }));
-    const data = await (await POST(postRequest({ personaId: "milestone-gift-giver" }), { params })).json();
+    const data = await (await POST(await postRequest({ personaId: "milestone-gift-giver" }), { params })).json();
     expect(data.personaStatus).toBe("stale");
   });
 
@@ -134,7 +137,7 @@ describe("POST /api/product/:id/images — persona/angle resolution status", () 
   // would never be seen by the screen that needs it.
   it("still reports the statuses when candidates come from the cache", async () => {
     productFindUnique.mockResolvedValue(productRow({ imageCandidatesJson: CANDIDATES }));
-    const data = await (await POST(postRequest({ personaId: "special-occasion-gifter", angleId: "safety-first" }), { params })).json();
+    const data = await (await POST(await postRequest({ personaId: "special-occasion-gifter", angleId: "safety-first" }), { params })).json();
     expect(data.cached).toBe(true);
     expect(data.personaStatus).toBe("stale");
     expect(data.angleStatus).toBe("resolved");

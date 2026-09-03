@@ -8,6 +8,8 @@ import { OpenRouterError } from "@/lib/ai/openrouter";
 import { DEFAULT_STORE_LANGUAGE, normalizeStoreLanguage } from "@/lib/store-config/language";
 import { CustomerPersonaSchema } from "@/lib/store-config/persona";
 import { MarketingAngleCacheSchema, personaCacheKey } from "@/lib/store-config/marketing-angle";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProductOwnership } from "@/lib/auth/authorize";
 
 // POST /api/product/:id/marketing-angles — { persona, language? } -> the four
 // product+persona-specific marketing angles for the Persona step's "How do you want to
@@ -19,7 +21,12 @@ import { MarketingAngleCacheSchema, personaCacheKey } from "@/lib/store-config/m
 // re-calls the AI; changing the persona, the language, or the product does — old angles
 // are never reused for new inputs.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProductOwnership(id, userId);
+  if (authError) return authError;
+
   const body = (await req.json().catch(() => ({}))) as { language?: unknown; persona?: unknown };
 
   const language =
