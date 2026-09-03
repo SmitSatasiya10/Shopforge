@@ -59,6 +59,7 @@ function CreateThemeModal({
         name: data.project.name,
         publicPreviewEnabled: false,
         publicPreviewToken: null,
+        publicPreviewExpiresAt: null,
       });
     } finally {
       setCreating(false);
@@ -216,19 +217,24 @@ export default function StoreThemesPage() {
     }
   }
 
-  async function setPublicPreview(themeId: string, enabled: boolean) {
+  async function setPublicPreview(themeId: string, enabled: boolean, rotate = false) {
     setBusyThemeId(themeId);
     try {
       const res = await fetch(`/api/store/${storeId}/theme/${themeId}/public-link`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ enabled }),
+        body: JSON.stringify({ enabled, ...(rotate ? { rotate: true } : {}) }),
       });
       if (res.ok) {
         const data = await res.json();
         setPublicLinkTheme((cur) =>
           cur && cur.id === themeId
-            ? { ...cur, publicPreviewEnabled: data.publicPreviewEnabled, publicPreviewToken: data.publicPreviewToken }
+            ? {
+                ...cur,
+                publicPreviewEnabled: data.publicPreviewEnabled,
+                publicPreviewToken: data.publicPreviewToken,
+                publicPreviewExpiresAt: data.publicPreviewExpiresAt,
+              }
             : cur,
         );
         load();
@@ -334,9 +340,11 @@ export default function StoreThemesPage() {
           themeName={publicLinkTheme.name}
           enabled={publicLinkTheme.publicPreviewEnabled}
           token={publicLinkTheme.publicPreviewToken}
+          expiresAt={publicLinkTheme.publicPreviewExpiresAt}
           busy={busyThemeId === publicLinkTheme.id}
           onClose={() => setPublicLinkTheme(null)}
           onToggle={(enabled) => setPublicPreview(publicLinkTheme.id, enabled)}
+          onRotate={() => setPublicPreview(publicLinkTheme.id, true, true)}
         />
       ) : null}
 

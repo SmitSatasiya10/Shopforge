@@ -7,6 +7,8 @@ import { AiConfigError } from "@/lib/ai/config";
 import { OpenRouterError } from "@/lib/ai/openrouter";
 import { DEFAULT_STORE_LANGUAGE, normalizeStoreLanguage } from "@/lib/store-config/language";
 import { PersonaOptionsCacheSchema, assignPersonaIcons } from "@/lib/store-config/persona";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProductOwnership } from "@/lib/auth/authorize";
 
 // POST /api/product/:id/personas — { language? } -> the four product-specific persona
 // options for the wizard's "Who are you selling to?" step
@@ -18,7 +20,12 @@ import { PersonaOptionsCacheSchema, assignPersonaIcons } from "@/lib/store-confi
 // also covers "the user changed the product" (a different product row has its own cache)
 // and "the user changed the language" (the cache language no longer matches).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProductOwnership(id, userId);
+  if (authError) return authError;
+
   const body = (await req.json().catch(() => ({}))) as { language?: unknown };
 
   const language =

@@ -10,6 +10,7 @@ export interface ThemeSummary {
   name: string;
   publicPreviewEnabled: boolean;
   publicPreviewToken: string | null;
+  publicPreviewExpiresAt: string | null;
 }
 
 interface ThemeCardProps {

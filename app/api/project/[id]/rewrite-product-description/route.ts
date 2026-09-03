@@ -8,6 +8,8 @@ import { AiConfigError } from "@/lib/ai/config";
 import { OpenRouterError } from "@/lib/ai/openrouter";
 import { parseCustomerPersona } from "@/lib/store-config/persona";
 import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProjectOwnership } from "@/lib/auth/authorize";
 
 // POST /api/project/:id/rewrite-product-description — AI-rewrites the product's description
 // and persists it to the Product record (docs/EDITOR-TOOLBARS.md "Editing the product
@@ -19,7 +21,12 @@ import { parseMarketingAngle } from "@/lib/store-config/marketing-angle";
 //     "preset"?: string,   a REWRITE_PRESETS id (chips); combined with prompt when both given
 //     "model"?: string }   overrides OPENROUTER_MODEL for this one run
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProjectOwnership(id, userId);
+  if (authError) return authError;
+
   const body = (await req.json().catch(() => ({}))) as {
     prompt?: unknown;
     preset?: unknown;

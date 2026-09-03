@@ -6,6 +6,8 @@ import { withAIContext } from "@/lib/ai/debug-logger";
 import { ImageCandidatesCacheSchema, type SelectionStatus } from "@/lib/store-config/product-images";
 import { PersonaOptionsCacheSchema, type CustomerPersona } from "@/lib/store-config/persona";
 import { MarketingAngleCacheSchema, type MarketingAngle } from "@/lib/store-config/marketing-angle";
+import { requireUserId } from "@/lib/auth/session";
+import { assertProductOwnership } from "@/lib/auth/authorize";
 
 // POST /api/product/:id/images — {} -> the wizard's Product Images step candidate set:
 // { primary: ImageCandidate[], other: ImageCandidate[] } (shopforge-personalization-image-
@@ -28,7 +30,12 @@ import { MarketingAngleCacheSchema, type MarketingAngle } from "@/lib/store-conf
 // on arrival — rather than at the final "Generate my store" click, after they have already
 // chosen their images.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id } = await params;
+  const authError = await assertProductOwnership(id, userId);
+  if (authError) return authError;
+
   const body = (await req.json().catch(() => ({}))) as {
     personaId?: unknown;
     personaText?: unknown;

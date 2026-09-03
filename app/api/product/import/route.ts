@@ -7,6 +7,7 @@ import {
 } from "@/lib/product/import";
 import { persistResult } from "@/lib/product/persist";
 import type { ProductImportSource } from "@/lib/product/source";
+import { requireUserId } from "@/lib/auth/session";
 
 // POST /api/product/import — { source?: "shopify"|"supplier"|"competitor", url } or { sample: true }.
 // `source` defaults to "shopify" for backward compatibility with the original single-source
@@ -25,6 +26,9 @@ import type { ProductImportSource } from "@/lib/product/source";
 //   successful/partial results are persisted; failed discovery candidates are dropped, never
 //   faked, and are reflected in `discovery.failed` instead.
 export async function POST(req: NextRequest) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
+
   const body = await req.json().catch(() => null);
   if (!body || (typeof body.url !== "string" && body.sample !== true)) {
     return NextResponse.json({ error: "Please enter a valid URL." }, { status: 400 });

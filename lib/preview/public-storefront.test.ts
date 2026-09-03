@@ -26,6 +26,7 @@ function project(overrides: Record<string, unknown> = {}) {
   return {
     id: "theme-1",
     publicPreviewEnabled: true,
+    publicPreviewExpiresAt: null,
     configurationJson: configuration,
     selectedImagesJson: null,
     store: {
@@ -77,6 +78,23 @@ describe("renderPublicStorefront", () => {
     const result = await renderPublicStorefront("token-1", "index");
     expect(result).toBeNull();
     expect(renderTemplate).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the link's expiry has passed, even if still enabled", async () => {
+    projectFindUnique.mockResolvedValue(
+      project({ publicPreviewExpiresAt: new Date(Date.now() - 1000) }),
+    );
+    const result = await renderPublicStorefront("token-1", "index");
+    expect(result).toBeNull();
+    expect(renderTemplate).not.toHaveBeenCalled();
+  });
+
+  it("renders when the link has a future expiry", async () => {
+    projectFindUnique.mockResolvedValue(
+      project({ publicPreviewExpiresAt: new Date(Date.now() + 1000) }),
+    );
+    const result = await renderPublicStorefront("token-1", "index");
+    expect(result).toEqual({ html: "<!doctype html><html></html>" });
   });
 
   it("returns null instead of throwing when configurationJson is corrupt", async () => {

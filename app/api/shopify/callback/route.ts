@@ -4,6 +4,7 @@ import { loadShopifyConfig, requireShopifyCredentials, ShopifyConfigError } from
 import { normalizeShopDomain } from "@/lib/shopify/shop-domain";
 import { verifyShopifyHmac } from "@/lib/shopify/hmac";
 import { encryptToken } from "@/lib/shopify/crypto";
+import { requireUserId } from "@/lib/auth/session";
 
 const STATE_COOKIE = "shopify_oauth_state";
 const PROJECT_ID_COOKIE = "shopify_oauth_project_id";
@@ -20,6 +21,9 @@ interface ShopifyAccessTokenResponse {
 // invalid/missing state or a failed HMAC verification means the request is never trusted,
 // per docs/product-phases/11-shopify-integration.md's error-handling contract.
 export async function GET(req: NextRequest) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
+
   const params = req.nextUrl.searchParams;
   const shop = normalizeShopDomain(params.get("shop") ?? "");
   const code = params.get("code");
@@ -86,8 +90,13 @@ export async function GET(req: NextRequest) {
   const projectId = req.cookies.get(PROJECT_ID_COOKIE)?.value;
   let redirectUrl = new URL(`/import?source=shopify&connected=${encodeURIComponent(shop)}`, req.url);
   if (projectId) {
-    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { storeId: true } });
-    if (project) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { storeId: true, store: { select: { ownerId: true } } },
+    });
+    // Only link the connection if the now-verified session user actually owns the project the
+    // cookie names — a stale or forged projectId cookie must never link someone else's store.
+    if (project && project.store.ownerId === userId) {
       await prisma.store.update({ where: { id: project.storeId }, data: { shopifyStoreId: store.id } });
       redirectUrl = new URL(`/editor/${projectId}?connected=${encodeURIComponent(shop)}`, req.url);
     }

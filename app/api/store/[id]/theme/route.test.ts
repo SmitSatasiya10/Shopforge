@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
+import { signedSessionCookieHeader } from "@/lib/auth/test-helpers";
+
+const OWNER_ID = "user-1";
 
 const storeFindUnique = vi.fn();
 const projectFindFirst = vi.fn();
@@ -23,16 +26,16 @@ vi.mock("@/lib/store-config/seed-theme", () => ({
 
 const { POST } = await import("./route");
 
-function request(body: unknown) {
+async function request(body: unknown) {
   return new NextRequest("http://localhost/api/store/store-1/theme", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", cookie: await signedSessionCookieHeader(OWNER_ID) },
     body: JSON.stringify(body),
   });
 }
 
 const params = Promise.resolve({ id: "store-1" });
-const STORE = { id: "store-1", product: { id: "product-1", title: "Bag" } };
+const STORE = { id: "store-1", ownerId: OWNER_ID, product: { id: "product-1", title: "Bag" } };
 
 describe("POST /api/store/:id/theme", () => {
   beforeEach(() => {
@@ -47,7 +50,7 @@ describe("POST /api/store/:id/theme", () => {
     projectCount.mockResolvedValue(2);
     projectCreate.mockResolvedValue({ id: "theme-3", name: "Theme 3" });
 
-    const res = await POST(request({}), { params });
+    const res = await POST(await request({}), { params });
     const body = await res.json();
 
     expect(res.status).toBe(201);
@@ -72,7 +75,7 @@ describe("POST /api/store/:id/theme", () => {
     projectFindFirst.mockResolvedValue(source);
     projectCreate.mockResolvedValue({ id: "theme-2", name: "Copy of Default" });
 
-    const res = await POST(request({ duplicateFrom: "theme-1" }), { params });
+    const res = await POST(await request({ duplicateFrom: "theme-1" }), { params });
     const body = await res.json();
 
     expect(res.status).toBe(201);
@@ -90,7 +93,7 @@ describe("POST /api/store/:id/theme", () => {
     storeFindUnique.mockResolvedValue(STORE);
     projectFindFirst.mockResolvedValue(null);
 
-    const res = await POST(request({ duplicateFrom: "theme-from-another-store" }), { params });
+    const res = await POST(await request({ duplicateFrom: "theme-from-another-store" }), { params });
 
     expect(res.status).toBe(400);
     expect(projectCreate).not.toHaveBeenCalled();
@@ -99,7 +102,7 @@ describe("POST /api/store/:id/theme", () => {
   it("returns 404 for an unknown store", async () => {
     storeFindUnique.mockResolvedValue(null);
 
-    const res = await POST(request({}), { params });
+    const res = await POST(await request({}), { params });
 
     expect(res.status).toBe(404);
   });

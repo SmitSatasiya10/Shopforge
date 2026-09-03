@@ -4,6 +4,34 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StartStoreHero } from "@/components/StartStoreHero";
 import { StoreCard, type StoreSummary } from "@/components/StoreCard";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
+
+function UserMenu() {
+  const router = useRouter();
+  const { user } = useCurrentUser();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function logout() {
+    setLoggingOut(true);
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
+
+  if (!user) return null;
+  return (
+    <div className="flex items-center gap-3 text-[13px] text-neutral-400">
+      <span className="truncate">{user.email}</span>
+      <button
+        type="button"
+        onClick={logout}
+        disabled={loggingOut}
+        className="rounded-full px-3 py-1.5 text-xs font-medium ring-1 ring-white/15 hover:bg-neutral-800 hover:text-white disabled:opacity-50"
+      >
+        {loggingOut ? "Logging out…" : "Log out"}
+      </button>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -41,13 +69,16 @@ export default function DashboardPage() {
       <div className="mx-auto w-full max-w-[1200px] flex-1 px-6 py-10 sm:px-8 sm:py-12">
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-[26px] font-semibold tracking-[-0.01em]">Your stores</h1>
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/new")}
-            className="rounded-full bg-neutral-50 px-4 py-2 text-[13px] font-medium text-neutral-900 hover:bg-neutral-200"
-          >
-            + New store
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/new")}
+              className="rounded-full bg-neutral-50 px-4 py-2 text-[13px] font-medium text-neutral-900 hover:bg-neutral-200"
+            >
+              + New store
+            </button>
+            <UserMenu />
+          </div>
         </div>
 
         <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

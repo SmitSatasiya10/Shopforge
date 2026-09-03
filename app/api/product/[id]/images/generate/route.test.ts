@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
+import { signedSessionCookieHeader } from "@/lib/auth/test-helpers";
+
+const OWNER_ID = "user-1";
 
 const productFindUnique = vi.fn();
 const productUpdate = vi.fn();
@@ -23,10 +26,10 @@ const { POST } = await import("./route");
 
 const params = Promise.resolve({ id: "product-1" });
 
-function postRequest(body: unknown) {
+async function postRequest(body: unknown) {
   return new NextRequest("http://localhost/api/product/product-1/images/generate", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", cookie: await signedSessionCookieHeader(OWNER_ID) },
     body: JSON.stringify(body),
   });
 }
@@ -40,26 +43,26 @@ beforeEach(() => {
 
 describe("POST /api/product/:id/images/generate", () => {
   it("returns 400 without calling editProductImage when instruction is missing", async () => {
-    const res = await POST(postRequest({ mode: "generate" }), { params });
+    const res = await POST(await postRequest({ mode: "generate" }), { params });
     expect(res.status).toBe(400);
     expect(editProductImage).not.toHaveBeenCalled();
   });
 
   it("returns 400 for an unknown mode", async () => {
-    const res = await POST(postRequest({ instruction: "x", mode: "not-a-mode" }), { params });
+    const res = await POST(await postRequest({ instruction: "x", mode: "not-a-mode" }), { params });
     expect(res.status).toBe(400);
     expect(editProductImage).not.toHaveBeenCalled();
   });
 
   it("returns 400 when mode is \"edit\" with no sourceImageUrl, without calling editProductImage", async () => {
-    const res = await POST(postRequest({ instruction: "edit it", mode: "edit" }), { params });
+    const res = await POST(await postRequest({ instruction: "edit it", mode: "edit" }), { params });
     expect(res.status).toBe(400);
     expect(editProductImage).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the product doesn't exist", async () => {
     productFindUnique.mockResolvedValue(null);
-    const res = await POST(postRequest({ instruction: "x", mode: "generate" }), { params });
+    const res = await POST(await postRequest({ instruction: "x", mode: "generate" }), { params });
     expect(res.status).toBe(404);
     expect(editProductImage).not.toHaveBeenCalled();
   });
@@ -67,7 +70,7 @@ describe("POST /api/product/:id/images/generate", () => {
   it("501s and persists nothing when generation is disabled — the flag, not this route, is the enforcement point", async () => {
     editProductImage.mockResolvedValue({ ok: false, reason: "disabled", message: "AI image generation is turned off for this project." });
 
-    const res = await POST(postRequest({ instruction: "x", mode: "generate" }), { params });
+    const res = await POST(await postRequest({ instruction: "x", mode: "generate" }), { params });
 
     expect(res.status).toBe(501);
     expect(productUpdate).not.toHaveBeenCalled();
@@ -76,7 +79,7 @@ describe("POST /api/product/:id/images/generate", () => {
   it("502s on a provider failure and persists nothing", async () => {
     editProductImage.mockResolvedValue({ ok: false, reason: "provider-error", message: "boom" });
 
-    const res = await POST(postRequest({ instruction: "x", mode: "generate" }), { params });
+    const res = await POST(await postRequest({ instruction: "x", mode: "generate" }), { params });
 
     expect(res.status).toBe(502);
     expect(productUpdate).not.toHaveBeenCalled();
@@ -87,7 +90,7 @@ describe("POST /api/product/:id/images/generate", () => {
     productUpdate.mockResolvedValue({});
 
     const res = await POST(
-      postRequest({
+      await postRequest({
         instruction: "put it on a beach",
         mode: "edit",
         sourceImageUrl: "https://cdn.example.com/source.jpg",
@@ -126,7 +129,7 @@ describe("POST /api/product/:id/images/generate", () => {
     editProductImage.mockResolvedValue({ ok: true, url: "https://cdn.example.com/new.jpg" });
     productUpdate.mockResolvedValue({});
 
-    await POST(postRequest({ instruction: "new one", mode: "generate" }), { params });
+    await POST(await postRequest({ instruction: "new one", mode: "generate" }), { params });
 
     const [[{ data }]] = productUpdate.mock.calls;
     expect(data.generatedImagesJson).toHaveLength(2);

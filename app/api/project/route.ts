@@ -10,6 +10,8 @@ import {
   allCandidates,
   type SelectedImages,
 } from "@/lib/store-config/product-images";
+import { requireUserId } from "@/lib/auth/session";
+import { assertStoreOwnership } from "@/lib/auth/authorize";
 
 // POST /api/project — { productId, name, language, storeId? } -> creates a theme (Project row)
 // seeded with the Base Theme's own templates, so it's previewable the moment it exists. AI
@@ -41,6 +43,9 @@ import {
 // candidates, order = gallery order, first = featured. Persisted as Project.selectedImagesJson;
 // Product.images is never overwritten.
 export async function POST(req: NextRequest) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
+
   const body = await req.json().catch(() => null);
   if (!body || typeof body.productId !== "string") {
     return NextResponse.json(
@@ -136,6 +141,8 @@ export async function POST(req: NextRequest) {
   const configurationJson = JSON.parse(JSON.stringify(configuration));
 
   if (typeof body.storeId === "string" && body.storeId) {
+    const authError = await assertStoreOwnership(body.storeId, userId);
+    if (authError) return authError;
     const store = await prisma.store.findUnique({ where: { id: body.storeId } });
     if (!store) return NextResponse.json({ error: "Store not found" }, { status: 404 });
     if (store.productId !== product.id) {
@@ -162,6 +169,7 @@ export async function POST(req: NextRequest) {
     data: {
       name: typeof body.name === "string" && body.name.trim() ? body.name : (product.title ?? "Untitled store"),
       productId: product.id,
+      ownerId: userId,
     },
   });
   const project = await prisma.project.create({

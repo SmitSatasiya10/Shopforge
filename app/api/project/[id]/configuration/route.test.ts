@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { Prisma } from "@/app/generated/prisma/client";
+import { signedSessionCookieHeader } from "@/lib/auth/test-helpers";
+
+const OWNER_ID = "user-1";
 
 const projectUpdate = vi.fn();
 const projectFindUnique = vi.fn();
@@ -25,10 +28,10 @@ vi.mock("@/lib/history/checkpoint", () => ({
 
 const { PATCH } = await import("./route");
 
-function request(body: unknown) {
+async function request(body: unknown) {
   return new NextRequest("http://localhost/api/project/project-1/configuration", {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", cookie: await signedSessionCookieHeader(OWNER_ID) },
     body: JSON.stringify(body),
   });
 }
@@ -42,6 +45,10 @@ describe("PATCH /api/project/:id/configuration", () => {
     projectFindUnique.mockReset();
     productFindUnique.mockReset();
     recordCheckpoint.mockReset();
+    // Default: the caller owns the project — the ownership pre-check's findUnique call shares
+    // this mock with the route's own findUnique calls, so tests that don't care about ownership
+    // still need it to resolve to an owned record.
+    projectFindUnique.mockResolvedValue({ store: { ownerId: OWNER_ID } });
   });
 
   it("applies the write and records a checkpoint when expectedUpdatedAt matches", async () => {
@@ -52,7 +59,7 @@ describe("PATCH /api/project/:id/configuration", () => {
     });
     productFindUnique.mockResolvedValue({ title: "Bag" });
 
-    const res = await PATCH(request({ configuration: { a: 1 }, expectedUpdatedAt: NOW }), { params });
+    const res = await PATCH(await request({ configuration: { a: 1 }, expectedUpdatedAt: NOW }), { params });
 
     expect(res.status).toBe(200);
     expect(projectUpdate).toHaveBeenCalledWith({
@@ -75,9 +82,9 @@ describe("PATCH /api/project/:id/configuration", () => {
       new Prisma.PrismaClientKnownRequestError("no record", { code: "P2025", clientVersion: "7.9.1" }),
     );
     const fresherUpdatedAt = new Date("2026-08-30T12:05:00.000Z");
-    projectFindUnique.mockResolvedValue({ updatedAt: fresherUpdatedAt });
+    projectFindUnique.mockResolvedValue({ store: { ownerId: OWNER_ID }, updatedAt: fresherUpdatedAt });
 
-    const res = await PATCH(request({ configuration: { a: 1 }, expectedUpdatedAt: NOW }), { params });
+    const res = await PATCH(await request({ configuration: { a: 1 }, expectedUpdatedAt: NOW }), { params });
     const body = await res.json();
 
     expect(res.status).toBe(409);
@@ -91,23 +98,32 @@ describe("PATCH /api/project/:id/configuration", () => {
     );
     projectFindUnique.mockResolvedValue(null);
 
-    const res = await PATCH(request({ configuration: { a: 1 }, expectedUpdatedAt: NOW }), { params });
+    const res = await PATCH(await request({ configuration: { a: 1 }, expectedUpdatedAt: NOW }), { params });
 
     expect(res.status).toBe(404);
     expect(recordCheckpoint).not.toHaveBeenCalled();
   });
 
   it("rejects a request missing expectedUpdatedAt", async () => {
-    const res = await PATCH(request({ configuration: { a: 1 } }), { params });
+    const res = await PATCH(await request({ configuration: { a: 1 } }), { params });
 
     expect(res.status).toBe(400);
     expect(projectUpdate).not.toHaveBeenCalled();
   });
 
   it("rejects a request with a malformed expectedUpdatedAt", async () => {
-    const res = await PATCH(request({ configuration: { a: 1 }, expectedUpdatedAt: "not-a-date" }), { params });
+    const res = await PATCH(await request({ configuration: { a: 1 }, expectedUpdatedAt: "not-a-date" }), { params });
 
     expect(res.status).toBe(400);
+    expect(projectUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the caller doesn't own the project's store", async () => {
+    projectFindUnique.mockResolvedValue({ store: { ownerId: "someone-else" } });
+
+    const res = await PATCH(await request({ configuration: { a: 1 }, expectedUpdatedAt: NOW }), { params });
+
+    expect(res.status).toBe(404);
     expect(projectUpdate).not.toHaveBeenCalled();
   });
 });

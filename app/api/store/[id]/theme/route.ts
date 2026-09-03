@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { seedThemeConfiguration } from "@/lib/store-config/seed-theme";
+import { requireUserId } from "@/lib/auth/session";
+import { assertStoreOwnership } from "@/lib/auth/authorize";
 
 // POST /api/store/:id/theme — { name?, duplicateFrom? } — adds a new theme (draft, never
 // auto-active) to an existing store.
@@ -15,7 +17,12 @@ import { seedThemeConfiguration } from "@/lib/store-config/seed-theme";
 // source's theme id would make the duplicate's first publish silently overwrite the source's
 // live theme) and it starts its own edit history / publish records.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
   const { id: storeId } = await params;
+  const authError = await assertStoreOwnership(storeId, userId);
+  if (authError) return authError;
+
   const body = await req.json().catch(() => ({}));
 
   const store = await prisma.store.findUnique({ where: { id: storeId }, include: { product: true } });

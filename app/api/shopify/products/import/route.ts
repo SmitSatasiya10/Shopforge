@@ -7,6 +7,7 @@ import { fetchShopifyProductForImport } from "@/lib/shopify/products";
 import { AdminApiError } from "@/lib/shopify/admin-client";
 import { persistResult } from "@/lib/product/persist";
 import { requiredFieldsMissing, deriveImportStatus } from "@/lib/product/types";
+import { requireUserId } from "@/lib/auth/session";
 
 // POST /api/shopify/products/import — { shop, productId, productUrl } — imports one product
 // picked from a connected store's catalog (app/import/page.tsx's ConnectShopify picker) via the
@@ -14,6 +15,9 @@ import { requiredFieldsMissing, deriveImportStatus } from "@/lib/product/types";
 // work even when the store's storefront is password-protected (lib/product/fetcher.ts's
 // tryFetchShopifyProductJson can't reach a password-protected store at all).
 export async function POST(req: NextRequest) {
+  const userId = await requireUserId(req);
+  if (userId instanceof NextResponse) return userId;
+
   const body = await req.json().catch(() => null);
   const shop = normalizeShopDomain(body?.shop ?? "");
   const productId = typeof body?.productId === "string" ? body.productId : null;
@@ -23,7 +27,9 @@ export async function POST(req: NextRequest) {
   }
 
   const store = await prisma.shopifyStore.findUnique({ where: { shopDomain: shop } });
-  if (!store) {
+  const ownsConnectedStore =
+    store && (await prisma.store.findFirst({ where: { ownerId: userId, shopifyStoreId: store.id } }));
+  if (!store || !ownsConnectedStore) {
     return NextResponse.json({ error: "This store isn't connected yet." }, { status: 404 });
   }
 
